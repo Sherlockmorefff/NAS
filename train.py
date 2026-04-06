@@ -1,4 +1,36 @@
-from __future__ import print_function
+import sys
+import datetime
+import os
+
+class Logger(object):
+    def __init__(self, filename="Default.log"):
+        self.terminal = sys.stdout
+        # 以追加模式打开日志文件，并设置 utf-8 编码
+        self.log = open(filename, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush() # 实时刷新写入，防止程序意外中断时丢失最后的日志
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+# 在当前目录下创建一个 logs 文件夹来集中存放日志
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# 自动生成带时间戳的日志文件名
+current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+log_filename = f"logs/train_log_{current_time}.txt"
+
+# 将标准输出重定向到我们自定义的 Logger
+sys.stdout = Logger(log_filename)
+
+print(f"[{current_time}] 开始训练！日志将自动保存在 {log_filename}")
+# --- 原本的 train.py 代码从这里继续往下 ---
+
 import os
 import sys
 import math
@@ -23,7 +55,6 @@ import matplotlib.image as mpimg
 from util import *
 from models import *
 from bayesian_optimization.evaluate_BN import Eval_BN
-
 
 parser = argparse.ArgumentParser(description='Train Variational Autoencoders for DAGs')
 # general settings

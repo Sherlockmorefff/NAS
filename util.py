@@ -15,6 +15,7 @@ import pdb
 import pygraphviz as pgv
 import sys
 from PIL import Image
+import math
 
 # create a parser to save graph arguments
 cmd_opt = argparse.ArgumentParser()

@@ -1,0 +1,14 @@
+# 忽略 Python 缓存
+__pycache__/
+
+# 忽略训练日志和结果
+logs/
+results/
+
+# 忽略模型权重和隐向量数据
+*.pth
+*.pkl
+*.mat
+*.pdf
+*.png
+*.jpg
