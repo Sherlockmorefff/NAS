@@ -1,278 +1,231 @@
 """
-train_joint.py  v4  (nz=12 + KL Annealing + Free Bits + 动态诊断阈值)
-=======================================================
-核心修改：
-1. 适应极致压缩：将 nz 从 32 降至 12，消除冗余噪声维度，完美适配下游 BO。
-2. 动态诊断阈值：修复因硬编码阈值导致的“假性坍缩”误报。
+train_joint.py  v8  (Search Space v3 + DVAE Loss 解包修复)
+====================================================================
+v8 变更：
+  - 修复 DVAE.loss() 返回 3 个值导致的 unpacking ValueError。
+  - 兼容底层 D-VAE (total_loss, recon, kl) 的经典返回格式。
+  - 维持 v7 的 Teacher Forcing 和 Free Bits 维度加权修正。
 """
 
 import os
+import sys
 import json
+import time
+import logging
+import argparse
 import pickle
-import random
 import torch
-from torch import optim
+import torch.nn as nn
 import torch.nn.functional as F
-import igraph
-from tqdm import tqdm
+import numpy as np
+from datetime import datetime
+from torch.utils.data import DataLoader, Subset
 
+# 导入自定义模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from nas_space import JointSpaceVAE
 
 # ============================================================
-# 全局配置
+# 日志系统
 # ============================================================
-BATCH_SIZE = 32
-EPOCHS     = 100
-LR         = 1e-4
-DEVICE     = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def setup_logger(log_dir: str, script_name: str, version: str):
+    ts = datetime.now().strftime('%m%d_%H%M')
+    log_subdir = os.path.join(log_dir, script_name)
+    os.makedirs(log_subdir, exist_ok=True)
 
-# KL 退火与正则化超参
-BETA_WARMUP_END = 20
-BETA_ANNEAL_END = 80
-BETA_TARGET     = 0.01
-FREE_BITS       = 2.0
+    log_filename = f"train_{version}_{ts}.log"
+    log_filepath = os.path.join(log_subdir, log_filename)
 
+    logger = logging.getLogger(script_name)
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
 
-class ArchArgs:
-    def __init__(self):
-        self.max_n           = 5
-        self.num_vertex_type = 7
-        self.START_TYPE      = 0
-        self.END_TYPE        = 1
-        self.hs              = 501
-        self.nz              = 12     # ← 核心修改: 32 -> 12 (完美匹配实际有效秩)
-        self.bidirectional   = True
+    fmt = logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    
+    fh = logging.FileHandler(log_filepath, encoding='utf-8')
+    fh.setLevel(logging.DEBUG); fh.setFormatter(fmt)
+    logger.addHandler(fh)
 
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO); ch.setFormatter(fmt)
+    logger.addHandler(ch)
+
+    return logger, log_filepath
+
+def save_args_json(args, log_filepath: str):
+    json_path = log_filepath.replace('.log', '.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(vars(args), f, indent=2, ensure_ascii=False)
+    return json_path
 
 # ============================================================
-# Beta 退火调度器
+# 损失函数 (v8: 智能解包修复)
 # ============================================================
-def get_beta(epoch: int) -> float:
-    if epoch <= BETA_WARMUP_END:
-        return 0.0
-    elif epoch <= BETA_ANNEAL_END:
-        progress = (epoch - BETA_WARMUP_END) / (BETA_ANNEAL_END - BETA_WARMUP_END)
-        return BETA_TARGET * progress
+def compute_loss(model, arch_out, mu_a, log_a, hp_out, mu_h, log_h, 
+                 target_graphs, target_hps, beta, free_bits, device):
+    """
+    计算联合 VAE 损失。
+    """
+    # 1. 架构重构与 KL 损失
+    arch_loss_tuple = model.arch_vae.loss(mu_a, log_a, target_graphs)
+    
+    # 智能解包：大多数 DVAE 返回 (total_loss, recon_loss, kld_loss)
+    if len(arch_loss_tuple) == 3:
+        _, recon_arch, kl_arch_raw = arch_loss_tuple
+    elif len(arch_loss_tuple) == 2:
+        recon_arch, kl_arch_raw = arch_loss_tuple
     else:
-        return BETA_TARGET
-
-
-# ============================================================
-# 数据加载
-# ============================================================
-def load_and_preprocess_data(filepath: str = 'data/mini_gnn_dataset.pkl'):
-    print(f"加载数据集: {filepath}")
-    with open(filepath, 'rb') as f:
-        raw_data = pickle.load(f)
-
-    processed_data = []
-    bad_edges = 0
-
-    for _, (types, adj, hp) in enumerate(raw_data):
-        n = len(types)
-        g = igraph.Graph(directed=True)
-        g.add_vertices(n)
-        g.vs['type'] = types
-
-        edges = []
-        for i in range(n):
-            for j in range(n):
-                if adj[i][j] == 1:
-                    if i >= j:
-                        bad_edges += 1
-                        continue
-                    edges.append((i, j))
-        g.add_edges(edges)
-        processed_data.append((g, hp))
-
-    if bad_edges > 0:
-        print(f"⚠️  跳过 {bad_edges} 条反向/自环边")
-
-    random.shuffle(processed_data)
-    split = int(len(processed_data) * 0.9)
-    print(f"训练集: {split}  测试集: {len(processed_data)-split}")
-    return processed_data[:split], processed_data[split:]
-
+        # 兜底：假设按标准约定索引 1 和 2 是 recon 和 kl
+        recon_arch = arch_loss_tuple[1]
+        kl_arch_raw = arch_loss_tuple[2]
+    
+    # 2. HP 重建损失 (MSE)
+    recon_hp = F.mse_loss(hp_out, target_hps, reduction='sum')
+    
+    # 3. HP KL 散度计算
+    kl_hp_raw = -0.5 * torch.sum(1 + log_h - mu_h.pow(2) - log_h.exp())
+    
+    bs = target_hps.size(0)
+    arch_nz = mu_a.size(1)
+    hp_nz   = mu_h.size(1)
+    
+    # 修正 Free Bits：按维度加权
+    free_limit_arch = free_bits * bs * arch_nz
+    free_limit_hp   = free_bits * bs * hp_nz
+    
+    kl_arch = torch.clamp(kl_arch_raw - free_limit_arch, min=0.0)
+    kl_hp   = torch.clamp(kl_hp_raw - free_limit_hp, min=0.0)
+    
+    total_recon = recon_arch + recon_hp
+    total_kl    = kl_arch + kl_hp
+    total_loss  = total_recon + beta * total_kl
+    
+    return total_loss, recon_arch, recon_hp, kl_arch_raw, kl_hp_raw
 
 # ============================================================
-# 单 epoch 训练
+# 训练循环
 # ============================================================
-def train_one_epoch(model: JointSpaceVAE, optimizer, train_data: list,
-                    epoch: int, beta: float):
+def train_one_epoch(model, loader, optimizer, beta, args, device):
     model.train()
-    total_loss  = 0.0
-    total_recon = 0.0
-    total_kld   = 0.0
-
-    random.shuffle(train_data)
-    g_batch, hp_batch = [], []
-
-    pbar = tqdm(train_data, desc=f"Ep {epoch:>3d} β={beta:.4f}")
-    for i, (g, hp) in enumerate(pbar):
-        g_batch.append(g)
-        hp_batch.append(hp)
-
-        if len(g_batch) < BATCH_SIZE and i < len(train_data) - 1:
-            continue
-
+    total_loss, total_ra, total_rh, total_ka, total_kh = 0, 0, 0, 0, 0
+    
+    for g_batch, hp_batch in loader:
+        hp_batch = hp_batch.to(device)
         optimizer.zero_grad()
-        hp_t = torch.tensor(hp_batch, dtype=torch.float32).to(DEVICE)
-        bs = len(g_batch)
-
-        (_, mu_a, log_a), (hp_out, mu_h, log_h) = model(g_batch, hp_t)
-
-        _, recon_a, kld_a = model.arch_vae.loss(mu_a, log_a, g_batch, beta=0.0)
         
-        kld_a_eff = torch.clamp(kld_a, min=FREE_BITS * bs)
-        loss_arch = recon_a + beta * kld_a_eff
-
-        recon_h = F.mse_loss(hp_out, hp_t, reduction='sum')
-        kld_h   = -0.5 * torch.sum(1 + log_h - mu_h.pow(2) - log_h.exp())
+        # 前向传播 (arch_out 在训练时自由解码的结果不参与 loss 计算)
+        (arch_out, mu_a, log_a), (hp_out, mu_h, log_h) = model(g_batch, hp_batch)
         
-        kld_h_eff = torch.clamp(kld_h, min=FREE_BITS * bs)
-        loss_hp = recon_h + beta * kld_h_eff
-
-        loss = loss_arch + loss_hp
+        # 计算损失
+        loss, ra, rh, ka, kh = compute_loss(
+            model, arch_out, mu_a, log_a, hp_out, mu_h, log_h,
+            g_batch, hp_batch, beta, args.free_bits, device
+        )
+        
         loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         optimizer.step()
-
-        total_loss  += loss.item()
-        total_recon += (recon_a + recon_h).item()
-        total_kld   += (kld_a + kld_h).item()
-
-        pbar.set_postfix({
-            'L': f"{loss.item()/bs:.2f}",
-            'R': f"{(recon_a+recon_h).item()/bs:.2f}",
-            'K': f"{(kld_a+kld_h).item()/bs:.2f}",
-        })
-        g_batch, hp_batch = [], []
-
-    n = len(train_data)
-    print(f"  => Loss={total_loss/n:.4f}  "
-          f"Recon={total_recon/n:.4f}  KLD={total_kld/n:.4f}")
-    return total_loss / n, total_recon / n, total_kld / n
-
+        
+        total_loss += loss.item()
+        total_ra   += ra.item()
+        total_rh   += rh.item()
+        total_ka   += ka.item()
+        total_kh   += kh.item()
+        
+    n = len(loader)
+    return total_loss/n, total_ra/n, total_rh/n, total_ka/n, total_kh/n
 
 # ============================================================
-# 有效秩诊断（适配小维度空间）
+# 主函数
 # ============================================================
-def diagnose_latent_rank(model: JointSpaceVAE, train_data: list,
-                         n_samples: int = 200) -> float:
-    model.eval()
-    samples = random.sample(train_data, min(n_samples, len(train_data)))
-    mu_list = []
+def main():
+    parser = argparse.ArgumentParser(description='train_joint.py v8')
+    parser.add_argument('--data', type=str, default='data/mini_gnn_dataset_v4.pkl')
+    parser.add_argument('--checkpoint_dir', type=str, default='results/joint_search')
+    parser.add_argument('--version', type=str, default='v3_final')
+    parser.add_argument('--log_dir', type=str, default='logs/train_joint')
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--beta_max', type=float, default=0.01)
+    parser.add_argument('--free_bits', type=float, default=2.0)
+    parser.add_argument('--seed', type=int, default=42)
+    args = parser.parse_args()
 
-    with torch.no_grad():
-        for i in range(0, len(samples), 32):
-            batch_g = [s[0] for s in samples[i:i+32]]
-            mu_a, _ = model.arch_vae.encode(batch_g)
-            mu_list.append(mu_a.cpu())
+    # 1. 初始化日志
+    logger, log_path = setup_logger(args.log_dir, 'train_joint', args.version)
+    save_args_json(args, log_path)
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    Z = torch.cat(mu_list, dim=0)
-    Z = Z - Z.mean(0, keepdim=True)
-    nz_dim = Z.shape[1]
+    logger.info("=" * 60)
+    logger.info(f"train_joint.py v8 (Search Space v3) | Device: {device}")
+    logger.info(f"Data: {args.data} | Beta Max: {args.beta_max}")
+    logger.info("=" * 60)
 
-    try:
-        _, S, _ = torch.linalg.svd(Z, full_matrices=False)
-        lam = S ** 2
-        eff_rank = (lam.sum() ** 2 / (lam ** 2).sum()).item()
-        top_var_idx = min(5, nz_dim)
-        top5_var = lam[:top_var_idx].sum().item() / lam.sum().item()
+    # 2. 加载数据
+    if not os.path.exists(args.data):
+        logger.error(f"数据集未找到: {args.data}，请先运行 generate_mini_data.py --hp_dim 4")
+        return
 
-        print(f"\n[Rank Diagnosis]  eff_rank={eff_rank:.1f}/{nz_dim}"
-              f"  top{top_var_idx}_var={top5_var:.1%}")
-        print(f"  sing_vals: {[f'{v:.3f}' for v in S[:min(12, nz_dim)].tolist()]}")
+    with open(args.data, 'rb') as f:
+        dataset = pickle.load(f)
+    
+    # 转换为 (igraph, tensor) 格式
+    processed_data = []
+    import igraph
+    for types, adj, hp in dataset:
+        g = igraph.Graph(directed=True)
+        g.add_vertices(len(types))
+        g.vs['type'] = types
+        edges = [(i, j) for i in range(len(types)) for j in range(len(types)) if adj[i][j] == 1]
+        g.add_edges(edges)
+        processed_data.append((g, torch.tensor(hp, dtype=torch.float32)))
 
-        # 动态判定阈值：不再硬编码 4，而是按维度比例
-        if eff_rank < nz_dim * 0.25:
-            print("  ❌ 严重坍缩：有效维度过低")
-        elif eff_rank < nz_dim * 0.4:
-            print("  ⚠️  轻度坍缩：部分维度未激活")
-        else:
-            print("  ✅ 隐空间有效秩极其完美，已达到最优流形压缩！")
+    # 划分训练集/验证集
+    indices = list(range(len(processed_data)))
+    np.random.seed(args.seed); np.random.shuffle(indices)
+    split = int(0.9 * len(processed_data))
+    train_idx, val_idx = indices[:split], indices[split:]
 
-        return eff_rank
-    except Exception as e:
-        print(f"  [诊断失败] {e}")
-        return 0.0
+    def collate_fn(batch):
+        return [b[0] for b in batch], torch.stack([b[1] for b in batch])
 
+    train_loader = DataLoader(Subset(processed_data, train_idx), 
+                              batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader   = DataLoader(Subset(processed_data, val_idx), 
+                              batch_size=args.batch_size, collate_fn=collate_fn)
 
-# ============================================================
-# 主入口
-# ============================================================
+    # 3. 初始化模型
+    class ArchArgs:
+        max_n = 7; num_vertex_type = 8; nz = 12; bidirectional = True
+        hs = 501; START_TYPE = 0; END_TYPE = 1
+
+    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
+    # 4. 训练循环
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    best_val_loss = float('inf')
+
+    for epoch in range(1, args.epochs + 1):
+        # KL 退火逻辑
+        if epoch <= 20: beta = 0.0
+        elif epoch <= 80: beta = args.beta_max * (epoch - 20) / 60
+        else: beta = args.beta_max
+
+        loss, ra, rh, ka, kh = train_one_epoch(model, train_loader, optimizer, beta, args, device)
+        
+        if epoch % 10 == 0 or epoch == 1:
+            logger.info(f"Epoch {epoch:>3d}/{args.epochs} | Loss: {loss:.2f} | "
+                        f"RA: {ra:.2f} RH: {rh:.4f} | KA: {ka:.1f} KH: {kh:.1f} | Beta: {beta:.4f}")
+
+        # 保存 Checkpoint
+        if epoch == args.epochs:
+            save_path = os.path.join(args.checkpoint_dir, f"joint_model_{args.version}_ep{epoch}.pth")
+            torch.save(model.state_dict(), save_path)
+            logger.info(f"模型已保存至: {save_path}")
+
+    logger.info("✅ 训练完成。")
+
 if __name__ == '__main__':
-    os.makedirs('results/joint_search', exist_ok=True)
-
-    train_data, test_data = load_and_preprocess_data()
-
-    arch_args = ArchArgs()
-    model     = JointSpaceVAE(arch_args, hp_latent_dim=4).to(DEVICE)
-    optimizer = optim.Adam(model.parameters(), lr=LR)
-
-    print(f"\narch_nz={model.arch_nz}  hp_nz={model.hp_nz}  total_nz={model.total_nz}")
-    print(f"KL Annealing: 0.0 (ep1-{BETA_WARMUP_END})"
-          f" → {BETA_TARGET} (ep{BETA_WARMUP_END+1}-{BETA_ANNEAL_END})"
-          f" → {BETA_TARGET} (ep{BETA_ANNEAL_END+1}+)")
-    print(f"Free Bits 机制启用，阈值: {FREE_BITS}")
-    print("\n🚀 训练开始（12维极简空间架构）...\n")
-
-    loss_log = []
-
-    for epoch in range(1, EPOCHS + 1):
-        beta = get_beta(epoch)
-        avg_loss, avg_recon, avg_kld = train_one_epoch(
-            model, optimizer, train_data, epoch, beta)
-        loss_log.append({'epoch': epoch, 'beta': beta,
-                         'loss': avg_loss, 'recon': avg_recon, 'kld': avg_kld})
-
-        if epoch % 10 == 0:
-            ckpt = f"results/joint_search/joint_model_ep{epoch}.pth"
-            torch.save(model.state_dict(), ckpt)
-            print(f"  Checkpoint: {ckpt}")
-
-            model.eval()
-            with torch.no_grad():
-                z = torch.randn(1, model.total_nz).to(DEVICE)
-                cfgs, lrs, drs = model.decode_from_joint_latent(z)
-                print(f"  [sample] ops={cfgs[0]['operations']}  "
-                      f"eff={cfgs[0]['effective_layers']}  "
-                      f"lr={lrs[0]:.5f}  dr={drs[0]:.4f}")
-            model.train()
-
-    eff_rank = diagnose_latent_rank(model, train_data)
-
-    with open('results/joint_search/train_loss_log.json', 'w') as f:
-        json.dump(loss_log, f, indent=2)
-
-    try:
-        import matplotlib; matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-
-        ep_  = [d['epoch'] for d in loss_log]
-        rec_ = [d['recon'] for d in loss_log]
-        kld_ = [d['kld']   for d in loss_log]
-        bet_ = [d['beta']  for d in loss_log]
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-
-        ax1.plot(ep_, rec_, label='Recon', color='steelblue')
-        ax1.plot(ep_, kld_, label='KLD',   color='tomato', ls='--')
-        ax1.set_ylabel('Loss / sample')
-        ax1.set_title(f'Beta-VAE Training (nz=12)  eff_rank={eff_rank:.1f}')
-        ax1.legend(); ax1.grid(alpha=0.3)
-
-        ax2.plot(ep_, bet_, color='green', lw=2)
-        ax2.axvline(BETA_WARMUP_END, color='gray', ls=':',
-                    label=f'warmup end (ep{BETA_WARMUP_END})')
-        ax2.axvline(BETA_ANNEAL_END, color='gray', ls='--',
-                    label=f'anneal end (ep{BETA_ANNEAL_END})')
-        ax2.set_xlabel('Epoch'); ax2.set_ylabel('Beta')
-        ax2.set_title('KL Annealing Schedule')
-        ax2.legend(); ax2.grid(alpha=0.3)
-
-        plt.tight_layout()
-        out = 'results/joint_search/training_curve_betavae.png'
-        plt.savefig(out, dpi=150); plt.close()
-        print(f"\n训练曲线已保存: {out}")
-    except ImportError:
-        pass
+    main()

@@ -1,10 +1,21 @@
 """
-acqf_geometric.py  v3  (ARCH_NZ=8 + random_proj 维度修复)
-==========================================================
-修复：JacobianLogDet.compute 中当 n_probes > nz 时，
-     QR 分解只产出 nz 个正交向量，但 J_cols 拼出 n_probes 列，
-     SVD 不报错但结果含全零列，影响 logD 精度（无崩溃但有偏差）。
-     现统一使用 actual_n = min(n_probes, nz)。
+acqf_geometric.py  v4  (奇异值爆炸防护 + ARCH_NZ=12 对齐)
+===========================================================
+v4 变更（相对 v3）：
+
+  [修复 1] JacobianLogDet.compute 奇异值爆炸防护
+      v3 问题：直接对所有奇异值取 -log，当极小奇异值（接近 0）存在时，
+               -log(S_min) → +∞，导致 logD 爆炸，污染采集函数得分。
+      v4 修复：定义 threshold = S[0] * 0.01（相对于最大奇异值的 1%），
+               筛选 active_S = S[S > threshold]，仅对有效奇异值求 logD。
+               若 active_S 为空，则 logD = 0.0（安全回退）。
+
+  [修复 2] ARCH_NZ 常量：8 → 12（对齐 Search Space v3）
+      HPDiversityBonus.hp_start_idx 默认值随之更新。
+      LatentDensityModel.arch_nz 默认值随之更新。
+      ReconstructionNovelty.arch_nz 默认值随之更新。
+
+  v3 其他修复保留不变（actual_n = min(n_probes, nz) 防维度溢出）。
 """
 
 import torch
@@ -16,7 +27,7 @@ from botorch.models import SingleTaskGP
 from botorch.acquisition.logei import qLogExpectedImprovement
 
 
-ARCH_NZ = 8
+ARCH_NZ = 12   # v4: 8 → 12，对齐 Search Space v3
 
 
 # ======================================================================
@@ -38,7 +49,7 @@ class JacobianLogDet:
             return self._cache[key]
 
         arch_nz  = self.dvae_diff.dvae.nz
-        # ── 修复：actual_n 不超过 arch_nz ──────────────────────
+        # 防止 n_probes > arch_nz 时 QR 分解维度溢出
         actual_n = min(self.n_probes, arch_nz)
         z_model  = z[:arch_nz].to(self.dvae_diff.get_device()).detach()
 
@@ -62,7 +73,18 @@ class JacobianLogDet:
 
         try:
             _, S, _ = torch.linalg.svd(J.float(), full_matrices=False)
-            logD = -torch.log(S.clamp(min=1e-8)).sum().item()
+
+            # ── [v4 修复] 奇异值爆炸防护 ────────────────────────
+            # 定义相对阈值：最大奇异值的 1%
+            # 极小奇异值（噪声维度）的 -log 会趋向 +∞，必须过滤
+            threshold = S[0] * 0.01
+            active_S  = S[S > threshold]
+
+            if len(active_S) > 0:
+                logD = -torch.log(active_S.clamp(min=1e-8)).sum().item()
+            else:
+                logD = 0.0   # 全部奇异值低于阈值时安全回退
+
         except Exception:
             logD = 0.0
 

@@ -1,21 +1,24 @@
 """
-bo_phase4.py  v7  (Search Space v3: ARCH_NZ=12, SEARCH_DIM=16, GCNII)
-======================================================================
-v7 变更（相对 v6）：
-  - ARCH_NZ  : 8  → 12  (适配 v3 VAE)
-  - SEARCH_DIM: 12 → 16  (12 arch + 4 HP)
-  - ArchArgs : max_n=7, num_vertex_type=8
-  - eval_z   : 传递 gcnii_alpha / gcnii_theta（使用默认值）
-  - HP 切片索引全部通过 ARCH_NZ 常量动态计算，无需手动修改
-
-⚠️  需要使用 v3 VAE 权重（train_joint.py 重新训练后生成）。
+bo_phase4.py  v9  (极限参数透传修复 + 工业级日志)
+=================================================================
+v9 变更（相对 v8）：
+  - 修复 argparser 缺少 --patience 参数的问题。
+  - 修复 eval_z() 函数未将 max_epochs 和 patience 透传给 
+    eval_z_search 的问题（解决 --eval_epochs 形同虚设的 Bug）。
 """
 
-import os, sys, json, argparse, warnings, urllib.request
+import os
+import sys
+import json
+import time
+import logging
+import argparse
+import warnings
+import urllib.request
 import torch
-import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
+from datetime import datetime
 
 sys.path.insert(0, '/mnt/project')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +30,6 @@ from scipy.stats import norm as scipy_norm
 
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
-from torch_geometric.nn import GCNConv, GATConv, SAGEConv, GINConv
 
 from nas_space import JointSpaceVAE
 from dvae_differentiable import build_differentiable_dvae
@@ -35,22 +37,63 @@ from jacobian_utils import analyze_latent_smoothness
 from acqf_geometric import GPNDNASNovelty, make_acqf_and_optimize
 from eval_utils import eval_z_search, DynamicGNN, norm_to_hidden, norm_to_l2
 
-parser = argparse.ArgumentParser()
+
+# ============================================================
+# 日志系统
+# ============================================================
+def setup_logger(log_dir: str, script_name: str, version: str):
+    ts        = datetime.now().strftime('%m%d_%H%M')
+    log_subdir = os.path.join(log_dir, script_name)
+    os.makedirs(log_subdir, exist_ok=True)
+
+    log_filename = f"train_{version}_{ts}.log"
+    log_filepath = os.path.join(log_subdir, log_filename)
+
+    logger = logging.getLogger(script_name)
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+
+    fmt = logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s',
+                            datefmt='%Y-%m-%d %H:%M:%S')
+    fh = logging.FileHandler(log_filepath, encoding='utf-8')
+    fh.setLevel(logging.DEBUG); fh.setFormatter(fmt)
+    logger.addHandler(fh)
+
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO); ch.setFormatter(fmt)
+    logger.addHandler(ch)
+
+    logger.info(f"日志文件: {log_filepath}")
+    return logger, log_filepath
+
+
+def save_args_json(args, log_filepath: str) -> str:
+    json_path = log_filepath.replace('.log', '.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(vars(args), f, indent=2, ensure_ascii=False)
+    return json_path
+
+
+# ============================================================
+# 参数解析
+# ============================================================
+parser = argparse.ArgumentParser(description='bo_phase4 v9')
+# 原有参数
 parser.add_argument('--checkpoint',      type=str,
                     default='results/joint_search/joint_model_v3_ep100.pth')
 parser.add_argument('--warm_start',      type=str,
                     default='results/bo_phase2/best_z_arch_final.pt')
-parser.add_argument('--n_eval_seeds', type=int, default=3,
-                    help='每个候选架构的评估种子数（推荐 3，单次为 1）')
+parser.add_argument('--n_eval_seeds',    type=int, default=3)
 parser.add_argument('--cora_root',       type=str, default='/tmp/Cora')
 parser.add_argument('--n_init',          type=int, default=20)
 parser.add_argument('--n_iter',          type=int, default=60)
 parser.add_argument('--output',          type=str, default='results/bo_phase4_v3')
 parser.add_argument('--sigma_arch',      type=float, default=0.8)
 parser.add_argument('--eval_epochs',     type=int, default=100)
+parser.add_argument('--patience',        type=int, default=20)  # v9 修复：添加 patience
 parser.add_argument('--novelty_w',       type=float, default=0.15)
 parser.add_argument('--tau_gumbel',      type=float, default=0.3)
-parser.add_argument('--n_probes',        type=int, default=12)   # ≤ ARCH_NZ=12
+parser.add_argument('--n_probes',        type=int, default=12)
 parser.add_argument('--log_lr_min',      type=float, default=-4.0)
 parser.add_argument('--log_lr_max',      type=float, default=-1.5)
 parser.add_argument('--dropout_min',     type=float, default=0.1)
@@ -64,22 +107,28 @@ parser.add_argument('--gpnd_gamma',      type=float, default=0.3)
 parser.add_argument('--gpnd_delta',      type=float, default=0.2)
 parser.add_argument('--gcnii_alpha',     type=float, default=0.1)
 parser.add_argument('--gcnii_theta',     type=float, default=0.5)
+# 新增参数
+parser.add_argument('--version',         type=str, default='v3_final')
+parser.add_argument('--log_dir',         type=str, default='logs/')
+parser.add_argument('--seed',            type=int, default=42)
 args = parser.parse_args()
 
+# ── 全局常量 ─────────────────────────────────────────────
 DEVICE     = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-ARCH_NZ    = 12    # ← v3: 8 → 12
+ARCH_NZ    = 12    # v3
 SEARCH_DIM = ARCH_NZ + 4   # 16
 
 os.makedirs(args.output, exist_ok=True)
+
+# ── 日志初始化 ────────────────────────────────────────────
+logger, log_filepath = setup_logger(args.log_dir, 'bo_phase4', args.version)
+save_args_json(args, log_filepath)
 
 
 # ============================================================
 # HP 反归一化
 # ============================================================
 def z_to_hp(z_search: torch.Tensor):
-    """从搜索向量中提取并反归一化 HP 值。
-    切片索引全部由 ARCH_NZ 动态决定，无需手动维护。
-    """
     log_lr_n = float(z_search[ARCH_NZ])
     drop_n   = float(z_search[ARCH_NZ + 1])
     log_lr   = log_lr_n * (args.log_lr_max - args.log_lr_min) + args.log_lr_min
@@ -100,17 +149,15 @@ def sample_hp_norm():
 
 
 # ============================================================
-# VAE / Cora 加载
+# ArchArgs — v3
 # ============================================================
 class ArchArgs:
-    """v3 ArchArgs — JointSpaceVAE.__init__ 会强制覆盖 max_n/nvt，
-    但保留这里方便直接阅读。"""
-    max_n           = 7    # ← v3
-    num_vertex_type = 8    # ← v3
+    max_n           = 7
+    num_vertex_type = 8
     START_TYPE      = 0
     END_TYPE        = 1
     hs              = 501
-    nz              = ARCH_NZ   # 12
+    nz              = ARCH_NZ
     bidirectional   = True
 
 
@@ -119,10 +166,13 @@ def load_vae(ckpt):
     state = torch.load(ckpt, map_location=DEVICE, weights_only=True)
     model.load_state_dict(state)
     model.eval()
-    print(f"VAE loaded: {ckpt}  (arch_nz={ARCH_NZ}, max_n=7, nvt=8)")
+    logger.info(f"VAE loaded: {ckpt}  (arch_nz={ARCH_NZ}, max_n=7, nvt=8)")
     return model
 
 
+# ============================================================
+# Cora 加载
+# ============================================================
 _CORA_FILES = [
     "ind.cora.x","ind.cora.tx","ind.cora.allx",
     "ind.cora.y","ind.cora.ty","ind.cora.ally",
@@ -151,14 +201,14 @@ def load_cora(root):
         os.makedirs(raw, exist_ok=True)
         for f in miss:
             ok = any(_dl(f"{m}/{f}", os.path.join(raw, f)) for m in _MIRRORS)
-            print(f"  {f}: {'OK' if ok else 'FAILED'}")
+            logger.info(f"  {f}: {'OK' if ok else 'FAILED'}")
     pyg_root = os.path.dirname(root) if os.path.basename(root)=="Cora" else root
     ds = Planetoid(root=pyg_root, name='Cora', transform=T.NormalizeFeatures())
     return ds[0].to(DEVICE), ds.num_features, ds.num_classes
 
 
 # ============================================================
-# 评估函数
+# 评估函数 (v9：修复透传)
 # ============================================================
 def eval_z(vae, z_search, data, in_ch, out_ch, epochs=None):
     return eval_z_search(
@@ -173,6 +223,8 @@ def eval_z(vae, z_search, data, in_ch, out_ch, epochs=None):
         has_l2      = True,
         gcnii_alpha = args.gcnii_alpha,
         gcnii_theta = args.gcnii_theta,
+        max_epochs  = args.eval_epochs,  # v9 修复：传入 max_epochs
+        patience    = args.patience,     # v9 修复：传入 patience
     )
 
 
@@ -200,7 +252,7 @@ def decode_arch(vae, z_arch, n_trials=5):
 
 
 # ============================================================
-# 舒尔补贪心初始点选择（算法本体不变，自动适配新维度）
+# 舒尔补贪心初始点选择
 # ============================================================
 def schur_greedy_select(
     X_norm: np.ndarray,
@@ -210,13 +262,8 @@ def schur_greedy_select(
     lengthscale: float = 0.5,
     outputscale: float = 1.0,
 ) -> list:
-    """Matern-5/2 ARD 核 + 舒尔补贪心方差最大化的初始点选择。
-    算法与 v6 完全相同，核矩阵自动适配 SEARCH_DIM=16 输入。
-    """
     N, D = X_norm.shape
-
     if N <= n_target:
-        print(f"  [Schur Greedy] 候选池 ({N}) ≤ n_target ({n_target})，全部返回")
         return list(range(N))
 
     X      = X_norm.astype(np.float64)
@@ -228,24 +275,19 @@ def schur_greedy_select(
     K = outputscale * (1.0 + sqrt5r + (5.0 / 3.0) * r2) * np.exp(-sqrt5r)
     K += noise_var * np.eye(N)
 
-    print(f"  [Schur Greedy] K ({N}×{N})  D={D}  ls={lengthscale}  noise={noise_var:.0e}")
-
     seed_idx  = int(np.argmax(Y_cand))
     selected  = [seed_idx]
     remaining = list(range(N))
     remaining.remove(seed_idx)
-
     L = np.array([[np.sqrt(max(K[seed_idx, seed_idx], 1e-12))]], dtype=np.float64)
 
     for step in range(1, n_target):
-        if not remaining:
-            break
+        if not remaining: break
         rem        = np.array(remaining, dtype=np.int32)
         K_S_rem    = K[np.ix_(selected, rem)]
         v          = np.linalg.solve(L, K_S_rem)
         K_rem_diag = K[rem, rem]
         post_var   = np.maximum(K_rem_diag - (v ** 2).sum(axis=0), 0.0)
-
         best_local  = int(np.argmax(post_var))
         best_global = remaining[best_local]
         var_best    = post_var[best_local]
@@ -262,51 +304,52 @@ def schur_greedy_select(
         L_new[s-1, :s-1]  = v_new
         L_new[s-1, s-1]   = ell
         L = L_new
-
-        if step % 5 == 0 or step == n_target - 1:
-            print(f"    step {step:>2d}/{n_target-1}  "
-                  f"|S|={len(selected)}  max_post_var={var_best:.5f}")
-
-    print(f"  [Schur Greedy] 完成：选出 {len(selected)} / {N} 个初始点")
     return selected
 
 
 # ============================================================
-# LHS 初始化（不变，SEARCH_DIM 自动生效）
+# LHS 初始化
 # ============================================================
 def lhs_init(vae, data, in_ch, out_ch, n_target: int, oversample: int = 3):
     n_sample = n_target * oversample
-    print(f"\n[LHS Init] {n_sample} 样本 → 目标 {n_target} 有效点  "
-          f"(SEARCH_DIM={SEARCH_DIM}, ARCH_NZ={ARCH_NZ})")
+    logger.info(f"\n[LHS Init] {n_sample} 样本 → 目标 {n_target} 有效点")
 
-    sampler  = qmc.LatinHypercube(d=SEARCH_DIM, seed=42)
+    sampler  = qmc.LatinHypercube(d=SEARCH_DIM, seed=args.seed)
     lhs_raw  = sampler.random(n=n_sample)
-    arch_pts = scipy_norm.ppf(
-        np.clip(lhs_raw[:, :ARCH_NZ], 0.001, 0.999)
-    ) * args.sigma_arch
+    arch_pts = scipy_norm.ppf(np.clip(lhs_raw[:, :ARCH_NZ], 0.001, 0.999)) * args.sigma_arch
     hp_pts   = lhs_raw[:, ARCH_NZ:]
     z_pts    = np.concatenate([arch_pts, hp_pts], axis=1)
 
     warm_pts = []
     if os.path.exists(args.warm_start):
         z_best = torch.load(args.warm_start, map_location='cpu', weights_only=True)
-        # Warm start 来自旧 Phase 2（nz=8），自动截断或填充至 ARCH_NZ=12
-        if z_best.shape[0] > ARCH_NZ:
-            z_best = z_best[:ARCH_NZ]
-        elif z_best.shape[0] < ARCH_NZ:
-            z_best = torch.cat([z_best, torch.zeros(ARCH_NZ - z_best.shape[0])])
-        n_warm = min(3, n_target // 4)
-        for _ in range(n_warm):
-            warm_pts.append(np.concatenate([
-                (z_best + torch.randn(ARCH_NZ) * 0.3).numpy(),
-                np.random.rand(4)
-            ]))
-        print(f"  + {n_warm} warm-start 点 (旧 Phase 2 best, 填充至 nz={ARCH_NZ})")
+        dim    = z_best.shape[0]
+
+        if dim == SEARCH_DIM:
+            n_warm = min(3, n_target // 4)
+            for _ in range(n_warm):
+                z_perturb     = z_best.clone()
+                z_perturb[:ARCH_NZ] += torch.randn(ARCH_NZ) * 0.3
+                z_perturb[ARCH_NZ:] = (z_best[ARCH_NZ:] + torch.randn(4) * 0.1).clamp(0.0, 1.0)
+                warm_pts.append(z_perturb.numpy())
+        elif dim <= ARCH_NZ:
+            if dim > ARCH_NZ: z_best = z_best[:ARCH_NZ]
+            elif dim < ARCH_NZ: z_best = torch.cat([z_best, torch.zeros(ARCH_NZ - dim)])
+            n_warm = min(3, n_target // 4)
+            for _ in range(n_warm):
+                warm_pts.append(np.concatenate([
+                    (z_best + torch.randn(ARCH_NZ) * 0.3).numpy(), np.random.rand(4)]))
+        else:
+            z_arch = z_best[:ARCH_NZ]
+            n_warm = min(3, n_target // 4)
+            for _ in range(n_warm):
+                warm_pts.append(np.concatenate([
+                    (z_arch + torch.randn(ARCH_NZ) * 0.3).numpy(), np.random.rand(4)]))
 
     all_pts = np.array(warm_pts + list(z_pts))
 
     X_all, Y_all, hist_all = [], [], []
-    pbar = tqdm(all_pts, desc='LHS eval')
+    pbar = tqdm(all_pts, desc='LHS eval', ncols=100)
     for raw in pbar:
         z = torch.tensor(raw, dtype=torch.float32)
         acc, lr_v, dr_v, hd_v, l2_v, ok = eval_z(vae, z, data, in_ch, out_ch)
@@ -317,21 +360,13 @@ def lhs_init(vae, data, in_ch, out_ch, n_target: int, oversample: int = 3):
             'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
             'hidden': hd_v, 'l2': l2_v, 'valid': ok
         })
-        if ok:
-            pbar.set_postfix({'valid_best': f"{max(Y_all):.4f}"})
+        if ok: pbar.set_postfix({'valid_best': f"{max(Y_all):.4f}"})
 
     valid_idx   = [i for i, h in enumerate(hist_all) if h['valid']]
     invalid_idx = [i for i, h in enumerate(hist_all) if not h['valid']]
-    best_so_far = max(Y_all) if Y_all else 0.0
-    print(f"\n  LHS: {len(valid_idx)}/{len(X_all)} 有效  best={best_so_far:.4f}")
-
-    if len(valid_idx) < 2:
-        print("  ⚠️  有效点不足 2，返回全部点")
-        return X_all, Y_all, hist_all
-
-    if len(valid_idx) <= n_target:
-        print(f"  ⚠️  有效点 ({len(valid_idx)}) ≤ n_target ({n_target})，直接返回")
-        return X_all, Y_all, hist_all
+    
+    if len(valid_idx) < 2: return X_all, Y_all, hist_all
+    if len(valid_idx) <= n_target: return X_all, Y_all, hist_all
 
     X_valid = torch.stack([X_all[i] for i in valid_idx]).numpy()
     Y_valid = np.array([Y_all[i] for i in valid_idx])
@@ -348,10 +383,6 @@ def lhs_init(vae, data, in_ch, out_ch, n_target: int, oversample: int = 3):
     X_obs   = [X_all[i]    for i in final_idx]
     Y_obs   = [Y_all[i]    for i in final_idx]
     history = [hist_all[i] for i in final_idx]
-
-    n_valid_kept = sum(1 for h in history if h['valid'])
-    print(f"  Schur Greedy → 保留 {len(X_obs)} 点  "
-          f"(有效={n_valid_kept}  无效={len(invalid_idx)})")
     return X_obs, Y_obs, history
 
 
@@ -360,25 +391,26 @@ def lhs_init(vae, data, in_ch, out_ch, n_target: int, oversample: int = 3):
 # ============================================================
 def run_bo(vae, dvae_diff, data, in_ch, out_ch):
     if not args.skip_smoothness:
-        print("\n[Smoothness Pre-analysis]")
+        logger.info("\n[Smoothness Pre-analysis]")
         try:
             analyze_latent_smoothness(
                 dvae_diff, n_pairs=5, nz=ARCH_NZ,
                 tau=args.tau_gumbel, method='random_proj', device='cpu')
         except Exception as e:
-            print(f"  error: {e}")
+            logger.warning(f"  error: {e}")
 
     X_obs, Y_obs, history = lhs_init(
         vae, data, in_ch, out_ch,
         n_target=args.n_init, oversample=args.lhs_oversample)
 
     if not any(h['valid'] for h in history):
-        print("❌ All init invalid."); return
+        logger.error("❌ All init invalid."); return
 
     best_acc     = max(Y_obs)
     stagnant_cnt = 0
-    print(f"\nInit complete. Best={best_acc:.4f}  N={len(X_obs)}")
-    print(f"Eval: max_epochs=150  patience=20  CosineAnnealingLR")
+    logger.info(f"\nInit complete. Best={best_acc:.4f}  N={len(X_obs)}")
+    # v9 修复打印
+    logger.info(f"Eval: max_epochs={args.eval_epochs}  patience={args.patience}  CosineAnnealingLR")
 
     safe_n_probes = min(args.n_probes, ARCH_NZ)
     gpnd = GPNDNASNovelty(
@@ -392,8 +424,8 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
         delta    = args.gpnd_delta,
     )
 
-    print(f"\n[Step 2] BO: {args.n_iter} iters  "
-          f"novelty_w={args.novelty_w}  SEARCH_DIM={SEARCH_DIM}")
+    logger.info(f"\n[Step 2] BO: {args.n_iter} iters  "
+                f"novelty_w={args.novelty_w}  SEARCH_DIM={SEARCH_DIM}")
 
     for it in range(args.n_iter):
         X_t = torch.stack(X_obs)
@@ -402,11 +434,11 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
         if stagnant_cnt >= args.stagnation_k:
             best_z_all = X_obs[Y_obs.index(best_acc)]
             best_hp    = best_z_all[ARCH_NZ:].clone()
-            new_hp     = (1.0 - best_hp + torch.randn(4) * 0.1).clamp(0.0, 1.0)
+            new_hp = (best_hp + torch.randn(4) * 0.3).clamp(0.0, 1.0)
             z_next     = torch.cat([
                 torch.randn(ARCH_NZ) * args.sigma_arch * 0.5, new_hp])
             stagnant_cnt = 0
-            tag_extra = " [RESTART→new HP]"
+            tag_extra = " [RESTART→random walk HP]"
         else:
             try:
                 z_next = make_acqf_and_optimize(
@@ -418,7 +450,7 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
                     n_extra        = 128,
                 ).cpu()
             except Exception as e:
-                print(f"  [iter {it}] acqf error: {e}, random fallback")
+                logger.warning(f"  [iter {it}] acqf error: {e}, random fallback")
                 z_next = torch.cat([
                     torch.randn(ARCH_NZ) * args.sigma_arch, sample_hp_norm()])
             tag_extra = ""
@@ -433,9 +465,9 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
             stagnant_cnt += 1
             tag = f"(best={best_acc:.4f}  stag={stagnant_cnt})"
 
-        print(f"  iter {it:>3d}: val={acc:.4f}  lr={lr_v:.5f}  "
-              f"drop={dr_v:.3f}  hd={hd_v}  l2={l2_v:.0e}  "
-              f"{tag}{'  [invalid]' if not ok else ''}{tag_extra}")
+        logger.info(f"  iter {it:>3d}: val={acc:.4f}  lr={lr_v:.5f}  "
+                    f"drop={dr_v:.3f}  hd={hd_v}  l2={l2_v:.0e}  "
+                    f"{tag}{'  [invalid]' if not ok else ''}{tag_extra}")
 
         history.append({'step': args.n_init+it, 'type': 'bo',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
@@ -445,19 +477,20 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
         if (it+1) % 10 == 0:
             _save(history, X_obs, Y_obs, f'step{it}')
 
+    # ── 最终结果 ─────────────────────────────────────────
     best_idx = Y_obs.index(max(Y_obs))
     best_z   = X_obs[best_idx]
     best_cfg = decode_arch(vae, best_z[:ARCH_NZ], n_trials=10)
     lr_b, dr_b, hd_b, l2_b = z_to_hp(best_z)
 
-    print("\n" + "="*70)
-    print(f"  Phase 4 v7 (nz={ARCH_NZ}, GPND-NAS, SEARCH_DIM={SEARCH_DIM}) Final")
-    print("="*70)
-    print(f"  Best val_acc  : {max(Y_obs):.4f}")
-    print(f"  GNN config    : {best_cfg}")
-    print(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  Hidden={hd_b}  L2={l2_b:.0e}")
-    print(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info(f"  Phase 4 v9 (nz={ARCH_NZ}, GPND-NAS, SEARCH_DIM={SEARCH_DIM}) Final")
+    logger.info("="*70)
+    logger.info(f"  Best val_acc  : {max(Y_obs):.4f}")
+    logger.info(f"  GNN config    : {best_cfg}")
+    logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  Hidden={hd_b}  L2={l2_b:.0e}")
+    logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
+    logger.info("="*70)
 
     _save(history, X_obs, Y_obs, 'final')
     _compare(history)
@@ -468,11 +501,11 @@ def _save(history, X_obs, Y_obs, suffix):
         json.dump(history, f, indent=2)
     torch.save(X_obs[Y_obs.index(max(Y_obs))],
                os.path.join(args.output, f'best_z_{suffix}.pt'))
-    print(f"  Saved: {suffix}")
+    logger.info(f"  Saved: {suffix}")
 
 
 def _compare(h4):
-    print("\n[Phase Comparison]")
+    logger.info("\n[Phase Comparison]")
     best4 = max(e['val_acc'] for e in h4)
     for phase, path in [
         ('Phase 2', 'results/bo_phase2/history_final.json'),
@@ -481,25 +514,36 @@ def _compare(h4):
         if os.path.exists(path):
             bprev = max(e['val_acc'] for e in json.load(open(path)))
             d = best4 - bprev
-            print(f"  vs {phase}: {bprev:.4f} → {best4:.4f}  "
-                  f"{'✅ +' if d>0 else '❌ '}{d:.4f}")
+            logger.info(f"  vs {phase}: {bprev:.4f} → {best4:.4f}  "
+                        f"{'✅ +' if d>0 else '❌ '}{d:.4f}")
 
 
 if __name__ == '__main__':
-    print(f"Device: {DEVICE}")
-    print(f"arch_nz={ARCH_NZ}  search_dim={SEARCH_DIM}  "
-          f"novelty_w={args.novelty_w}  tau={args.tau_gumbel}")
-    print(f"hidden_dim: {{16,32,64,128,256,512}}  l2: {{1e-4..5e-4}}")
-    print(f"GCNII: alpha={args.gcnii_alpha}  theta={args.gcnii_theta}")
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    start_time = time.time()
+
+    logger.info("=" * 70)
+    logger.info(f"bo_phase4.py  v9  —  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 70)
+    logger.info(f"Device: {DEVICE}")
+    logger.info(f"arch_nz={ARCH_NZ}  search_dim={SEARCH_DIM}  seed={args.seed}")
+    logger.info(f"novelty_w={args.novelty_w}  tau={args.tau_gumbel}")
+    logger.info(f"hidden_dim: {{16,32,64,128,256,512}}  l2: {{1e-4..5e-4}}")
+    logger.info(f"GCNII: alpha={args.gcnii_alpha}  theta={args.gcnii_theta}")
 
     vae       = load_vae(args.checkpoint)
     dvae_diff = build_differentiable_dvae(vae)
 
-    print(f"\nDVAE: p_dim={dvae_diff.p_dim}  (expected 84)")
+    logger.info(f"\nDVAE: p_dim={dvae_diff.p_dim}  (expected 84)")
     assert dvae_diff.p_dim == 84, f"p_dim mismatch: {dvae_diff.p_dim} != 84"
     dvae_diff.check_gradient_flow(nz=ARCH_NZ)
 
     data, in_ch, out_ch = load_cora(args.cora_root)
-    print(f"Cora: {in_ch} features  {out_ch} classes")
+    logger.info(f"Cora: {in_ch} features  {out_ch} classes")
 
     run_bo(vae, dvae_diff, data, in_ch, out_ch)
+
+    elapsed = time.time() - start_time
+    logger.info(f"\n✅ 运行完成  总耗时: {elapsed/60:.1f} min")
