@@ -16,3 +16,4 @@ amat(net) <- ad.mat
 # print(net)
 s = score(net, asia)
 write(s, file = output.file)
+prrint

@@ -25,7 +25,7 @@ if not os.path.exists('logs'):
 current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 log_filename = f"logs/train_log_{current_time}.txt"
 
-# 将标准输出重定向到我们自定义的 Logger
+# 将标准输出重定向到自定义的 Logger
 sys.stdout = Logger(log_filename)
 
 print(f"[{current_time}] 开始训练！日志将自动保存在 {log_filename}")
