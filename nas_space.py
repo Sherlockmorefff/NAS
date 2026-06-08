@@ -1,19 +1,18 @@
 """
-nas_space.py  v4  (Search Space v3 + HP VAE 4维升级)
+nas_space.py  v5  (Search Space v3 + 条件参数 4 维对齐)
 ======================================================
-v4 变更（相对 v3）：
-  - HP_VAE input_dim: 2 → 4
-      [0] log_lr   (归一化)
-      [1] dropout  (归一化)
-      [2] hidden_dim_norm  (归一化, 映射至 {16,32,64,128,256,512})
-      [3] l2_norm          (归一化, 映射至 {1e-4..5e-4})
-  - decode_from_joint_latent：
-      * 新增 return_full=False 参数（向后兼容）
-      * return_full=True 时额外返回 hidden_dims, l2_regs
+v5 变更（相对 v4）：
+  - HP_VAE 4 维语义统一为条件参数向量：
+      [0] log_lr_norm       (全局生效)
+      [1] dropout_norm      (全局生效)
+      [2] gat_heads_norm    (仅当架构含 GATConv 时生效)
+      [3] sage_aggr_norm    (仅当架构含 SAGEConv 时生效)
+  - decode_from_joint_latent(return_full=True) 返回 gat_heads/sage_aggr，
+    并根据解码架构自动 mask 非活跃条件参数。
   - JointSpaceVAE: HP_VAE(input_dim=4)
 
-⚠️  HP VAE input_dim 变化导致 v3 及更早权重与 HP 解码器不兼容，
-    必须重新运行 generate_mini_data.py（v4）和 train_joint.py。
+⚠️  HP VAE 条件参数语义变化导致 v4 及更早数据/权重不兼容，
+    必须重新运行 generate_mini_data.py（v5）和 train_joint.py。
 """
 
 import torch
@@ -30,11 +29,51 @@ OP_MAPPING = {
     7: "GCNII",        # v3 新增
 }
 
+LOG_LR_MIN = -4.0
+LOG_LR_MAX = -1.5
+DROPOUT_MIN = 0.1
+DROPOUT_MAX = 0.6
+GAT_HEAD_OPTIONS = [1, 2, 4, 8]
+SAGE_AGGR_OPTIONS = ["mean", "max", "add"]
+
+
+def _norm_index(x: float, n: int) -> int:
+    x = max(0.0, min(float(x), 1.0 - 1e-8))
+    return min(int(x * n), n - 1)
+
+
+def norm_to_gat_heads(x: float) -> int:
+    return GAT_HEAD_OPTIONS[_norm_index(x, len(GAT_HEAD_OPTIONS))]
+
+
+def norm_to_sage_aggr(x: float) -> str:
+    return SAGE_AGGR_OPTIONS[_norm_index(x, len(SAGE_AGGR_OPTIONS))]
+
+
+def condition_mask_from_types(types) -> list:
+    type_set = {int(t) for t in types}
+    return [
+        1.0,
+        1.0,
+        1.0 if 3 in type_set else 0.0,
+        1.0 if 4 in type_set else 0.0,
+    ]
+
+
+def condition_mask_from_graph(graph) -> list:
+    return condition_mask_from_types(graph.vs["type"])
+
+
+def condition_masks_from_graphs(graphs, device=None) -> torch.Tensor:
+    masks = [condition_mask_from_graph(g) for g in graphs]
+    return torch.tensor(masks, dtype=torch.float32, device=device)
+
 
 class HP_VAE(nn.Module):
     """超参数变分自编码器。
 
-    input_dim=4 时编码 [log_lr, dropout, hidden_norm, l2_norm]（v4 默认）。
+    input_dim=4 时编码 [log_lr_norm, dropout_norm,
+    gat_heads_norm, sage_aggr_norm]（v5 默认）。
     input_dim=2 时仅编码 [log_lr, dropout]（向后兼容）。
     """
 
@@ -95,7 +134,7 @@ class JointSpaceVAE(nn.Module):
             bidirectional = arch_args.bidirectional,
         )
 
-        # v4: HP VAE 升级到 input_dim=4，完整编码 4 个超参
+        # v5: HP VAE 编码 4 维条件参数，非活跃条件位由训练侧 mask
         self.hp_vae = HP_VAE(input_dim=4, latent_dim=hp_latent_dim)
 
         self.arch_nz  = arch_args.nz
@@ -130,35 +169,30 @@ class JointSpaceVAE(nn.Module):
             False（默认）→ 返回 (gnn_configs, learning_rates, dropouts)，
                            向后兼容所有旧调用方。
             True          → 返回 (gnn_configs, learning_rates, dropouts,
-                                  hidden_dims, l2_regs)，支持 v4 完整解码。
+                                  gat_heads, sage_aggrs)，支持条件参数解码。
 
         Returns
         -------
         gnn_configs    : list of dict
         learning_rates : list of float
         dropouts       : list of float
-        hidden_dims    : list of float  (仅 return_full=True)
-        l2_regs        : list of float  (仅 return_full=True)
+        gat_heads      : list of int  (仅 return_full=True)
+        sage_aggrs     : list of str  (仅 return_full=True)
         """
         z_arch = z_total[:, :self.arch_nz]
         z_hp   = z_total[:, self.arch_nz:]
 
         raw_hps        = self.hp_vae.decode(z_hp)
-        learning_rates = torch.pow(10, raw_hps[:, 0]).tolist()
-        dropouts       = torch.clamp(raw_hps[:, 1], 0.0, 0.6).tolist()
+        lr_norm        = torch.clamp(raw_hps[:, 0], 0.0, 1.0)
+        drop_norm      = torch.clamp(raw_hps[:, 1], 0.0, 1.0)
+        log_lrs        = lr_norm * (LOG_LR_MAX - LOG_LR_MIN) + LOG_LR_MIN
+        learning_rates = torch.pow(10, log_lrs).tolist()
+        dropouts       = (drop_norm * (DROPOUT_MAX - DROPOUT_MIN) + DROPOUT_MIN).tolist()
 
-        # v4: 提取 hidden_dim 和 l2 (当 HP_VAE input_dim >= 3/4 时有效)
-        if raw_hps.shape[1] >= 3:
-            hidden_dims = raw_hps[:, 2].tolist()
-        else:
-            # 向后兼容：input_dim=2 的旧模型，返回默认归一化值 0.5 → 64
-            hidden_dims = [0.5] * raw_hps.shape[0]
-
-        if raw_hps.shape[1] >= 4:
-            l2_regs = raw_hps[:, 3].tolist()
-        else:
-            # 向后兼容：返回默认归一化值 0.8 → 5e-4 (最后一档)
-            l2_regs = [0.8] * raw_hps.shape[0]
+        gat_norms = raw_hps[:, 2].tolist() if raw_hps.shape[1] >= 3 \
+            else [0.0] * raw_hps.shape[0]
+        sage_norms = raw_hps[:, 3].tolist() if raw_hps.shape[1] >= 4 \
+            else [0.0] * raw_hps.shape[0]
 
         graphs = self.arch_vae.decode(z_arch)
         gnn_configs = []
@@ -177,5 +211,12 @@ class JointSpaceVAE(nn.Module):
             })
 
         if return_full:
-            return gnn_configs, learning_rates, dropouts, hidden_dims, l2_regs
+            gat_heads = []
+            sage_aggrs = []
+            for cfg, gat_n, sage_n in zip(gnn_configs, gat_norms, sage_norms):
+                ops = cfg["operations"]
+                gat_heads.append(norm_to_gat_heads(gat_n) if "GATConv" in ops else 1)
+                sage_aggrs.append(
+                    norm_to_sage_aggr(sage_n) if "SAGEConv" in ops else "mean")
+            return gnn_configs, learning_rates, dropouts, gat_heads, sage_aggrs
         return gnn_configs, learning_rates, dropouts

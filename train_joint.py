@@ -1,10 +1,11 @@
 """
-train_joint.py  v8  (Search Space v3 + DVAE Loss 解包修复)
+train_joint.py  v9  (Search Space v3 + 条件参数 mask)
 ====================================================================
-v8 变更：
-  - 修复 DVAE.loss() 返回 3 个值导致的 unpacking ValueError。
-  - 兼容底层 D-VAE (total_loss, recon, kl) 的经典返回格式。
-  - 维持 v7 的 Teacher Forcing 和 Free Bits 维度加权修正。
+v9 变更：
+  - HP 4 维改为 [lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]。
+  - 训练时根据每个 DAG 的算子类型 mask 非活跃条件参数：
+      GATConv 缺席时不监督 gat_heads，SAGEConv 缺席时不监督 sage_aggr。
+  - 保留 v8 的 DVAE.loss() 智能解包修复。
 """
 
 import os
@@ -23,7 +24,7 @@ from torch.utils.data import DataLoader, Subset
 
 # 导入自定义模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nas_space import JointSpaceVAE
+from nas_space import JointSpaceVAE, condition_masks_from_graphs
 
 # ============================================================
 # 日志系统
@@ -59,10 +60,10 @@ def save_args_json(args, log_filepath: str):
     return json_path
 
 # ============================================================
-# 损失函数 (v8: 智能解包修复)
+# 损失函数 (v9: 条件参数 mask + 智能解包)
 # ============================================================
-def compute_loss(model, arch_out, mu_a, log_a, hp_out, mu_h, log_h, 
-                 target_graphs, target_hps, beta, free_bits, device):
+def compute_loss(model, arch_out, mu_a, log_a, hp_out, mu_h, log_h,
+                 target_graphs, target_hps, hp_mask, beta, free_bits, device):
     """
     计算联合 VAE 损失。
     """
@@ -79,8 +80,8 @@ def compute_loss(model, arch_out, mu_a, log_a, hp_out, mu_h, log_h,
         recon_arch = arch_loss_tuple[1]
         kl_arch_raw = arch_loss_tuple[2]
     
-    # 2. HP 重建损失 (MSE)
-    recon_hp = F.mse_loss(hp_out, target_hps, reduction='sum')
+    # 2. 条件 HP 重建损失：只监督当前架构真正生效的条件位
+    recon_hp = torch.sum(((hp_out - target_hps) * hp_mask) ** 2)
     
     # 3. HP KL 散度计算
     kl_hp_raw = -0.5 * torch.sum(1 + log_h - mu_h.pow(2) - log_h.exp())
@@ -111,15 +112,17 @@ def train_one_epoch(model, loader, optimizer, beta, args, device):
     
     for g_batch, hp_batch in loader:
         hp_batch = hp_batch.to(device)
+        hp_mask  = condition_masks_from_graphs(g_batch, device=device)
+        hp_input = hp_batch * hp_mask
         optimizer.zero_grad()
         
         # 前向传播 (arch_out 在训练时自由解码的结果不参与 loss 计算)
-        (arch_out, mu_a, log_a), (hp_out, mu_h, log_h) = model(g_batch, hp_batch)
+        (arch_out, mu_a, log_a), (hp_out, mu_h, log_h) = model(g_batch, hp_input)
         
         # 计算损失
         loss, ra, rh, ka, kh = compute_loss(
             model, arch_out, mu_a, log_a, hp_out, mu_h, log_h,
-            g_batch, hp_batch, beta, args.free_bits, device
+            g_batch, hp_batch, hp_mask, beta, args.free_bits, device
         )
         
         loss.backward()
@@ -139,8 +142,8 @@ def train_one_epoch(model, loader, optimizer, beta, args, device):
 # 主函数
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description='train_joint.py v8')
-    parser.add_argument('--data', type=str, default='data/mini_gnn_dataset_v4.pkl')
+    parser = argparse.ArgumentParser(description='train_joint.py v9')
+    parser.add_argument('--data', type=str, default='data/mini_gnn_dataset_v5.pkl')
     parser.add_argument('--checkpoint_dir', type=str, default='results/joint_search')
     parser.add_argument('--version', type=str, default='v3_final')
     parser.add_argument('--log_dir', type=str, default='logs/train_joint')
@@ -158,13 +161,13 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     logger.info("=" * 60)
-    logger.info(f"train_joint.py v8 (Search Space v3) | Device: {device}")
+    logger.info(f"train_joint.py v9 (Search Space v3 + conditional HP mask) | Device: {device}")
     logger.info(f"Data: {args.data} | Beta Max: {args.beta_max}")
     logger.info("=" * 60)
 
     # 2. 加载数据
     if not os.path.exists(args.data):
-        logger.error(f"数据集未找到: {args.data}，请先运行 generate_mini_data.py --hp_dim 4")
+        logger.error(f"数据集未找到: {args.data}，请先运行 generate_mini_data.py --hp_dim 4 生成 v5 条件参数数据")
         return
 
     with open(args.data, 'rb') as f:

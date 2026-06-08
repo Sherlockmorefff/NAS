@@ -1,9 +1,10 @@
 """
-eval_utils.py  v5  (网络隔离自测版)
+eval_utils.py  v6  (条件参数 mask + 网络隔离自测版)
 =====================================================================
-v5 变更：
-  - 将自测模块（__main__）中的 Test 4 改为使用随机 Dummy 数据，
-    彻底切断了对 GitHub 的网络下载依赖，避免服务器 timeout 报错。
+v6 变更：
+  - 新增条件参数 [lr, dropout, gat_heads, sage_aggr] 的解码与 mask。
+  - DynamicGNN 支持按条件参数设置 GATConv heads 和 SAGEConv aggr。
+  - 保留 v5 的网络隔离自测，避免服务器 timeout 报错。
 """
 
 import torch
@@ -34,14 +35,35 @@ HIDDEN_DIM_OPTIONS = [16, 32, 64, 128, 256, 512]
 # 修改前: L2_OPTIONS = [1e-4, 2e-4, 3e-4, 4e-4, 5e-4]
 # 修改后:
 L2_OPTIONS = [1e-5, 5e-5, 1e-4, 5e-4, 1e-3]
+GAT_HEAD_OPTIONS = [1, 2, 4, 8]
+SAGE_AGGR_OPTIONS = ['mean', 'max', 'add']
+
+DEFAULT_GAT_HEADS = 1
+DEFAULT_SAGE_AGGR = 'mean'
+
+
+def _norm_index(x: float, n: int) -> int:
+    x = float(np.clip(x, 0.0, 1.0 - 1e-8))
+    return min(int(x * n), n - 1)
 
 def norm_to_hidden(x: float) -> int:
-    idx = min(int(x * len(HIDDEN_DIM_OPTIONS)), len(HIDDEN_DIM_OPTIONS) - 1)
-    return HIDDEN_DIM_OPTIONS[idx]
+    return HIDDEN_DIM_OPTIONS[_norm_index(x, len(HIDDEN_DIM_OPTIONS))]
 
 def norm_to_l2(x: float) -> float:
-    idx = min(int(x * len(L2_OPTIONS)), len(L2_OPTIONS) - 1)
-    return L2_OPTIONS[idx]
+    return L2_OPTIONS[_norm_index(x, len(L2_OPTIONS))]
+
+def norm_to_gat_heads(x: float) -> int:
+    return GAT_HEAD_OPTIONS[_norm_index(x, len(GAT_HEAD_OPTIONS))]
+
+def norm_to_sage_aggr(x: float) -> str:
+    return SAGE_AGGR_OPTIONS[_norm_index(x, len(SAGE_AGGR_OPTIONS))]
+
+def condition_mask_from_config(config: dict) -> dict:
+    ops = config.get('operations', []) if config else []
+    return {
+        'gat_heads': 'GATConv' in ops,
+        'sage_aggr': 'SAGEConv' in ops,
+    }
 
 # ============================================================
 # 动态 GNN 模型
@@ -49,13 +71,17 @@ def norm_to_l2(x: float) -> float:
 class DynamicGNN(torch.nn.Module):
     def __init__(self, config: dict, in_ch: int, out_ch: int,
                  dropout: float = 0.5, hidden_dim: int = HIDDEN,
-                 gcnii_alpha: float = 0.1, gcnii_theta: float = 0.5):
+                 gcnii_alpha: float = 0.1, gcnii_theta: float = 0.5,
+                 gat_heads: int = DEFAULT_GAT_HEADS,
+                 sage_aggr: str = DEFAULT_SAGE_AGGR):
         super().__init__()
         self.ops        = config['operations']
         self.dropout    = dropout
         self.hidden_dim = hidden_dim
         self.in_ch      = in_ch
         self.out_ch     = out_ch
+        self.gat_heads  = max(1, int(gat_heads))
+        self.sage_aggr  = sage_aggr if sage_aggr in SAGE_AGGR_OPTIONS else DEFAULT_SAGE_AGGR
 
         self.edges = list(config.get('edges', []))
         n_ops = len(self.ops)
@@ -103,6 +129,21 @@ class DynamicGNN(torch.nn.Module):
                     shared_weights = True,
                 ))
                 gcnii_layer_idx += 1
+                node_out_dim[node_idx] = hidden_dim
+
+            elif op == 'GATConv':
+                self.layers.append(GATConv(
+                    in_dim, hidden_dim,
+                    heads  = self.gat_heads,
+                    concat = False,
+                ))
+                node_out_dim[node_idx] = hidden_dim
+
+            elif op == 'SAGEConv':
+                self.layers.append(SAGEConv(
+                    in_dim, hidden_dim,
+                    aggr = self.sage_aggr,
+                ))
                 node_out_dim[node_idx] = hidden_dim
 
             else:
@@ -200,6 +241,8 @@ def train_and_eval_arch(
     weight_decay: float = 5e-4,
     gcnii_alpha: float  = 0.1,
     gcnii_theta: float  = 0.5,
+    gat_heads: int      = DEFAULT_GAT_HEADS,
+    sage_aggr: str      = DEFAULT_SAGE_AGGR,
     max_epochs: int     = MAX_EPOCHS,
     patience: int       = PATIENCE,
     seed: int           = None,
@@ -222,6 +265,8 @@ def train_and_eval_arch(
             hidden_dim  = hidden_dim,
             gcnii_alpha = gcnii_alpha,
             gcnii_theta = gcnii_theta,
+            gat_heads   = gat_heads,
+            sage_aggr   = sage_aggr,
         ).to(device)
     except Exception as e:
         print(f"  [DynamicGNN build failed] {e}")
@@ -286,12 +331,18 @@ def eval_z_search(
     device,
     has_hidden: bool    = False,
     has_l2: bool        = False,
+    use_conditional_params: bool = False,
+    default_hidden_dim: int = HIDDEN,
+    default_weight_decay: float = 5e-4,
     gcnii_alpha: float  = 0.1,
     gcnii_theta: float  = 0.5,
     n_trials: int       = 3,
     max_epochs: int     = MAX_EPOCHS,
     patience: int       = PATIENCE,
 ) -> tuple:
+    z_arch = z_search[:arch_nz]
+    config = _decode_arch(vae, z_arch, device, n_trials)
+
     log_lr_n = float(z_search[arch_nz])
     drop_n   = float(z_search[arch_nz + 1])
     log_lr   = log_lr_n * (log_lr_max - log_lr_min) + log_lr_min
@@ -299,18 +350,27 @@ def eval_z_search(
     lr_val   = float(np.clip(10 ** log_lr, 1e-6, 1.0))
     dr_val   = float(np.clip(dropout, 0.0, 0.9))
 
-    if has_hidden and z_search.shape[0] > arch_nz + 2:
-        hidden_val = norm_to_hidden(float(z_search[arch_nz + 2]))
-    else:
-        hidden_val = HIDDEN
+    gat_heads_val = DEFAULT_GAT_HEADS
+    sage_aggr_val = DEFAULT_SAGE_AGGR
 
-    if has_l2 and z_search.shape[0] > arch_nz + 3:
-        l2_val = norm_to_l2(float(z_search[arch_nz + 3]))
+    if use_conditional_params:
+        mask = condition_mask_from_config(config)
+        if mask['gat_heads'] and z_search.shape[0] > arch_nz + 2:
+            gat_heads_val = norm_to_gat_heads(float(z_search[arch_nz + 2]))
+        if mask['sage_aggr'] and z_search.shape[0] > arch_nz + 3:
+            sage_aggr_val = norm_to_sage_aggr(float(z_search[arch_nz + 3]))
+        hidden_val = default_hidden_dim
+        l2_val = default_weight_decay
     else:
-        l2_val = 5e-4
+        if has_hidden and z_search.shape[0] > arch_nz + 2:
+            hidden_val = norm_to_hidden(float(z_search[arch_nz + 2]))
+        else:
+            hidden_val = default_hidden_dim
 
-    z_arch = z_search[:arch_nz]
-    config = _decode_arch(vae, z_arch, device, n_trials)
+        if has_l2 and z_search.shape[0] > arch_nz + 3:
+            l2_val = norm_to_l2(float(z_search[arch_nz + 3]))
+        else:
+            l2_val = default_weight_decay
 
     val_acc, is_valid = train_and_eval_arch(
         config, data, in_ch, out_ch,
@@ -320,12 +380,16 @@ def eval_z_search(
         weight_decay = l2_val,
         gcnii_alpha  = gcnii_alpha,
         gcnii_theta  = gcnii_theta,
+        gat_heads    = gat_heads_val,
+        sage_aggr    = sage_aggr_val,
         device       = device,
         max_epochs   = max_epochs,
         patience     = patience,
         track_test   = False,
     )
 
+    if use_conditional_params:
+        return val_acc, lr_val, dr_val, gat_heads_val, sage_aggr_val, is_valid
     return val_acc, lr_val, dr_val, hidden_val, l2_val, is_valid
 
 def _decode_arch(vae, z_arch: torch.Tensor, device, n_trials: int = 3):
@@ -355,7 +419,7 @@ if __name__ == '__main__':
     from torch_geometric.data import Data
     import os
 
-    print("eval_utils v5 self-test (Network Isolated)...")
+    print("eval_utils v6 self-test (Network Isolated)...")
     device = torch.device('cpu')
 
     # ── 测试 1：拓扑重建（含跳跃边） ─────────────────────
@@ -451,4 +515,4 @@ if __name__ == '__main__':
     print(f"\n  norm_to_hidden: {[norm_to_hidden(v) for v in [0,.2,.4,.6,.8,1.]]}")
     print(f"  norm_to_l2:     {[norm_to_l2(v) for v in [0,.25,.5,.75,1.]]}")
 
-    print("\n✅ eval_utils v5 OK")
+    print("\n✅ eval_utils v6 OK")

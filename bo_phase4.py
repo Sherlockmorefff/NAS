@@ -35,7 +35,13 @@ from nas_space import JointSpaceVAE
 from dvae_differentiable import build_differentiable_dvae
 from jacobian_utils import analyze_latent_smoothness
 from acqf_geometric import GPNDNASNovelty, make_acqf_and_optimize
-from eval_utils import eval_z_search, DynamicGNN, norm_to_hidden, norm_to_l2
+from eval_utils import (
+    eval_z_search,
+    DynamicGNN,
+    norm_to_gat_heads,
+    norm_to_sage_aggr,
+    condition_mask_from_config,
+)
 
 
 # ============================================================
@@ -128,7 +134,7 @@ save_args_json(args, log_filepath)
 # ============================================================
 # HP 反归一化
 # ============================================================
-def z_to_hp(z_search: torch.Tensor):
+def z_to_hp(z_search: torch.Tensor, config: dict = None):
     log_lr_n = float(z_search[ARCH_NZ])
     drop_n   = float(z_search[ARCH_NZ + 1])
     log_lr   = log_lr_n * (args.log_lr_max - args.log_lr_min) + args.log_lr_min
@@ -136,12 +142,13 @@ def z_to_hp(z_search: torch.Tensor):
     lr       = float(np.clip(10 ** np.clip(log_lr, -6, 0), 1e-6, 1.0))
     dr       = float(np.clip(dropout, 0.0, 0.9))
 
-    hd = norm_to_hidden(float(z_search[ARCH_NZ + 2])) \
-         if z_search.shape[0] > ARCH_NZ + 2 else 64
-    l2 = norm_to_l2(float(z_search[ARCH_NZ + 3])) \
-         if z_search.shape[0] > ARCH_NZ + 3 else 5e-4
+    mask = condition_mask_from_config(config)
+    gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
+        if mask['gat_heads'] and z_search.shape[0] > ARCH_NZ + 2 else 1
+    sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
+        if mask['sage_aggr'] and z_search.shape[0] > ARCH_NZ + 3 else 'mean'
 
-    return lr, dr, hd, l2
+    return lr, dr, gat_heads, sage_aggr
 
 
 def sample_hp_norm():
@@ -221,6 +228,7 @@ def eval_z(vae, z_search, data, in_ch, out_ch, epochs=None):
         device      = DEVICE,
         has_hidden  = True,
         has_l2      = True,
+        use_conditional_params = True,
         gcnii_alpha = args.gcnii_alpha,
         gcnii_theta = args.gcnii_theta,
         max_epochs  = args.eval_epochs,  # v9 修复：传入 max_epochs
@@ -352,13 +360,13 @@ def lhs_init(vae, data, in_ch, out_ch, n_target: int, oversample: int = 3):
     pbar = tqdm(all_pts, desc='LHS eval', ncols=100)
     for raw in pbar:
         z = torch.tensor(raw, dtype=torch.float32)
-        acc, lr_v, dr_v, hd_v, l2_v, ok = eval_z(vae, z, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z, data, in_ch, out_ch)
         X_all.append(z)
         Y_all.append(acc)
         hist_all.append({
             'step': len(hist_all) - 1, 'type': 'lhs',
             'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
-            'hidden': hd_v, 'l2': l2_v, 'valid': ok
+            'gat_heads': heads_v, 'sage_aggr': aggr_v, 'valid': ok
         })
         if ok: pbar.set_postfix({'valid_best': f"{max(Y_all):.4f}"})
 
@@ -455,7 +463,7 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
                     torch.randn(ARCH_NZ) * args.sigma_arch, sample_hp_norm()])
             tag_extra = ""
 
-        acc, lr_v, dr_v, hd_v, l2_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
         X_obs.append(z_next.cpu()); Y_obs.append(acc)
 
         if acc > best_acc:
@@ -466,12 +474,12 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
             tag = f"(best={best_acc:.4f}  stag={stagnant_cnt})"
 
         logger.info(f"  iter {it:>3d}: val={acc:.4f}  lr={lr_v:.5f}  "
-                    f"drop={dr_v:.3f}  hd={hd_v}  l2={l2_v:.0e}  "
+                    f"drop={dr_v:.3f}  heads={heads_v}  sage={aggr_v}  "
                     f"{tag}{'  [invalid]' if not ok else ''}{tag_extra}")
 
         history.append({'step': args.n_init+it, 'type': 'bo',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
-                        'hidden': hd_v, 'l2': l2_v,
+                        'gat_heads': heads_v, 'sage_aggr': aggr_v,
                         'best': best_acc, 'valid': ok})
 
         if (it+1) % 10 == 0:
@@ -481,14 +489,15 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
     best_idx = Y_obs.index(max(Y_obs))
     best_z   = X_obs[best_idx]
     best_cfg = decode_arch(vae, best_z[:ARCH_NZ], n_trials=10)
-    lr_b, dr_b, hd_b, l2_b = z_to_hp(best_z)
+    lr_b, dr_b, heads_b, aggr_b = z_to_hp(best_z, best_cfg)
 
     logger.info("\n" + "="*70)
     logger.info(f"  Phase 4 v9 (nz={ARCH_NZ}, GPND-NAS, SEARCH_DIM={SEARCH_DIM}) Final")
     logger.info("="*70)
     logger.info(f"  Best val_acc  : {max(Y_obs):.4f}")
     logger.info(f"  GNN config    : {best_cfg}")
-    logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  Hidden={hd_b}  L2={l2_b:.0e}")
+    logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  "
+                f"GAT heads={heads_b}  SAGE aggr={aggr_b}")
     logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
     logger.info("="*70)
 
@@ -530,7 +539,8 @@ if __name__ == '__main__':
     logger.info(f"Device: {DEVICE}")
     logger.info(f"arch_nz={ARCH_NZ}  search_dim={SEARCH_DIM}  seed={args.seed}")
     logger.info(f"novelty_w={args.novelty_w}  tau={args.tau_gumbel}")
-    logger.info(f"hidden_dim: {{16,32,64,128,256,512}}  l2: {{1e-4..5e-4}}")
+    logger.info("conditional HP: [lr, dropout, gat_heads, sage_aggr]")
+    logger.info("gat_heads active only for GATConv; sage_aggr active only for SAGEConv")
     logger.info(f"GCNII: alpha={args.gcnii_alpha}  theta={args.gcnii_theta}")
 
     vae       = load_vae(args.checkpoint)

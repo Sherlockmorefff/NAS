@@ -49,7 +49,13 @@ from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv, GINConv
 
 from nas_space import JointSpaceVAE
-from eval_utils import eval_z_search, DynamicGNN, norm_to_hidden, norm_to_l2
+from eval_utils import (
+    eval_z_search,
+    DynamicGNN,
+    norm_to_gat_heads,
+    norm_to_sage_aggr,
+    condition_mask_from_config,
+)
 
 
 # ============================================================
@@ -135,7 +141,7 @@ save_args_json(args, log_filepath)
 # ============================================================
 # HP 反归一化
 # ============================================================
-def z_to_hp(z_search: torch.Tensor):
+def z_to_hp(z_search: torch.Tensor, config: dict = None):
     log_lr_n = float(z_search[ARCH_NZ])
     drop_n   = float(z_search[ARCH_NZ + 1])
     log_lr   = log_lr_n * (args.log_lr_max - args.log_lr_min) + args.log_lr_min
@@ -143,12 +149,13 @@ def z_to_hp(z_search: torch.Tensor):
     lr       = float(np.clip(10 ** log_lr, 1e-6, 1.0))
     dr       = float(np.clip(dropout, 0.0, 0.9))
 
-    hd = norm_to_hidden(float(z_search[ARCH_NZ + 2])) \
-         if z_search.shape[0] > ARCH_NZ + 2 else 64
-    l2 = norm_to_l2(float(z_search[ARCH_NZ + 3])) \
-         if z_search.shape[0] > ARCH_NZ + 3 else 5e-4
+    mask = condition_mask_from_config(config)
+    gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
+        if mask['gat_heads'] and z_search.shape[0] > ARCH_NZ + 2 else 1
+    sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
+        if mask['sage_aggr'] and z_search.shape[0] > ARCH_NZ + 3 else 'mean'
 
-    return lr, dr, hd, l2
+    return lr, dr, gat_heads, sage_aggr
 
 
 def sample_hp_norm():
@@ -229,6 +236,9 @@ def eval_z(vae, z_search: torch.Tensor, data, in_ch, out_ch, epochs=None):
         device      = DEVICE,
         has_hidden  = True,
         has_l2      = True,
+        use_conditional_params = True,
+        default_hidden_dim     = args.hidden_dim,
+        default_weight_decay   = args.weight_decay,
         gcnii_alpha = args.gcnii_alpha,   # v7 新增
         gcnii_theta = args.gcnii_theta,   # v7 新增
     )
@@ -376,18 +386,20 @@ def run_bo(vae, data, in_ch, out_ch):
     logger.info(f"  ARCH_NZ={ARCH_NZ}  SEARCH_DIM={SEARCH_DIM}")
     logger.info(f"  LR: 10^[{args.log_lr_min},{args.log_lr_max}]  "
                 f"Dropout: [{args.dropout_min},{args.dropout_max}]")
-    logger.info(f"  hidden: {{16,32,64,128,256,512}}  l2: {{1e-4..5e-4}}")
+    logger.info("  conditional HP: [lr, dropout, gat_heads, sage_aggr]")
+    logger.info("  gat_heads active only for GATConv; sage_aggr active only for SAGEConv")
     logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
     logger.info(f"  Eval: max_epochs=150  patience={args.patience}  CosineAnnealingLR")
 
     for i, z in enumerate(tqdm(init_pts, desc='Init')):
-        acc, lr_v, dr_v, hd_v, l2_v, ok = eval_z(vae, z, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z, data, in_ch, out_ch)
         X_obs.append(z); Y_obs.append(acc)
         history.append({'step': i, 'type': 'init',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
-                        'hidden': hd_v, 'l2': l2_v, 'valid': ok})
+                        'gat_heads': heads_v, 'sage_aggr': aggr_v,
+                        'valid': ok})
         logger.info(f"  init {i:>2d}: val={acc:.4f}  lr={lr_v:.5f}  "
-                    f"drop={dr_v:.3f}  hd={hd_v}  l2={l2_v:.0e}  "
+                    f"drop={dr_v:.3f}  heads={heads_v}  sage={aggr_v}  "
                     f"[{'valid' if ok else 'INVALID'}]")
 
     if not any(h['valid'] for h in history):
@@ -409,7 +421,7 @@ def run_bo(vae, data, in_ch, out_ch):
             z_next = torch.cat([torch.randn(ARCH_NZ) * args.sigma_arch,
                                 sample_hp_norm()])
 
-        acc, lr_v, dr_v, hd_v, l2_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
         X_obs.append(z_next); Y_obs.append(acc)
 
         if acc > best_acc:
@@ -417,12 +429,12 @@ def run_bo(vae, data, in_ch, out_ch):
         else:
             tag = f"(best={best_acc:.4f})"
         logger.info(f"  iter {it:>3d}: val={acc:.4f}  lr={lr_v:.5f}  "
-                    f"drop={dr_v:.3f}  hd={hd_v}  l2={l2_v:.0e}  "
+                    f"drop={dr_v:.3f}  heads={heads_v}  sage={aggr_v}  "
                     f"{tag}{'  [invalid]' if not ok else ''}")
 
         history.append({'step': args.n_init+it, 'type': 'bo',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
-                        'hidden': hd_v, 'l2': l2_v,
+                        'gat_heads': heads_v, 'sage_aggr': aggr_v,
                         'best': best_acc, 'valid': ok})
         if (it+1) % 10 == 0:
             _save(history, X_obs, Y_obs, f'step{it}')
@@ -431,14 +443,15 @@ def run_bo(vae, data, in_ch, out_ch):
     best_idx = Y_obs.index(max(Y_obs))
     best_z   = X_obs[best_idx]
     best_cfg = decode_arch(vae, best_z[:ARCH_NZ], n_trials=10)
-    lr_b, dr_b, hd_b, l2_b = z_to_hp(best_z)
+    lr_b, dr_b, heads_b, aggr_b = z_to_hp(best_z, best_cfg)
 
     logger.info("\n" + "="*66)
     logger.info(f"          Phase 3 v7 (nz={ARCH_NZ}, SEARCH_DIM={SEARCH_DIM}) Final")
     logger.info("="*66)
     logger.info(f"  Best val_acc  : {max(Y_obs):.4f}")
     logger.info(f"  GNN config    : {best_cfg}")
-    logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  Hidden={hd_b}  L2={l2_b:.0e}")
+    logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  "
+                f"GAT heads={heads_b}  SAGE aggr={aggr_b}")
     logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
     logger.info("="*66)
 
@@ -526,7 +539,7 @@ if __name__ == '__main__':
     vae = load_vae(args.checkpoint)
     data, in_ch, out_ch = load_cora(args.cora_root)
     logger.info(f"Cora: {in_ch} features, {out_ch} classes")
-    logger.info(f"Search space v3: z_arch({ARCH_NZ}d) + lr+drop+hidden+l2(4d) "
+    logger.info(f"Search space v3: z_arch({ARCH_NZ}d) + lr+drop+gat_heads+sage_aggr(4d) "
                 f"= {SEARCH_DIM}d")
 
     run_bo(vae, data, in_ch, out_ch)

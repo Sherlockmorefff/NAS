@@ -175,15 +175,26 @@ CANDIDATES = [
     },
 
     # ══ C. 消融：NAS架构 + 默认HP ══════════════════════════════
+    # {
+    #     "name":        "ABL_Phase4arch_defaultHP",
+    #     "description": "消融：Phase4 v9 NAS最优架构 (Dense-5层) + 默认HP",
+    #     "operations":  ['GCNConv', 'GINConv', 'GINConv', 'GATConv', 'GCNConv'],
+    #     "edges":       [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
+    #     "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
+    #     "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
+    #     "group":       "ablation_arch",
+    # },
     {
-        "name":        "ABL_Phase4arch_defaultHP",
-        "description": "消融：Phase4 v7 NAS最优架构 (SAGE+GCN+Identity) + 默认HP",
-        "operations":  ["SAGEConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
+        "name":        "NAS_Phase4_Iter80_GIN",
+        "description": "Phase4 80轮最优：4层有效 (GAT+SAGE+GIN+GIN), 极低Dropout(0.1)硬背",
+        "operations":  ['GATConv', 'SAGEConv', 'Identity', 'GINConv', 'GINConv'],
+        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
         "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
         "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
         "group":       "ablation_arch",
     },
+
+
     {
         "name":        "ABL_Phase3arch_defaultHP",
         "description": "消融：Phase3架构 (GAT+SAGE+SAGE) + 默认HP",
@@ -214,23 +225,43 @@ CANDIDATES = [
         "group":       "nas_v1",
     },
 
-    # ══ E. 全量 NAS v2（架构 + LR/Dropout/Hidden/L2 全搜）═════
+
+    # {
+    #     "name":        "NAS_v2_Phase4_Dense",
+    #     "description": "NAS v2：Phase4 v9 最优 Dense-5层，LR=0.00488",
+    #     "operations":  ['GCNConv', 'GINConv', 'GINConv', 'GATConv', 'GCNConv'],
+    #     "edges":       [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
+    #     "lr":          0.00488, "dropout": 0.483, "hidden_dim": 512, "l2": 5e-04,
+    #     "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
+    #     "group":       "nas_v2",
+    # },
+
     {
-        "name":        "NAS_v2_Phase3_GAT_SAGE_SAGE",
-        "description": "NAS v2：Phase3 v2 最优 GAT→SAGE→SAGE，LR=0.01044",
-        "operations":  ["GATConv", "SAGEConv", "SAGEConv"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.01044, "dropout": 0.576, "hidden_dim": 512, "l2": 4e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
+        "name":        "NAS_Phase4_Iter80_GIN",
+        "description": "Phase4 80轮最优：4层有效 (GAT+SAGE+GIN+GIN), 极低Dropout(0.1)硬背",
+        "operations":  ['GATConv', 'SAGEConv', 'Identity', 'GINConv', 'GINConv'],
+        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
+        "lr":          0.00038, 
+        "dropout":     0.100, 
+        "hidden_dim":  512, 
+        "l2":          1e-05,
+        "gcnii_alpha": 0.1,  
+        "gcnii_theta": 1.0,
         "group":       "nas_v2",
     },
+
+    # ══ Iter 60 (高正则 GCNII 残差) ═════════════════
     {
-        "name":        "NAS_v2_Phase4_SAGE_GCN",
-        "description": "NAS v2：Phase4 v7 最优 SAGE→GCN→Identity，LR=0.00090",
-        "operations":  ["SAGEConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.00090, "dropout": 0.569, "hidden_dim": 512, "l2": 3e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
+        "name":        "NAS_Phase4_Iter60_GCNII",
+        "description": "Phase4 60轮最优：3层有效 (GAT+GCNII+GCN), 高Dropout(0.527)防过拟合",
+        "operations":  ['GATConv', 'GCNII', 'Identity', 'Identity', 'GCNConv'],
+        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (5, 6)],
+        "lr":          0.00062, 
+        "dropout":     0.527, 
+        "hidden_dim":  512, 
+        "l2":          1e-04,
+        "gcnii_alpha": 0.1,  
+        "gcnii_theta": 0.5,
         "group":       "nas_v2",
     },
 
