@@ -52,8 +52,10 @@ from nas_space import JointSpaceVAE
 from eval_utils import (
     eval_z_search,
     DynamicGNN,
+    HP_DIM_LAYERWISE,
     norm_to_gat_heads,
     norm_to_sage_aggr,
+    decode_layerwise_conditional_hp,
     condition_mask_from_config,
 )
 
@@ -124,12 +126,16 @@ parser.add_argument('--hidden_dim',  type=int,   default=64)
 parser.add_argument('--gcnii_alpha', type=float, default=0.1)
 parser.add_argument('--gcnii_theta', type=float, default=0.5)
 parser.add_argument('--patience',    type=int,   default=20)
+parser.add_argument('--hp_dim',      type=int,   default=4,
+                    choices=[4, HP_DIM_LAYERWISE],
+                    help='HP 维度：4=v5 type-wise，17=v6 layer-wise + GIN')
 args = parser.parse_args()
 
 # ── 全局常量（v7：ARCH_NZ=12）────────────────────────────
 DEVICE     = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 ARCH_NZ    = 12   # v7 核心修正：8 → 12
-SEARCH_DIM = ARCH_NZ + 4   # 16
+HP_DIM     = args.hp_dim
+SEARCH_DIM = ARCH_NZ + HP_DIM
 
 os.makedirs(args.output, exist_ok=True)
 
@@ -149,17 +155,22 @@ def z_to_hp(z_search: torch.Tensor, config: dict = None):
     lr       = float(np.clip(10 ** log_lr, 1e-6, 1.0))
     dr       = float(np.clip(dropout, 0.0, 0.9))
 
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        gat_heads, sage_aggr, gin_eps = decode_layerwise_conditional_hp(
+            z_search, ARCH_NZ, config)
+        return lr, dr, gat_heads, sage_aggr, gin_eps
+
     mask = condition_mask_from_config(config)
     gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
         if mask['gat_heads'] and z_search.shape[0] > ARCH_NZ + 2 else 1
     sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
         if mask['sage_aggr'] and z_search.shape[0] > ARCH_NZ + 3 else 'mean'
 
-    return lr, dr, gat_heads, sage_aggr
+    return lr, dr, gat_heads, sage_aggr, None
 
 
 def sample_hp_norm():
-    return torch.rand(4)
+    return torch.rand(HP_DIM)
 
 
 # ============================================================
@@ -177,7 +188,8 @@ class ArchArgs:
 
 
 def load_vae(ckpt_path):
-    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(DEVICE)
+    model = JointSpaceVAE(
+        ArchArgs(), hp_latent_dim=HP_DIM, hp_input_dim=HP_DIM).to(DEVICE)
     state = torch.load(ckpt_path, map_location=DEVICE, weights_only=True)
     model.load_state_dict(state)
     model.eval()
@@ -226,7 +238,7 @@ def load_cora(root):
 # 评估函数（v7：透传 gcnii_alpha/theta）
 # ============================================================
 def eval_z(vae, z_search: torch.Tensor, data, in_ch, out_ch, epochs=None):
-    return eval_z_search(
+    result = eval_z_search(
         vae, z_search, data, in_ch, out_ch,
         arch_nz     = ARCH_NZ,
         log_lr_min  = args.log_lr_min,
@@ -241,7 +253,12 @@ def eval_z(vae, z_search: torch.Tensor, data, in_ch, out_ch, epochs=None):
         default_weight_decay   = args.weight_decay,
         gcnii_alpha = args.gcnii_alpha,   # v7 新增
         gcnii_theta = args.gcnii_theta,   # v7 新增
+        return_layerwise = HP_DIM >= HP_DIM_LAYERWISE,
     )
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        return result
+    acc, lr_v, dr_v, heads_v, aggr_v, ok = result
+    return acc, lr_v, dr_v, heads_v, aggr_v, None, ok
 
 
 # ============================================================
@@ -386,20 +403,26 @@ def run_bo(vae, data, in_ch, out_ch):
     logger.info(f"  ARCH_NZ={ARCH_NZ}  SEARCH_DIM={SEARCH_DIM}")
     logger.info(f"  LR: 10^[{args.log_lr_min},{args.log_lr_max}]  "
                 f"Dropout: [{args.dropout_min},{args.dropout_max}]")
-    logger.info("  conditional HP: [lr, dropout, gat_heads, sage_aggr]")
-    logger.info("  gat_heads active only for GATConv; sage_aggr active only for SAGEConv")
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        logger.info("  conditional HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]")
+        logger.info("  layer-wise activation for GATConv/SAGEConv/GINConv")
+    else:
+        logger.info("  conditional HP: [lr, dropout, gat_heads, sage_aggr]")
+        logger.info("  gat_heads active only for GATConv; sage_aggr active only for SAGEConv")
     logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
     logger.info(f"  Eval: max_epochs=150  patience={args.patience}  CosineAnnealingLR")
 
     for i, z in enumerate(tqdm(init_pts, desc='Init')):
-        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, gin_v, ok = eval_z(vae, z, data, in_ch, out_ch)
         X_obs.append(z); Y_obs.append(acc)
         history.append({'step': i, 'type': 'init',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
                         'gat_heads': heads_v, 'sage_aggr': aggr_v,
+                        'gin_eps': gin_v,
                         'valid': ok})
         logger.info(f"  init {i:>2d}: val={acc:.4f}  lr={lr_v:.5f}  "
                     f"drop={dr_v:.3f}  heads={heads_v}  sage={aggr_v}  "
+                    f"gin={gin_v}  "
                     f"[{'valid' if ok else 'INVALID'}]")
 
     if not any(h['valid'] for h in history):
@@ -421,7 +444,7 @@ def run_bo(vae, data, in_ch, out_ch):
             z_next = torch.cat([torch.randn(ARCH_NZ) * args.sigma_arch,
                                 sample_hp_norm()])
 
-        acc, lr_v, dr_v, heads_v, aggr_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
+        acc, lr_v, dr_v, heads_v, aggr_v, gin_v, ok = eval_z(vae, z_next, data, in_ch, out_ch)
         X_obs.append(z_next); Y_obs.append(acc)
 
         if acc > best_acc:
@@ -430,11 +453,13 @@ def run_bo(vae, data, in_ch, out_ch):
             tag = f"(best={best_acc:.4f})"
         logger.info(f"  iter {it:>3d}: val={acc:.4f}  lr={lr_v:.5f}  "
                     f"drop={dr_v:.3f}  heads={heads_v}  sage={aggr_v}  "
+                    f"gin={gin_v}  "
                     f"{tag}{'  [invalid]' if not ok else ''}")
 
         history.append({'step': args.n_init+it, 'type': 'bo',
                         'val_acc': acc, 'lr': lr_v, 'dropout': dr_v,
                         'gat_heads': heads_v, 'sage_aggr': aggr_v,
+                        'gin_eps': gin_v,
                         'best': best_acc, 'valid': ok})
         if (it+1) % 10 == 0:
             _save(history, X_obs, Y_obs, f'step{it}')
@@ -443,7 +468,7 @@ def run_bo(vae, data, in_ch, out_ch):
     best_idx = Y_obs.index(max(Y_obs))
     best_z   = X_obs[best_idx]
     best_cfg = decode_arch(vae, best_z[:ARCH_NZ], n_trials=10)
-    lr_b, dr_b, heads_b, aggr_b = z_to_hp(best_z, best_cfg)
+    lr_b, dr_b, heads_b, aggr_b, gin_b = z_to_hp(best_z, best_cfg)
 
     logger.info("\n" + "="*66)
     logger.info(f"          Phase 3 v7 (nz={ARCH_NZ}, SEARCH_DIM={SEARCH_DIM}) Final")
@@ -452,6 +477,7 @@ def run_bo(vae, data, in_ch, out_ch):
     logger.info(f"  GNN config    : {best_cfg}")
     logger.info(f"  LR={lr_b:.5f}  Dropout={dr_b:.3f}  "
                 f"GAT heads={heads_b}  SAGE aggr={aggr_b}")
+    logger.info(f"  GIN eps={gin_b}")
     logger.info(f"  gcnii_alpha={args.gcnii_alpha}  gcnii_theta={args.gcnii_theta}")
     logger.info("="*66)
 
@@ -539,7 +565,7 @@ if __name__ == '__main__':
     vae = load_vae(args.checkpoint)
     data, in_ch, out_ch = load_cora(args.cora_root)
     logger.info(f"Cora: {in_ch} features, {out_ch} classes")
-    logger.info(f"Search space v3: z_arch({ARCH_NZ}d) + lr+drop+gat_heads+sage_aggr(4d) "
+    logger.info(f"Search space v3: z_arch({ARCH_NZ}d) + hp({HP_DIM}d) "
                 f"= {SEARCH_DIM}d")
 
     run_bo(vae, data, in_ch, out_ch)

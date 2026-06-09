@@ -46,7 +46,7 @@ import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 
 from nas_space import JointSpaceVAE
-from eval_utils import train_and_eval_arch, DynamicGNN
+from eval_utils import train_and_eval_arch, DynamicGNN, HP_DIM_LAYERWISE
 
 
 # ============================================================
@@ -108,6 +108,9 @@ parser.add_argument('--hidden_dim',  type=int,   default=64)
 parser.add_argument('--gcnii_alpha', type=float, default=0.1)
 parser.add_argument('--gcnii_theta', type=float, default=0.5)
 parser.add_argument('--patience',    type=int,   default=20)
+parser.add_argument('--hp_dim',      type=int,   default=4,
+                    choices=[4, HP_DIM_LAYERWISE],
+                    help='仅用于匹配 JointSpaceVAE checkpoint 的 HP 分支维度')
 args = parser.parse_args()
 
 # ── 全局常量 ─────────────────────────────────────────────
@@ -134,7 +137,8 @@ class ArchArgs:
 
 
 def load_vae(checkpoint_path: str) -> JointSpaceVAE:
-    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(DEVICE)
+    model = JointSpaceVAE(
+        ArchArgs(), hp_latent_dim=args.hp_dim, hp_input_dim=args.hp_dim).to(DEVICE)
     state = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
     model.load_state_dict(state)
     model.eval()

@@ -1,6 +1,12 @@
 """
-eval_utils.py  v6  (条件参数 mask + 网络隔离自测版)
+eval_utils.py  v7  (layer-wise 条件参数 + GIN eps)
 =====================================================================
+v7 变更：
+  - 支持 17 维 layer-wise 条件参数：
+      [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
+  - DynamicGNN 支持每层 GAT heads、每层 SAGE aggr、每层 GIN eps。
+  - 保留 v6 的 4 维 type-wise 条件参数兼容。
+
 v6 变更：
   - 新增条件参数 [lr, dropout, gat_heads, sage_aggr] 的解码与 mask。
   - DynamicGNN 支持按条件参数设置 GATConv heads 和 SAGEConv aggr。
@@ -37,9 +43,15 @@ HIDDEN_DIM_OPTIONS = [16, 32, 64, 128, 256, 512]
 L2_OPTIONS = [1e-5, 5e-5, 1e-4, 5e-4, 1e-3]
 GAT_HEAD_OPTIONS = [1, 2, 4, 8]
 SAGE_AGGR_OPTIONS = ['mean', 'max', 'add']
+GIN_EPS_MIN = -0.5
+GIN_EPS_MAX = 1.0
+MAX_OP_NODES = 5
+HP_DIM_TYPEWISE = 4
+HP_DIM_LAYERWISE = 2 + 3 * MAX_OP_NODES
 
 DEFAULT_GAT_HEADS = 1
 DEFAULT_SAGE_AGGR = 'mean'
+DEFAULT_GIN_EPS = 0.0
 
 
 def _norm_index(x: float, n: int) -> int:
@@ -58,12 +70,55 @@ def norm_to_gat_heads(x: float) -> int:
 def norm_to_sage_aggr(x: float) -> str:
     return SAGE_AGGR_OPTIONS[_norm_index(x, len(SAGE_AGGR_OPTIONS))]
 
+def norm_to_gin_eps(x: float) -> float:
+    x = float(np.clip(x, 0.0, 1.0))
+    return x * (GIN_EPS_MAX - GIN_EPS_MIN) + GIN_EPS_MIN
+
+def _layer_values(values, default, n: int = MAX_OP_NODES) -> list:
+    if values is None:
+        return [default for _ in range(n)]
+    if isinstance(values, (list, tuple)):
+        out = list(values[:n])
+        return out + [default for _ in range(n - len(out))]
+    return [values for _ in range(n)]
+
 def condition_mask_from_config(config: dict) -> dict:
     ops = config.get('operations', []) if config else []
+    ops5 = list(ops[:MAX_OP_NODES])
+    ops5 += ['Identity'] * (MAX_OP_NODES - len(ops5))
     return {
         'gat_heads': 'GATConv' in ops,
         'sage_aggr': 'SAGEConv' in ops,
+        'gin_eps': 'GINConv' in ops,
+        'gat_by_layer': [op == 'GATConv' for op in ops5],
+        'sage_by_layer': [op == 'SAGEConv' for op in ops5],
+        'gin_by_layer': [op == 'GINConv' for op in ops5],
     }
+
+def decode_layerwise_conditional_hp(
+    z_search: torch.Tensor,
+    arch_nz: int,
+    config: dict,
+) -> tuple:
+    gat_heads = [DEFAULT_GAT_HEADS] * MAX_OP_NODES
+    sage_aggr = [DEFAULT_SAGE_AGGR] * MAX_OP_NODES
+    gin_eps = [DEFAULT_GIN_EPS] * MAX_OP_NODES
+    if z_search.shape[0] < arch_nz + HP_DIM_LAYERWISE:
+        return gat_heads, sage_aggr, gin_eps
+
+    mask = condition_mask_from_config(config)
+    gat_norms = z_search[arch_nz + 2:arch_nz + 2 + MAX_OP_NODES]
+    sage_norms = z_search[arch_nz + 2 + MAX_OP_NODES:arch_nz + 2 + 2 * MAX_OP_NODES]
+    gin_norms = z_search[arch_nz + 2 + 2 * MAX_OP_NODES:arch_nz + 2 + 3 * MAX_OP_NODES]
+
+    for i in range(MAX_OP_NODES):
+        if mask['gat_by_layer'][i]:
+            gat_heads[i] = norm_to_gat_heads(float(gat_norms[i]))
+        if mask['sage_by_layer'][i]:
+            sage_aggr[i] = norm_to_sage_aggr(float(sage_norms[i]))
+        if mask['gin_by_layer'][i]:
+            gin_eps[i] = norm_to_gin_eps(float(gin_norms[i]))
+    return gat_heads, sage_aggr, gin_eps
 
 # ============================================================
 # 动态 GNN 模型
@@ -73,7 +128,11 @@ class DynamicGNN(torch.nn.Module):
                  dropout: float = 0.5, hidden_dim: int = HIDDEN,
                  gcnii_alpha: float = 0.1, gcnii_theta: float = 0.5,
                  gat_heads: int = DEFAULT_GAT_HEADS,
-                 sage_aggr: str = DEFAULT_SAGE_AGGR):
+                 sage_aggr: str = DEFAULT_SAGE_AGGR,
+                 gin_eps: float = DEFAULT_GIN_EPS,
+                 gat_heads_by_layer=None,
+                 sage_aggr_by_layer=None,
+                 gin_eps_by_layer=None):
         super().__init__()
         self.ops        = config['operations']
         self.dropout    = dropout
@@ -82,6 +141,17 @@ class DynamicGNN(torch.nn.Module):
         self.out_ch     = out_ch
         self.gat_heads  = max(1, int(gat_heads))
         self.sage_aggr  = sage_aggr if sage_aggr in SAGE_AGGR_OPTIONS else DEFAULT_SAGE_AGGR
+        self.gin_eps    = float(gin_eps)
+        self.gat_heads_by_layer = [
+            max(1, int(v)) for v in _layer_values(gat_heads_by_layer, self.gat_heads)
+        ]
+        self.sage_aggr_by_layer = [
+            v if v in SAGE_AGGR_OPTIONS else DEFAULT_SAGE_AGGR
+            for v in _layer_values(sage_aggr_by_layer, self.sage_aggr)
+        ]
+        self.gin_eps_by_layer = [
+            float(v) for v in _layer_values(gin_eps_by_layer, self.gin_eps)
+        ]
 
         self.edges = list(config.get('edges', []))
         n_ops = len(self.ops)
@@ -117,7 +187,11 @@ class DynamicGNN(torch.nn.Module):
                 mlp = Sequential(
                     Linear(in_dim, hidden_dim), ReLU(),
                     Linear(hidden_dim, hidden_dim))
-                self.layers.append(GINConv(mlp))
+                self.layers.append(GINConv(
+                    mlp,
+                    eps=self.gin_eps_by_layer[i],
+                    train_eps=False,
+                ))
                 node_out_dim[node_idx] = hidden_dim
 
             elif op == 'GCNII':
@@ -134,7 +208,7 @@ class DynamicGNN(torch.nn.Module):
             elif op == 'GATConv':
                 self.layers.append(GATConv(
                     in_dim, hidden_dim,
-                    heads  = self.gat_heads,
+                    heads  = self.gat_heads_by_layer[i],
                     concat = False,
                 ))
                 node_out_dim[node_idx] = hidden_dim
@@ -142,7 +216,7 @@ class DynamicGNN(torch.nn.Module):
             elif op == 'SAGEConv':
                 self.layers.append(SAGEConv(
                     in_dim, hidden_dim,
-                    aggr = self.sage_aggr,
+                    aggr = self.sage_aggr_by_layer[i],
                 ))
                 node_out_dim[node_idx] = hidden_dim
 
@@ -243,6 +317,10 @@ def train_and_eval_arch(
     gcnii_theta: float  = 0.5,
     gat_heads: int      = DEFAULT_GAT_HEADS,
     sage_aggr: str      = DEFAULT_SAGE_AGGR,
+    gin_eps: float       = DEFAULT_GIN_EPS,
+    gat_heads_by_layer   = None,
+    sage_aggr_by_layer   = None,
+    gin_eps_by_layer     = None,
     max_epochs: int     = MAX_EPOCHS,
     patience: int       = PATIENCE,
     seed: int           = None,
@@ -267,6 +345,10 @@ def train_and_eval_arch(
             gcnii_theta = gcnii_theta,
             gat_heads   = gat_heads,
             sage_aggr   = sage_aggr,
+            gin_eps     = gin_eps,
+            gat_heads_by_layer = gat_heads_by_layer,
+            sage_aggr_by_layer = sage_aggr_by_layer,
+            gin_eps_by_layer   = gin_eps_by_layer,
         ).to(device)
     except Exception as e:
         print(f"  [DynamicGNN build failed] {e}")
@@ -339,6 +421,7 @@ def eval_z_search(
     n_trials: int       = 3,
     max_epochs: int     = MAX_EPOCHS,
     patience: int       = PATIENCE,
+    return_layerwise: bool = False,
 ) -> tuple:
     z_arch = z_search[:arch_nz]
     config = _decode_arch(vae, z_arch, device, n_trials)
@@ -352,13 +435,34 @@ def eval_z_search(
 
     gat_heads_val = DEFAULT_GAT_HEADS
     sage_aggr_val = DEFAULT_SAGE_AGGR
+    gin_eps_val = DEFAULT_GIN_EPS
+    gat_heads_by_layer = None
+    sage_aggr_by_layer = None
+    gin_eps_by_layer = None
 
     if use_conditional_params:
         mask = condition_mask_from_config(config)
-        if mask['gat_heads'] and z_search.shape[0] > arch_nz + 2:
-            gat_heads_val = norm_to_gat_heads(float(z_search[arch_nz + 2]))
-        if mask['sage_aggr'] and z_search.shape[0] > arch_nz + 3:
-            sage_aggr_val = norm_to_sage_aggr(float(z_search[arch_nz + 3]))
+        hp_dim = z_search.shape[0] - arch_nz
+        if hp_dim >= HP_DIM_LAYERWISE:
+            gat_heads_by_layer, sage_aggr_by_layer, gin_eps_by_layer = \
+                decode_layerwise_conditional_hp(z_search, arch_nz, config)
+            if mask['gat_heads']:
+                gat_heads_val = next(
+                    (v for i, v in enumerate(gat_heads_by_layer)
+                     if mask['gat_by_layer'][i]), DEFAULT_GAT_HEADS)
+            if mask['sage_aggr']:
+                sage_aggr_val = next(
+                    (v for i, v in enumerate(sage_aggr_by_layer)
+                     if mask['sage_by_layer'][i]), DEFAULT_SAGE_AGGR)
+            if mask['gin_eps']:
+                gin_eps_val = next(
+                    (v for i, v in enumerate(gin_eps_by_layer)
+                     if mask['gin_by_layer'][i]), DEFAULT_GIN_EPS)
+        else:
+            if mask['gat_heads'] and z_search.shape[0] > arch_nz + 2:
+                gat_heads_val = norm_to_gat_heads(float(z_search[arch_nz + 2]))
+            if mask['sage_aggr'] and z_search.shape[0] > arch_nz + 3:
+                sage_aggr_val = norm_to_sage_aggr(float(z_search[arch_nz + 3]))
         hidden_val = default_hidden_dim
         l2_val = default_weight_decay
     else:
@@ -382,6 +486,10 @@ def eval_z_search(
         gcnii_theta  = gcnii_theta,
         gat_heads    = gat_heads_val,
         sage_aggr    = sage_aggr_val,
+        gin_eps      = gin_eps_val,
+        gat_heads_by_layer = gat_heads_by_layer,
+        sage_aggr_by_layer = sage_aggr_by_layer,
+        gin_eps_by_layer   = gin_eps_by_layer,
         device       = device,
         max_epochs   = max_epochs,
         patience     = patience,
@@ -389,6 +497,9 @@ def eval_z_search(
     )
 
     if use_conditional_params:
+        if return_layerwise:
+            return (val_acc, lr_val, dr_val, gat_heads_by_layer,
+                    sage_aggr_by_layer, gin_eps_by_layer, is_valid)
         return val_acc, lr_val, dr_val, gat_heads_val, sage_aggr_val, is_valid
     return val_acc, lr_val, dr_val, hidden_val, l2_val, is_valid
 

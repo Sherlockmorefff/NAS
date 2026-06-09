@@ -1,6 +1,11 @@
 """
-train_joint.py  v9  (Search Space v3 + 条件参数 mask)
+train_joint.py  v10  (Search Space v3 + layer-wise 条件参数 mask)
 ====================================================================
+v10 变更：
+  - 支持 hp_dim=17 的 layer-wise 条件参数：
+      [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
+  - hp_dim 从数据集自动推断；hp_dim=4 的 v5 数据仍兼容。
+
 v9 变更：
   - HP 4 维改为 [lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]。
   - 训练时根据每个 DAG 的算子类型 mask 非活跃条件参数：
@@ -24,7 +29,7 @@ from torch.utils.data import DataLoader, Subset
 
 # 导入自定义模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nas_space import JointSpaceVAE, condition_masks_from_graphs
+from nas_space import JointSpaceVAE, condition_masks_from_graphs, HP_DIM_LAYERWISE
 
 # ============================================================
 # 日志系统
@@ -112,7 +117,8 @@ def train_one_epoch(model, loader, optimizer, beta, args, device):
     
     for g_batch, hp_batch in loader:
         hp_batch = hp_batch.to(device)
-        hp_mask  = condition_masks_from_graphs(g_batch, device=device)
+        hp_mask  = condition_masks_from_graphs(
+            g_batch, device=device, hp_dim=hp_batch.shape[1])
         hp_input = hp_batch * hp_mask
         optimizer.zero_grad()
         
@@ -142,8 +148,9 @@ def train_one_epoch(model, loader, optimizer, beta, args, device):
 # 主函数
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description='train_joint.py v9')
-    parser.add_argument('--data', type=str, default='data/mini_gnn_dataset_v5.pkl')
+    parser = argparse.ArgumentParser(description='train_joint.py v10')
+    parser.add_argument('--data', type=str,
+                        default='data/mini_gnn_dataset_v6_layerwise_gin.pkl')
     parser.add_argument('--checkpoint_dir', type=str, default='results/joint_search')
     parser.add_argument('--version', type=str, default='v3_final')
     parser.add_argument('--log_dir', type=str, default='logs/train_joint')
@@ -152,6 +159,8 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--beta_max', type=float, default=0.01)
     parser.add_argument('--free_bits', type=float, default=2.0)
+    parser.add_argument('--hp_dim', type=int, default=None,
+                        help='HP 维度；默认从数据集自动推断')
     parser.add_argument('--seed', type=int, default=42)
     args = parser.parse_args()
 
@@ -161,17 +170,24 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     logger.info("=" * 60)
-    logger.info(f"train_joint.py v9 (Search Space v3 + conditional HP mask) | Device: {device}")
+    logger.info(f"train_joint.py v10 (Search Space v3 + layer-wise conditional HP mask) | Device: {device}")
     logger.info(f"Data: {args.data} | Beta Max: {args.beta_max}")
     logger.info("=" * 60)
 
     # 2. 加载数据
     if not os.path.exists(args.data):
-        logger.error(f"数据集未找到: {args.data}，请先运行 generate_mini_data.py --hp_dim 4 生成 v5 条件参数数据")
+        logger.error(f"数据集未找到: {args.data}，请先运行 generate_mini_data.py --hp_dim {HP_DIM_LAYERWISE}")
         return
 
     with open(args.data, 'rb') as f:
         dataset = pickle.load(f)
+
+    inferred_hp_dim = len(dataset[0][2])
+    if args.hp_dim is not None and args.hp_dim != inferred_hp_dim:
+        logger.error(f"--hp_dim={args.hp_dim} 与数据集 hp_dim={inferred_hp_dim} 不一致")
+        return
+    hp_dim = inferred_hp_dim
+    logger.info(f"HP dim inferred from dataset: {hp_dim}")
     
     # 转换为 (igraph, tensor) 格式
     processed_data = []
@@ -203,7 +219,8 @@ def main():
         max_n = 7; num_vertex_type = 8; nz = 12; bidirectional = True
         hs = 501; START_TYPE = 0; END_TYPE = 1
 
-    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(device)
+    model = JointSpaceVAE(
+        ArchArgs(), hp_latent_dim=hp_dim, hp_input_dim=hp_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # 4. 训练循环

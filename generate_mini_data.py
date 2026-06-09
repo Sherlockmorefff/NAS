@@ -1,8 +1,18 @@
 """
-generate_mini_data.py  v5
+generate_mini_data.py  v6
 =========================
 Search Space v3: max_n=7 (5 算子节点), nvt=8 (含 GCNII=type 7)
-HP 向量升级为条件参数：[log_lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]
+HP 向量升级为 layer-wise 条件参数：
+[lr_norm, dropout_norm, gat_heads_i, sage_aggr_i, gin_eps_i]
+
+v6 变更（相对 v5）：
+  - 新增 hp_dim=17：
+      [0] lr_norm
+      [1] dropout_norm
+      [2:7]   gat_heads_norm_i，仅第 i 个算子节点为 GATConv(type=3) 时生效
+      [7:12]  sage_aggr_norm_i，仅第 i 个算子节点为 SAGEConv(type=4) 时生效
+      [12:17] gin_eps_norm_i，仅第 i 个算子节点为 GINConv(type=5) 时生效
+  - 保留 hp_dim=4 的 v5 type-wise 条件参数兼容。
 
 v5 变更（相对 v4）：
   - HP 从普通 4 维改为条件参数 4 维，与 nas_space.py v5 对齐：
@@ -46,6 +56,8 @@ LOG_LR_MIN    = -4.0
 LOG_LR_MAX    = -1.5
 DROPOUT_MIN   = 0.1
 DROPOUT_MAX   = 0.6
+MAX_OP_NODES  = 5
+HP_DIM_LAYERWISE = 2 + 3 * MAX_OP_NODES
 
 
 def _sample_hp4(types: list) -> list:
@@ -57,6 +69,17 @@ def _sample_hp4(types: list) -> list:
     return [lr_n, dropout_n, gat_heads_n, sage_aggr_n]
 
 
+def _sample_hp17(types: list) -> list:
+    """采样 17 维 layer-wise 条件参数。"""
+    op_types = types[1:1 + MAX_OP_NODES]
+    lr_n = random.random()
+    dropout_n = random.random()
+    gat_heads = [random.random() if t == 3 else 0.0 for t in op_types]
+    sage_aggr = [random.random() if t == 4 else 0.0 for t in op_types]
+    gin_eps = [random.random() if t == 5 else 0.0 for t in op_types]
+    return [lr_n, dropout_n] + gat_heads + sage_aggr + gin_eps
+
+
 def _sample_hp2() -> list:
     """向后兼容：采样旧格式 2 维 HP 向量：[log_lr, dropout]。"""
     log_lr  = random.uniform(LOG_LR_MIN, LOG_LR_MAX)
@@ -65,10 +88,10 @@ def _sample_hp2() -> list:
 
 
 def generate_mini_dataset(
-    output_file: str = 'data/mini_gnn_dataset_v5.pkl',
+    output_file: str = 'data/mini_gnn_dataset_v6_layerwise_gin.pkl',
     num_samples: int = 3000,
     skip_prob: float = 0.35,
-    hp_dim: int      = 4,
+    hp_dim: int      = HP_DIM_LAYERWISE,
 ) -> str:
     """
     生成 num_samples 个 v3 空间合法 DAG 样本。
@@ -78,14 +101,18 @@ def generate_mini_dataset(
     output_file : str    输出 .pkl 文件路径
     num_samples : int    样本数量
     skip_prob   : float  跳跃边生成概率（每条潜在跳跃边独立）
-    hp_dim      : int    HP 维度；4=v5 条件参数格式（默认），2=向后兼容
+    hp_dim      : int    HP 维度；17=v6 layer-wise，4=v5 type-wise，2=向后兼容
     """
-    assert hp_dim in (2, 4), f"hp_dim 必须为 2 或 4，当前: {hp_dim}"
+    assert hp_dim in (2, 4, HP_DIM_LAYERWISE), \
+        f"hp_dim 必须为 2、4 或 {HP_DIM_LAYERWISE}，当前: {hp_dim}"
     dataset = []
     print(f"生成 {num_samples} 个 v3 DAG 样本 (max_n=7, nvt=8, hp_dim={hp_dim})...")
     print(f"  主链: 0→1→2→3→4→5→6  每条跳跃边概率={skip_prob}")
     print(f"  REAL_OP_TYPES={REAL_OP_TYPES}  ALL_OP_TYPES={ALL_OP_TYPES}")
-    if hp_dim == 4:
+    if hp_dim == HP_DIM_LAYERWISE:
+        print("  HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]")
+        print("      条件参数按 5 个算子节点逐层激活：GAT/SAGE/GIN 各自监督对应层")
+    elif hp_dim == 4:
         print(f"  HP: [lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]")
         print(f"      lr/dropout 全局生效；gat_heads 仅 GATConv 生效；"
               f"sage_aggr 仅 SAGEConv 生效")
@@ -122,7 +149,12 @@ def generate_mini_dataset(
         _assert_valid_v3(types, adj)
 
         # ── HP 采样 ───────────────────────────────────────
-        hp = _sample_hp4(types) if hp_dim == 4 else _sample_hp2()
+        if hp_dim == HP_DIM_LAYERWISE:
+            hp = _sample_hp17(types)
+        elif hp_dim == 4:
+            hp = _sample_hp4(types)
+        else:
+            hp = _sample_hp2()
         dataset.append((types, adj, hp))
 
     with open(output_file, 'wb') as f:
@@ -133,7 +165,14 @@ def generate_mini_dataset(
     print("\n[自检] 前 3 条样本：")
     for i, (t, a, hp) in enumerate(dataset[:3]):
         edges = [(r, c) for r in range(7) for c in range(7) if a[r, c]]
-        if len(hp) >= 4:
+        if len(hp) == HP_DIM_LAYERWISE:
+            lr_actual = 10 ** (hp[0] * (LOG_LR_MAX - LOG_LR_MIN) + LOG_LR_MIN)
+            drop_actual = hp[1] * (DROPOUT_MAX - DROPOUT_MIN) + DROPOUT_MIN
+            hp_str = f"lr={lr_actual:.5f}  drop={drop_actual:.3f}"
+            hp_str += f"  gat={np.round(hp[2:7], 3).tolist()}"
+            hp_str += f"  sage={np.round(hp[7:12], 3).tolist()}"
+            hp_str += f"  gin={np.round(hp[12:17], 3).tolist()}"
+        elif len(hp) >= 4:
             lr_actual = 10 ** (hp[0] * (LOG_LR_MAX - LOG_LR_MIN) + LOG_LR_MIN)
             drop_actual = hp[1] * (DROPOUT_MAX - DROPOUT_MIN) + DROPOUT_MIN
             hp_str = f"lr={lr_actual:.5f}  drop={drop_actual:.3f}"
@@ -187,14 +226,14 @@ if __name__ == "__main__":
     import os
     os.makedirs('data', exist_ok=True)
 
-    parser = argparse.ArgumentParser(description='generate_mini_data v5')
+    parser = argparse.ArgumentParser(description='generate_mini_data v6')
     parser.add_argument('--output',      type=str,
-                        default='data/mini_gnn_dataset_v5.pkl')
+                        default='data/mini_gnn_dataset_v6_layerwise_gin.pkl')
     parser.add_argument('--num_samples', type=int,  default=3000)
     parser.add_argument('--skip_prob',   type=float, default=0.35)
-    parser.add_argument('--hp_dim',      type=int,  default=4,
-                        choices=[2, 4],
-                        help='HP 维度：4=v5条件参数格式（默认），2=v3向后兼容')
+    parser.add_argument('--hp_dim',      type=int,  default=HP_DIM_LAYERWISE,
+                        choices=[2, 4, HP_DIM_LAYERWISE],
+                        help='HP 维度：17=v6逐层条件参数，4=v5条件参数，2=向后兼容')
     parser.add_argument('--seed',        type=int,  default=42)
     cli_args = parser.parse_args()
 

@@ -1,6 +1,14 @@
 """
-final_eval.py  v9  (面向 condHP v5 的非冗余消融实验)
+final_eval.py  v10  (condHP v5/v6 非冗余消融实验)
 ============================================================================
+v10 变更（相对 v9）：
+
+  [新增 1] 支持逐层条件参数与 GIN 条件参数
+      - --hp_dim 4 保持 condHP v5 行为
+      - --hp_dim 17 启用 condHP v6：
+          [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
+      - 自动按 decoded NAS 架构逐层激活 GAT/SAGE/GIN 的条件参数
+
 v9 变更（相对 v8）：
 
   [重构 1] 去除旧 v1/v2/诊断型冗余候选
@@ -30,8 +38,8 @@ v8 变更（相对 v7）：
       - 默认读取 results/bo_phase4_condhp_v5/best_z_final.pt
       - 默认读取 results/joint_search/joint_model_condhp_v5_ep100.pth
       - 使用 JointSpaceVAE 解码 z[:12] 得到 GNN 架构
-      - 使用 z[12:16] 反归一化得到 [lr, dropout, gat_heads, sage_aggr]
-      - 按架构条件 mask 仅在包含 GAT/SAGE 时激活对应条件参数
+      - 使用 z[12:] 按 --hp_dim 反归一化得到条件参数
+      - 按架构条件 mask 仅在对应层包含 GAT/SAGE/GIN 时激活条件参数
       - 自动候选追加到 CANDIDATES 后，不破坏原有人工候选和消融矩阵
 
   [修复 2] final_eval 透传条件 HP
@@ -93,9 +101,13 @@ from torch_geometric.datasets import Planetoid
 from nas_space import JointSpaceVAE
 from eval_utils import (
     train_and_eval_arch,
+    HP_DIM_LAYERWISE,
+    MAX_OP_NODES,
+    DEFAULT_GIN_EPS,
     condition_mask_from_config,
     norm_to_gat_heads,
     norm_to_sage_aggr,
+    decode_layerwise_conditional_hp,
 )
 
 
@@ -138,7 +150,7 @@ def save_args_json(args, log_filepath: str) -> str:
 # ============================================================
 # 参数解析
 # ============================================================
-parser = argparse.ArgumentParser(description='final_eval v9')
+parser = argparse.ArgumentParser(description='final_eval v10')
 # 原有参数（不变）
 parser.add_argument('--cora_root',   type=str, default='/tmp/Cora')
 parser.add_argument('--n_seeds',     type=int, default=10)
@@ -155,7 +167,7 @@ parser.add_argument('--hidden_dim',  type=int, default=64,
                     help='全局默认 hidden_dim（各候选中若有 hidden_dim 字段则优先）')
 parser.add_argument('--gcnii_alpha', type=float, default=0.1)
 parser.add_argument('--gcnii_theta', type=float, default=0.5)
-# v9：Phase4 条件参数 best_z 自动消融
+# Phase4 条件参数 best_z 自动消融
 parser.add_argument('--checkpoint',  type=str,
                     default='results/joint_search/joint_model_condhp_v5_ep100.pth',
                     help='用于解码 best_z_final.pt 的 JointSpaceVAE checkpoint')
@@ -171,10 +183,19 @@ parser.add_argument('--log_lr_min',  type=float, default=-4.0)
 parser.add_argument('--log_lr_max',  type=float, default=-1.5)
 parser.add_argument('--dropout_min', type=float, default=0.1)
 parser.add_argument('--dropout_max', type=float, default=0.6)
+parser.add_argument('--hp_dim',      type=int, default=4,
+                    choices=[4, HP_DIM_LAYERWISE],
+                    help='HP 维度：4=v5 type-wise，17=v6 layer-wise + GIN')
 args = parser.parse_args()
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 ARCH_NZ = args.arch_nz
+HP_DIM = args.hp_dim
+HP_MODE_LABEL = (
+    'condHP v6 layer-wise + GIN'
+    if HP_DIM >= HP_DIM_LAYERWISE else
+    'condHP v5 type-wise'
+)
 os.makedirs(args.output, exist_ok=True)
 
 logger, log_filepath = setup_logger(args.log_dir, 'final_eval', args.version)
@@ -189,6 +210,9 @@ DEFAULT_DROPOUT = 0.5
 DEFAULT_GAT_HEADS = 1
 DEFAULT_SAGE_AGGR = 'mean'
 DEFAULT_EDGES = [(0, 1), (1, 2), (2, 3), (3, 4)]
+DEFAULT_GAT_HEADS_BY_LAYER = [DEFAULT_GAT_HEADS] * MAX_OP_NODES
+DEFAULT_SAGE_AGGR_BY_LAYER = [DEFAULT_SAGE_AGGR] * MAX_OP_NODES
+DEFAULT_GIN_EPS_BY_LAYER = [DEFAULT_GIN_EPS] * MAX_OP_NODES
 MANUAL_2GCN_OPS = ["GCNConv", "GCNConv", "Identity"]
 MANUAL_1GCN_OPS = ["GCNConv", "Identity", "Identity"]
 
@@ -205,6 +229,10 @@ def make_candidate(
     l2: float = None,
     gat_heads: int = DEFAULT_GAT_HEADS,
     sage_aggr: str = DEFAULT_SAGE_AGGR,
+    gin_eps: float = DEFAULT_GIN_EPS,
+    gat_heads_by_layer=None,
+    sage_aggr_by_layer=None,
+    gin_eps_by_layer=None,
     **extra,
 ) -> dict:
     cand = {
@@ -220,6 +248,10 @@ def make_candidate(
         "gcnii_theta": args.gcnii_theta,
         "gat_heads":   gat_heads,
         "sage_aggr":   sage_aggr,
+        "gin_eps":     gin_eps,
+        "gat_heads_by_layer": gat_heads_by_layer,
+        "sage_aggr_by_layer": sage_aggr_by_layer,
+        "gin_eps_by_layer": gin_eps_by_layer,
         "group":       group,
     }
     cand.update(extra)
@@ -266,11 +298,12 @@ def _torch_load(path: str, map_location):
 
 
 def load_vae_for_auto(ckpt_path: str):
-    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(DEVICE)
+    model = JointSpaceVAE(
+        ArchArgs(), hp_latent_dim=HP_DIM, hp_input_dim=HP_DIM).to(DEVICE)
     state = _torch_load(ckpt_path, map_location=DEVICE)
     model.load_state_dict(state)
     model.eval()
-    logger.info(f"Auto VAE loaded: {ckpt_path}  (arch_nz={ARCH_NZ}, hp_dim=4)")
+    logger.info(f"Auto VAE loaded: {ckpt_path}  (arch_nz={ARCH_NZ}, hp_dim={HP_DIM})")
     return model
 
 
@@ -304,12 +337,13 @@ def decode_arch_from_z(vae, z_arch: torch.Tensor, n_trials: int = 10):
 
 def z_to_condhp(z_search: torch.Tensor, config: dict):
     """
-    将 Phase4 搜索向量 z[12:16] 反归一化为条件 HP。
-    z[14]/z[15] 仅在架构含 GATConv/SAGEConv 时激活。
+    将 Phase4 搜索向量反归一化为条件 HP。
+    hp_dim=4  使用 v5 type-wise 条件参数；
+    hp_dim=17 使用 v6 layer-wise GAT/SAGE/GIN 条件参数。
     """
-    if z_search.shape[0] < ARCH_NZ + 4:
+    if z_search.shape[0] < ARCH_NZ + HP_DIM:
         raise ValueError(
-            f"best_z 维度不足：需要至少 {ARCH_NZ + 4} 维，实际 {z_search.shape[0]} 维")
+            f"best_z 维度不足：需要至少 {ARCH_NZ + HP_DIM} 维，实际 {z_search.shape[0]} 维")
 
     log_lr_n = float(z_search[ARCH_NZ])
     drop_n   = float(z_search[ARCH_NZ + 1])
@@ -319,15 +353,51 @@ def z_to_condhp(z_search: torch.Tensor, config: dict):
     dr       = float(np.clip(dropout, 0.0, 0.9))
 
     mask = condition_mask_from_config(config)
-    gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
-        if mask['gat_heads'] else 1
-    sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
-        if mask['sage_aggr'] else 'mean'
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        gat_by_layer, sage_by_layer, gin_by_layer = decode_layerwise_conditional_hp(
+            z_search, ARCH_NZ, config)
+        return {
+            'lr': lr,
+            'dropout': dr,
+            'gat_heads': next(
+                (v for i, v in enumerate(gat_by_layer)
+                 if mask['gat_by_layer'][i]), DEFAULT_GAT_HEADS),
+            'sage_aggr': next(
+                (v for i, v in enumerate(sage_by_layer)
+                 if mask['sage_by_layer'][i]), DEFAULT_SAGE_AGGR),
+            'gin_eps': next(
+                (v for i, v in enumerate(gin_by_layer)
+                 if mask['gin_by_layer'][i]), DEFAULT_GIN_EPS),
+            'gat_heads_by_layer': gat_by_layer,
+            'sage_aggr_by_layer': sage_by_layer,
+            'gin_eps_by_layer': gin_by_layer,
+            'mask': mask,
+        }
 
-    return lr, dr, gat_heads, sage_aggr, mask
+    gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
+        if mask['gat_heads'] else DEFAULT_GAT_HEADS
+    sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
+        if mask['sage_aggr'] else DEFAULT_SAGE_AGGR
+
+    return {
+        'lr': lr,
+        'dropout': dr,
+        'gat_heads': gat_heads,
+        'sage_aggr': sage_aggr,
+        'gin_eps': DEFAULT_GIN_EPS,
+        'gat_heads_by_layer': None,
+        'sage_aggr_by_layer': None,
+        'gin_eps_by_layer': None,
+        'mask': mask,
+    }
 
 
 def candidate_signature(cand: dict) -> tuple:
+    def _seq(v, default):
+        if v is None:
+            return None
+        return tuple(v if isinstance(v, (list, tuple)) else [v])
+
     edges = tuple(tuple(e) for e in cand['edges'])
     return (
         tuple(cand['operations']),
@@ -338,6 +408,10 @@ def candidate_signature(cand: dict) -> tuple:
         round(float(cand.get('l2', args.weight_decay)), 12),
         int(cand.get('gat_heads', DEFAULT_GAT_HEADS)),
         cand.get('sage_aggr', DEFAULT_SAGE_AGGR),
+        round(float(cand.get('gin_eps', DEFAULT_GIN_EPS)), 12),
+        _seq(cand.get('gat_heads_by_layer'), DEFAULT_GAT_HEADS_BY_LAYER),
+        _seq(cand.get('sage_aggr_by_layer'), DEFAULT_SAGE_AGGR_BY_LAYER),
+        _seq(cand.get('gin_eps_by_layer'), DEFAULT_GIN_EPS_BY_LAYER),
         round(float(cand.get('gcnii_alpha', args.gcnii_alpha)), 12),
         round(float(cand.get('gcnii_theta', args.gcnii_theta)), 12),
     )
@@ -375,7 +449,16 @@ def build_auto_ablation_candidates(existing_candidates=None):
         logger.warning(f"best_z 架构解码失败，跳过自动消融候选: {args.auto_best_z}")
         return []
 
-    lr, dropout, gat_heads, sage_aggr, mask = z_to_condhp(z_search, config)
+    hp = z_to_condhp(z_search, config)
+    lr = hp['lr']
+    dropout = hp['dropout']
+    gat_heads = hp['gat_heads']
+    sage_aggr = hp['sage_aggr']
+    gin_eps = hp['gin_eps']
+    gat_heads_by_layer = hp['gat_heads_by_layer']
+    sage_aggr_by_layer = hp['sage_aggr_by_layer']
+    gin_eps_by_layer = hp['gin_eps_by_layer']
+    mask = hp['mask']
 
     source_meta = {
         'source_best_z': args.auto_best_z,
@@ -408,10 +491,17 @@ def build_auto_ablation_candidates(existing_candidates=None):
         **source_meta,
     ), seen)
 
-    has_nondefault_cond = (
-        (mask['gat_heads'] and gat_heads != DEFAULT_GAT_HEADS) or
-        (mask['sage_aggr'] and sage_aggr != DEFAULT_SAGE_AGGR)
-    )
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        has_nondefault_cond = (
+            (mask['gat_heads'] and gat_heads_by_layer != DEFAULT_GAT_HEADS_BY_LAYER) or
+            (mask['sage_aggr'] and sage_aggr_by_layer != DEFAULT_SAGE_AGGR_BY_LAYER) or
+            (mask['gin_eps'] and gin_eps_by_layer != DEFAULT_GIN_EPS_BY_LAYER)
+        )
+    else:
+        has_nondefault_cond = (
+            (mask['gat_heads'] and gat_heads != DEFAULT_GAT_HEADS) or
+            (mask['sage_aggr'] and sage_aggr != DEFAULT_SAGE_AGGR)
+        )
 
     if has_nondefault_cond:
         append_unique_candidate(added, make_candidate(
@@ -422,6 +512,10 @@ def build_auto_ablation_candidates(existing_candidates=None):
             edges=nas_edges,
             gat_heads=gat_heads,
             sage_aggr=sage_aggr,
+            gin_eps=gin_eps,
+            gat_heads_by_layer=gat_heads_by_layer,
+            sage_aggr_by_layer=sage_aggr_by_layer,
+            gin_eps_by_layer=gin_eps_by_layer,
             **source_meta,
         ), seen)
 
@@ -448,13 +542,21 @@ def build_auto_ablation_candidates(existing_candidates=None):
         dropout=dropout,
         gat_heads=gat_heads,
         sage_aggr=sage_aggr,
+        gin_eps=gin_eps,
+        gat_heads_by_layer=gat_heads_by_layer,
+        sage_aggr_by_layer=sage_aggr_by_layer,
+        gin_eps_by_layer=gin_eps_by_layer,
         **source_meta,
     ), seen)
 
-    logger.info("已生成 Phase4 condHP v5 消融候选：")
+    logger.info(f"已生成 Phase4 {HP_MODE_LABEL} 消融候选：")
     logger.info(f"  ops={nas_ops}")
     logger.info(f"  lr={lr:.5f}  dropout={dropout:.3f}  "
-                f"gat_heads={gat_heads}  sage_aggr={sage_aggr}")
+                f"gat_heads={gat_heads}  sage_aggr={sage_aggr}  gin_eps={gin_eps:.3f}")
+    if HP_DIM >= HP_DIM_LAYERWISE:
+        logger.info(f"  gat_by_layer={gat_heads_by_layer}")
+        logger.info(f"  sage_by_layer={sage_aggr_by_layer}")
+        logger.info(f"  gin_by_layer={gin_eps_by_layer}")
     logger.info(f"  mask={mask}")
     logger.info(f"  added={len(added)}")
     return added
@@ -520,6 +622,10 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
     gcnii_theta  = cand.get('gcnii_theta', args.gcnii_theta)
     gat_heads    = cand.get('gat_heads', 1)
     sage_aggr    = cand.get('sage_aggr', 'mean')
+    gin_eps      = cand.get('gin_eps', DEFAULT_GIN_EPS)
+    gat_heads_by_layer = cand.get('gat_heads_by_layer')
+    sage_aggr_by_layer = cand.get('sage_aggr_by_layer')
+    gin_eps_by_layer = cand.get('gin_eps_by_layer')
 
     val_accs, test_accs = [], []
 
@@ -538,6 +644,10 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
             gcnii_theta  = gcnii_theta,
             gat_heads    = gat_heads,
             sage_aggr    = sage_aggr,
+            gin_eps      = gin_eps,
+            gat_heads_by_layer = gat_heads_by_layer,
+            sage_aggr_by_layer = sage_aggr_by_layer,
+            gin_eps_by_layer   = gin_eps_by_layer,
             device       = DEVICE,
             max_epochs   = args.eval_epochs,
             patience     = args.patience,
@@ -567,6 +677,10 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
         'gcnii_theta': gcnii_theta,
         'gat_heads':   gat_heads,
         'sage_aggr':   sage_aggr,
+        'gin_eps':     gin_eps,
+        'gat_heads_by_layer': gat_heads_by_layer,
+        'sage_aggr_by_layer': sage_aggr_by_layer,
+        'gin_eps_by_layer': gin_eps_by_layer,
         'operations':  cand['operations'],
         'edges':       cand['edges'],
         'source_best_z': cand.get('source_best_z'),
@@ -606,7 +720,12 @@ def main():
                     f"gcnii_α={cand.get('gcnii_alpha',0.1)}  "
                     f"gcnii_θ={cand.get('gcnii_theta',0.5)}  "
                     f"gat_heads={cand.get('gat_heads',1)}  "
-                    f"sage_aggr={cand.get('sage_aggr','mean')}")
+                    f"sage_aggr={cand.get('sage_aggr','mean')}  "
+                    f"gin_eps={cand.get('gin_eps', DEFAULT_GIN_EPS):.3f}")
+        if cand.get('gat_heads_by_layer') is not None:
+            logger.info(f"  gat_by_layer={cand.get('gat_heads_by_layer')}")
+            logger.info(f"  sage_by_layer={cand.get('sage_aggr_by_layer')}")
+            logger.info(f"  gin_by_layer={cand.get('gin_eps_by_layer')}")
         if cand.get('source_best_z'):
             logger.info(f"  source_best_z={cand['source_best_z']}")
 
@@ -650,22 +769,23 @@ def _print_summary(summary):
             continue
         logger.info(f"\n  {glabel}")
         logger.info(f"  {'名称':<44} {'Val':>14} {'Test':>14} "
-                    f"{'Hidden':>6} {'L2':>8} {'Heads':>5} {'Aggr':>6}")
-        logger.info(f"  {'-'*108}")
+                    f"{'Hidden':>6} {'L2':>8} {'Heads':>5} {'Aggr':>6} {'GINeps':>7}")
+        logger.info(f"  {'-'*118}")
         for r in rows:
             vs = f"{r['val_mean']:.3f}±{r['val_std']:.3f}"
             ts = f"{r['test_mean']:.3f}±{r['test_std']:.3f}"
             logger.info(f"  {r['name'][:43]:<44} {vs:>14} {ts:>14} "
                         f"{r['hidden_dim']:>6} {r['l2']:>8.0e} "
-                        f"{r.get('gat_heads', 1):>5} {r.get('sage_aggr', 'mean'):>6}")
+                        f"{r.get('gat_heads', 1):>5} {r.get('sage_aggr', 'mean'):>6} "
+                        f"{r.get('gin_eps', DEFAULT_GIN_EPS):>7.3f}")
 
 
 # ============================================================
-# 关键发现打印（v9：condHP 非冗余消融归因）
+# 关键发现打印（condHP 非冗余消融归因）
 # ============================================================
 def _print_findings(summary):
     logger.info(f"\n{'='*80}")
-    logger.info("关键发现（Key Findings）—— condHP v5 非冗余消融")
+    logger.info(f"关键发现（Key Findings）—— {HP_MODE_LABEL} 非冗余消融")
     logger.info(f"{'='*80}")
 
     base_2gcn = get_nth_by_group(summary, 'baseline', 0)
@@ -731,13 +851,18 @@ def _print_findings(summary):
         logger.info(f"    lr/dropout              : {full['lr']:.5f} / {full['dropout']:.3f}")
         logger.info(f"    gat_heads/sage_aggr     : {full.get('gat_heads', 1)} / "
                     f"{full.get('sage_aggr', 'mean')}")
+        logger.info(f"    gin_eps                 : {full.get('gin_eps', DEFAULT_GIN_EPS):.3f}")
+        if full.get('gin_eps_by_layer') is not None:
+            logger.info(f"    gat_heads_by_layer      : {full.get('gat_heads_by_layer')}")
+            logger.info(f"    sage_aggr_by_layer      : {full.get('sage_aggr_by_layer')}")
+            logger.info(f"    gin_eps_by_layer        : {full.get('gin_eps_by_layer')}")
         logger.info(f"    condition_mask          : {full.get('condition_mask')}")
     else:
         logger.warning("\n  未生成完整 condHP 候选；请确认 Phase4 best_z_final.pt 和 VAE checkpoint 是否存在。")
 
 
 # ============================================================
-# 可视化（v9：非冗余候选柱状图 + condHP 2×2 消融矩阵）
+# 可视化（非冗余候选柱状图 + condHP 2×2 消融矩阵）
 # ============================================================
 def _plot(summary):
     try:
@@ -773,7 +898,7 @@ def _plot(summary):
         ax.set_xticklabels(names, fontsize=7)
         ax.set_ylabel('Test Accuracy')
         ax.set_ylim(0.30, 0.93)
-        ax.set_title('Cora Test Accuracy — condHP v5 ablation\n'
+        ax.set_title(f'Cora Test Accuracy — {HP_MODE_LABEL} ablation\n'
                      '(CosineAnnealingLR + EarlyStopping)')
         ax.grid(axis='y', alpha=0.3)
         ax.legend(handles=[
