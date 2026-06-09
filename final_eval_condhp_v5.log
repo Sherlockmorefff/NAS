@@ -1,0 +1,173 @@
+[2026-06-08 02:50:26][INFO] 日志文件: logs/final_eval/train_condhp_v5_final_0608_0250.log
+[2026-06-08 02:50:26][INFO] ======================================================================
+[2026-06-08 02:50:26][INFO] final_eval.py  v9  —  2026-06-08 02:50:26
+[2026-06-08 02:50:26][INFO] ======================================================================
+[2026-06-08 02:50:26][INFO] Device=cuda:0  Seeds=10  Epochs=200  Patience=30
+[2026-06-08 02:50:26][INFO] version=condhp_v5_final  seed=42
+[2026-06-08 02:50:26][INFO] Cora: 1433 个特征  7 个类别
+[2026-06-08 02:50:26][INFO] Seeds=10  Epochs=200  Patience=30  Scheduler=CosineAnnealingLR
+[2026-06-08 02:50:26][INFO] Device: cuda:0
+[2026-06-08 02:50:26][INFO] gcnii_alpha(default)=0.1  gcnii_theta(default)=0.5
+[2026-06-08 02:50:26][INFO] Auto VAE loaded: results/joint_search/joint_model_condhp_v5_ep100.pth  (arch_nz=12, hp_dim=4)
+[2026-06-08 02:50:26][INFO] 搜索到的条件HP与默认值一致或无激活条件参数，跳过 cond-only/globalHP-only 重复消融
+[2026-06-08 02:50:26][INFO] 已生成 Phase4 condHP v5 消融候选：
+[2026-06-08 02:50:26][INFO]   ops=['GATConv', 'GATConv', 'GINConv', 'SAGEConv', 'GATConv']
+[2026-06-08 02:50:26][INFO]   lr=0.00567  dropout=0.438  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:26][INFO]   mask={'gat_heads': True, 'sage_aggr': True}
+[2026-06-08 02:50:26][INFO]   added=3
+[2026-06-08 02:50:26][INFO] 
+==================================================================
+[2026-06-08 02:50:26][INFO] [BASELINE]  BASE_2xGCN_defaultHP
+[2026-06-08 02:50:26][INFO]   人工基线：2层GCN + 默认全局HP
+[2026-06-08 02:50:26][INFO]   ops=['GCNConv', 'GCNConv', 'Identity']
+[2026-06-08 02:50:26][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:27][INFO]   seed  0: val=0.6860  test=0.6960  [valid]
+[2026-06-08 02:50:28][INFO]   seed  1: val=0.4680  test=0.4780  [valid]
+[2026-06-08 02:50:29][INFO]   seed  2: val=0.6740  test=0.7040  [valid]
+[2026-06-08 02:50:30][INFO]   seed  3: val=0.6340  test=0.6200  [valid]
+[2026-06-08 02:50:30][INFO]   seed  4: val=0.7000  test=0.6950  [valid]
+[2026-06-08 02:50:30][INFO]   seed  5: val=0.0580  test=0.0640  [valid]
+[2026-06-08 02:50:31][INFO]   seed  6: val=0.3160  test=0.3190  [valid]
+[2026-06-08 02:50:31][INFO]   seed  7: val=0.3280  test=0.3530  [valid]
+[2026-06-08 02:50:32][INFO]   seed  8: val=0.7160  test=0.7460  [valid]
+[2026-06-08 02:50:33][INFO]   seed  9: val=0.7160  test=0.7120  [valid]
+[2026-06-08 02:50:33][INFO] 
+  >> Val  : 0.5296 ± 0.2161
+[2026-06-08 02:50:33][INFO]   >> Test : 0.5387 ± 0.2163  ← 报告此值
+[2026-06-08 02:50:33][INFO] 
+==================================================================
+[2026-06-08 02:50:33][INFO] [BASELINE]  BASE_1xGCN_defaultHP
+[2026-06-08 02:50:33][INFO]   人工参考：1层GCN + 默认全局HP
+[2026-06-08 02:50:33][INFO]   ops=['GCNConv', 'Identity', 'Identity']
+[2026-06-08 02:50:33][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:33][INFO]   seed  0: val=0.7540  test=0.7440  [valid]
+[2026-06-08 02:50:33][INFO]   seed  1: val=0.7840  test=0.8000  [valid]
+[2026-06-08 02:50:34][INFO]   seed  2: val=0.7340  test=0.7800  [valid]
+[2026-06-08 02:50:34][INFO]   seed  3: val=0.7380  test=0.7380  [valid]
+[2026-06-08 02:50:35][INFO]   seed  4: val=0.7580  test=0.7790  [valid]
+[2026-06-08 02:50:35][INFO]   seed  5: val=0.6980  test=0.7040  [valid]
+[2026-06-08 02:50:35][INFO]   seed  6: val=0.7180  test=0.7360  [valid]
+[2026-06-08 02:50:36][INFO]   seed  7: val=0.6140  test=0.5880  [valid]
+[2026-06-08 02:50:36][INFO]   seed  8: val=0.7860  test=0.7850  [valid]
+[2026-06-08 02:50:37][INFO]   seed  9: val=0.7580  test=0.7790  [valid]
+[2026-06-08 02:50:37][INFO] 
+  >> Val  : 0.7342 ± 0.0477
+[2026-06-08 02:50:37][INFO]   >> Test : 0.7433 ± 0.0588  ← 报告此值
+[2026-06-08 02:50:37][INFO] 
+==================================================================
+[2026-06-08 02:50:37][INFO] [HP_ON_MANUAL]  ABL_manualArch_searchGlobalHP
+[2026-06-08 02:50:37][INFO]   HP-only：2xGCN 手工架构 + Phase4 搜索出的 lr/dropout
+[2026-06-08 02:50:37][INFO]   ops=['GCNConv', 'GCNConv', 'Identity']
+[2026-06-08 02:50:37][INFO]   lr=0.00567  dropout=0.438  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:37][INFO]   source_best_z=results/bo_phase4_condhp_v5/best_z_final.pt
+[2026-06-08 02:50:37][INFO]   seed  0: val=0.7760  test=0.7980  [valid]
+[2026-06-08 02:50:38][INFO]   seed  1: val=0.7760  test=0.7530  [valid]
+[2026-06-08 02:50:38][INFO]   seed  2: val=0.7880  test=0.7810  [valid]
+[2026-06-08 02:50:39][INFO]   seed  3: val=0.8040  test=0.8040  [valid]
+[2026-06-08 02:50:39][INFO]   seed  4: val=0.7860  test=0.7850  [valid]
+[2026-06-08 02:50:40][INFO]   seed  5: val=0.8060  test=0.8020  [valid]
+[2026-06-08 02:50:40][INFO]   seed  6: val=0.7880  test=0.7800  [valid]
+[2026-06-08 02:50:41][INFO]   seed  7: val=0.8020  test=0.8020  [valid]
+[2026-06-08 02:50:41][INFO]   seed  8: val=0.8040  test=0.8130  [valid]
+[2026-06-08 02:50:42][INFO]   seed  9: val=0.8020  test=0.7800  [valid]
+[2026-06-08 02:50:42][INFO] 
+  >> Val  : 0.7932 ± 0.0112
+[2026-06-08 02:50:42][INFO]   >> Test : 0.7898 ± 0.0166  ← 报告此值
+[2026-06-08 02:50:42][INFO] 
+==================================================================
+[2026-06-08 02:50:42][INFO] [ARCH_ONLY]  ABL_NASArch_defaultHP
+[2026-06-08 02:50:42][INFO]   Arch-only：Phase4 解码架构 + 默认全局HP + 默认条件HP
+[2026-06-08 02:50:42][INFO]   ops=['GATConv', 'GATConv', 'GINConv', 'SAGEConv', 'GATConv']
+[2026-06-08 02:50:42][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:42][INFO]   source_best_z=results/bo_phase4_condhp_v5/best_z_final.pt
+[2026-06-08 02:50:44][INFO]   seed  0: val=0.6300  test=0.6500  [valid]
+[2026-06-08 02:50:46][INFO]   seed  1: val=0.6420  test=0.6600  [valid]
+[2026-06-08 02:50:46][INFO]   seed  2: val=0.3560  test=0.3540  [valid]
+[2026-06-08 02:50:49][INFO]   seed  3: val=0.6500  test=0.6690  [valid]
+[2026-06-08 02:50:50][INFO]   seed  4: val=0.4200  test=0.3910  [valid]
+[2026-06-08 02:50:51][INFO]   seed  5: val=0.5680  test=0.5310  [valid]
+[2026-06-08 02:50:53][INFO]   seed  6: val=0.6900  test=0.6810  [valid]
+[2026-06-08 02:50:55][INFO]   seed  7: val=0.7300  test=0.7200  [valid]
+[2026-06-08 02:50:57][INFO]   seed  8: val=0.6240  test=0.6400  [valid]
+[2026-06-08 02:50:59][INFO]   seed  9: val=0.6820  test=0.6580  [valid]
+[2026-06-08 02:50:59][INFO] 
+  >> Val  : 0.5992 ± 0.1142
+[2026-06-08 02:50:59][INFO]   >> Test : 0.5954 ± 0.1206  ← 报告此值
+[2026-06-08 02:50:59][INFO] 
+==================================================================
+[2026-06-08 02:50:59][INFO] [FULL_CONDHP]  NAS_condHP_full
+[2026-06-08 02:50:59][INFO]   Full：Phase4 解码架构 + 搜索 lr/dropout + 搜索条件HP
+[2026-06-08 02:50:59][INFO]   ops=['GATConv', 'GATConv', 'GINConv', 'SAGEConv', 'GATConv']
+[2026-06-08 02:50:59][INFO]   lr=0.00567  dropout=0.438  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean
+[2026-06-08 02:50:59][INFO]   source_best_z=results/bo_phase4_condhp_v5/best_z_final.pt
+[2026-06-08 02:51:01][INFO]   seed  0: val=0.7480  test=0.7580  [valid]
+[2026-06-08 02:51:02][INFO]   seed  1: val=0.7120  test=0.7250  [valid]
+[2026-06-08 02:51:04][INFO]   seed  2: val=0.7620  test=0.7370  [valid]
+[2026-06-08 02:51:05][INFO]   seed  3: val=0.7380  test=0.7460  [valid]
+[2026-06-08 02:51:07][INFO]   seed  4: val=0.6320  test=0.6570  [valid]
+[2026-06-08 02:51:09][INFO]   seed  5: val=0.7420  test=0.7400  [valid]
+[2026-06-08 02:51:10][INFO]   seed  6: val=0.7440  test=0.7510  [valid]
+[2026-06-08 02:51:11][INFO]   seed  7: val=0.7140  test=0.6850  [valid]
+[2026-06-08 02:51:13][INFO]   seed  8: val=0.7220  test=0.7380  [valid]
+[2026-06-08 02:51:14][INFO]   seed  9: val=0.7360  test=0.7070  [valid]
+[2026-06-08 02:51:14][INFO] 
+  >> Val  : 0.7250 ± 0.0343
+[2026-06-08 02:51:14][INFO]   >> Test : 0.7244 ± 0.0305  ← 报告此值
+[2026-06-08 02:51:14][INFO] 
+================================================================================
+[2026-06-08 02:51:14][INFO] 完整结果汇总表
+[2026-06-08 02:51:14][INFO] ================================================================================
+[2026-06-08 02:51:14][INFO] 
+  A. 人工基线
+[2026-06-08 02:51:14][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr
+[2026-06-08 02:51:14][INFO]   ------------------------------------------------------------------------------------------------------------
+[2026-06-08 02:51:14][INFO]   BASE_2xGCN_defaultHP                            0.530±0.216    0.539±0.216     64    5e-04     1   mean
+[2026-06-08 02:51:14][INFO]   BASE_1xGCN_defaultHP                            0.734±0.048    0.743±0.059     64    5e-04     1   mean
+[2026-06-08 02:51:14][INFO] 
+  B. HP-only：手工架构 + 搜索全局HP
+[2026-06-08 02:51:14][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr
+[2026-06-08 02:51:14][INFO]   ------------------------------------------------------------------------------------------------------------
+[2026-06-08 02:51:14][INFO]   ABL_manualArch_searchGlobalHP                   0.793±0.011    0.790±0.017     64    5e-04     1   mean
+[2026-06-08 02:51:14][INFO] 
+  C. Arch-only：NAS架构 + 默认HP
+[2026-06-08 02:51:14][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr
+[2026-06-08 02:51:14][INFO]   ------------------------------------------------------------------------------------------------------------
+[2026-06-08 02:51:14][INFO]   ABL_NASArch_defaultHP                           0.599±0.114    0.595±0.121     64    5e-04     1   mean
+[2026-06-08 02:51:14][INFO] 
+  F. Full：NAS架构 + 搜索全局HP + 搜索条件HP
+[2026-06-08 02:51:14][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr
+[2026-06-08 02:51:14][INFO]   ------------------------------------------------------------------------------------------------------------
+[2026-06-08 02:51:14][INFO]   NAS_condHP_full                                 0.725±0.034    0.724±0.030     64    5e-04     1   mean
+[2026-06-08 02:51:14][INFO] 
+================================================================================
+[2026-06-08 02:51:14][INFO] 关键发现（Key Findings）—— condHP v5 非冗余消融
+[2026-06-08 02:51:14][INFO] ================================================================================
+[2026-06-08 02:51:14][INFO] 
+  [Finding 1] 人工基线稳定性：
+[2026-06-08 02:51:14][INFO]     2xGCN default           : test=0.539±0.216
+[2026-06-08 02:51:14][INFO]     1xGCN default           : test=0.743±0.059
+[2026-06-08 02:51:14][INFO]     1xGCN - 2xGCN           : Δtest=+0.205
+[2026-06-08 02:51:14][INFO] 
+  [Finding 2] 全局 HP 搜索贡献（固定手工架构）：
+[2026-06-08 02:51:14][INFO]     Manual default HP       : test=0.539±0.216
+[2026-06-08 02:51:14][INFO]     Manual searched HP      : test=0.790±0.017
+[2026-06-08 02:51:14][INFO]     global HP only          : Δtest=+0.251
+[2026-06-08 02:51:14][INFO] 
+  [Finding 3] 架构搜索贡献（默认 HP 控制）：
+[2026-06-08 02:51:14][INFO]     Manual arch             : test=0.539±0.216
+[2026-06-08 02:51:14][INFO]     NAS arch default HP     : test=0.595±0.121
+[2026-06-08 02:51:14][INFO]     arch only               : Δtest=+0.057
+[2026-06-08 02:51:14][INFO] 
+  [Finding 6] 完整 condHP 搜索结果：
+[2026-06-08 02:51:14][INFO]     Full condHP             : test=0.724±0.030
+[2026-06-08 02:51:14][INFO]     searched HP total       : Δtest=+0.129
+[2026-06-08 02:51:14][INFO]     full vs 2xGCN           : Δtest=+0.186
+[2026-06-08 02:51:14][INFO]     ops                     : ['GATConv', 'GATConv', 'GINConv', 'SAGEConv', 'GATConv']
+[2026-06-08 02:51:14][INFO]     lr/dropout              : 0.00567 / 0.438
+[2026-06-08 02:51:14][INFO]     gat_heads/sage_aggr     : 1 / mean
+[2026-06-08 02:51:14][INFO]     condition_mask          : {'gat_heads': True, 'sage_aggr': True}
+[2026-06-08 02:51:14][INFO] 
+结果已保存: results/final_eval_condhp_v5/final_results_v9.json
+[2026-06-08 02:51:15][INFO] Comparison plot saved: results/final_eval_condhp_v5/final_comparison_v9.png
+[2026-06-08 02:51:15][INFO] 
+✅ 运行完成  总耗时: 0.8 min

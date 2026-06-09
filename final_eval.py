@@ -1,6 +1,44 @@
 """
-final_eval.py  v7  (架构名解耦 + eval_utils 统一 + GCNII 透传 + 工业级日志)
+final_eval.py  v9  (面向 condHP v5 的非冗余消融实验)
 ============================================================================
+v9 变更（相对 v8）：
+
+  [重构 1] 去除旧 v1/v2/诊断型冗余候选
+      v8 仍保留 Phase3/Phase4 旧硬编码架构、旧 NAS v1/v2 HP 和诊断项，
+      与当前 condHP v5 的 best_z_final.pt 不在同一实验语义下。
+      v9 改为只保留必要人工基线，并从 Phase4 best_z 自动生成可归因消融：
+        - 手工基线：Manual GCN + default HP
+        - HP-only：Manual GCN + searched global HP
+        - Arch-only：Decoded NAS arch + default HP
+        - Cond-only：Decoded NAS arch + default global HP + searched conditional HP
+        - GlobalHP-only：Decoded NAS arch + searched global HP + default conditional HP
+        - Full：Decoded NAS arch + searched global HP + searched conditional HP
+
+  [重构 2] 条件参数消融自动去重
+      当架构不含 GAT/SAGE，或搜索到的条件参数等于默认值时，
+      cond-only / globalHP-only 中会出现重复配置。v9 自动跳过这些重复候选。
+
+  [重构 3] 输出与可视化改为 condHP 2×2 归因矩阵
+      在 decoded NAS 架构固定时，比较：
+        行：默认全局 HP / 搜索全局 HP
+        列：默认条件 HP / 搜索条件 HP
+      更直接地回答条件参数是否带来额外收益。
+
+v8 变更（相对 v7）：
+
+  [新增 1] 自动读取 Phase4 条件参数搜索结果
+      - 默认读取 results/bo_phase4_condhp_v5/best_z_final.pt
+      - 默认读取 results/joint_search/joint_model_condhp_v5_ep100.pth
+      - 使用 JointSpaceVAE 解码 z[:12] 得到 GNN 架构
+      - 使用 z[12:16] 反归一化得到 [lr, dropout, gat_heads, sage_aggr]
+      - 按架构条件 mask 仅在包含 GAT/SAGE 时激活对应条件参数
+      - 自动候选追加到 CANDIDATES 后，不破坏原有人工候选和消融矩阵
+
+  [修复 2] final_eval 透传条件 HP
+      v7 问题：run_eval 未把 cand 里的 gat_heads/sage_aggr 传给
+               train_and_eval_arch，导致最终评估时条件参数失效。
+      v8 修复：run_eval 安全提取 gat_heads/sage_aggr 并透传。
+
 v7 变更（相对 v6）：
 
   [修复 1] 消除硬编码架构名查询（消融矩阵安全性）
@@ -43,6 +81,7 @@ import logging
 import argparse
 import torch
 import numpy as np
+from collections import Counter
 from datetime import datetime
 
 sys.path.insert(0, '/mnt/project')
@@ -51,7 +90,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 
-from eval_utils import train_and_eval_arch, DynamicGNN
+from nas_space import JointSpaceVAE
+from eval_utils import (
+    train_and_eval_arch,
+    condition_mask_from_config,
+    norm_to_gat_heads,
+    norm_to_sage_aggr,
+)
 
 
 # ============================================================
@@ -93,7 +138,7 @@ def save_args_json(args, log_filepath: str) -> str:
 # ============================================================
 # 参数解析
 # ============================================================
-parser = argparse.ArgumentParser(description='final_eval v7')
+parser = argparse.ArgumentParser(description='final_eval v9')
 # 原有参数（不变）
 parser.add_argument('--cora_root',   type=str, default='/tmp/Cora')
 parser.add_argument('--n_seeds',     type=int, default=10)
@@ -101,7 +146,7 @@ parser.add_argument('--eval_epochs', type=int, default=200)
 parser.add_argument('--patience',    type=int, default=30)
 parser.add_argument('--output',      type=str, default='results/final_eval')
 # 新增参数
-parser.add_argument('--version',     type=str, default='v3_final')
+parser.add_argument('--version',     type=str, default='condhp_v5_final')
 parser.add_argument('--log_dir',     type=str, default='logs/')
 parser.add_argument('--seed',        type=int, default=42)
 parser.add_argument('--weight_decay', type=float, default=5e-4,
@@ -110,9 +155,26 @@ parser.add_argument('--hidden_dim',  type=int, default=64,
                     help='全局默认 hidden_dim（各候选中若有 hidden_dim 字段则优先）')
 parser.add_argument('--gcnii_alpha', type=float, default=0.1)
 parser.add_argument('--gcnii_theta', type=float, default=0.5)
+# v9：Phase4 条件参数 best_z 自动消融
+parser.add_argument('--checkpoint',  type=str,
+                    default='results/joint_search/joint_model_condhp_v5_ep100.pth',
+                    help='用于解码 best_z_final.pt 的 JointSpaceVAE checkpoint')
+parser.add_argument('--auto_best_z', type=str,
+                    default='results/bo_phase4_condhp_v5/best_z_final.pt',
+                    help='Phase4 条件参数搜索输出的 best_z_final.pt')
+parser.add_argument('--disable_auto_best', action='store_true',
+                    help='禁用自动追加 Phase4 best_z_final.pt 候选')
+parser.add_argument('--auto_name',   type=str, default='NAS_condHP_full')
+parser.add_argument('--auto_decode_trials', type=int, default=10)
+parser.add_argument('--arch_nz',     type=int, default=12)
+parser.add_argument('--log_lr_min',  type=float, default=-4.0)
+parser.add_argument('--log_lr_max',  type=float, default=-1.5)
+parser.add_argument('--dropout_min', type=float, default=0.1)
+parser.add_argument('--dropout_max', type=float, default=0.6)
 args = parser.parse_args()
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+ARCH_NZ = args.arch_nz
 os.makedirs(args.output, exist_ok=True)
 
 logger, log_filepath = setup_logger(args.log_dir, 'final_eval', args.version)
@@ -120,166 +182,286 @@ save_args_json(args, log_filepath)
 
 
 # ============================================================
-# 候选架构定义（结构不变，仅新增 gcnii_alpha/theta 占位字段）
+# 候选架构定义（v9：仅保留必要人工基线，其余消融由 best_z 动态生成）
 # ============================================================
+DEFAULT_LR = 1e-3
+DEFAULT_DROPOUT = 0.5
+DEFAULT_GAT_HEADS = 1
+DEFAULT_SAGE_AGGR = 'mean'
+DEFAULT_EDGES = [(0, 1), (1, 2), (2, 3), (3, 4)]
+MANUAL_2GCN_OPS = ["GCNConv", "GCNConv", "Identity"]
+MANUAL_1GCN_OPS = ["GCNConv", "Identity", "Identity"]
+
+
+def make_candidate(
+    name: str,
+    group: str,
+    description: str,
+    operations: list,
+    edges: list,
+    lr: float = DEFAULT_LR,
+    dropout: float = DEFAULT_DROPOUT,
+    hidden_dim: int = None,
+    l2: float = None,
+    gat_heads: int = DEFAULT_GAT_HEADS,
+    sage_aggr: str = DEFAULT_SAGE_AGGR,
+    **extra,
+) -> dict:
+    cand = {
+        "name":        name,
+        "description": description,
+        "operations":  operations,
+        "edges":       edges,
+        "lr":          lr,
+        "dropout":     dropout,
+        "hidden_dim":  args.hidden_dim if hidden_dim is None else hidden_dim,
+        "l2":          args.weight_decay if l2 is None else l2,
+        "gcnii_alpha": args.gcnii_alpha,
+        "gcnii_theta": args.gcnii_theta,
+        "gat_heads":   gat_heads,
+        "sage_aggr":   sage_aggr,
+        "group":       group,
+    }
+    cand.update(extra)
+    return cand
+
+
 CANDIDATES = [
-    # ══ A. 人工基线 ══════════════════════════════════════════
-    {
-        "name":        "BASE_2xGCN_defaultLR",
-        "description": "手工基线：2层GCN，默认HP",
-        "operations":  ["GCNConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "baseline",
-    },
-    {
-        "name":        "BASE_1xGCN_defaultLR",
-        "description": "手工基线：1层GCN，默认HP",
-        "operations":  ["GCNConv", "Identity", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "baseline",
-    },
-
-    # ══ A'. 诊断候选 1：hd=64 信息瓶颈验证 ════════════════════
-    {
-        "name":        "BASE_2xGCN_hd128_defaultLR",
-        "description": "【诊断1】2xGCN，hd=128，其余HP同BASE_2xGCN_defaultLR",
-        "operations":  ["GCNConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          1e-3, "dropout": 0.5, "hidden_dim": 128, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "baseline_diag",
-    },
-
-    # ══ B. 消融：手工架构 + NAS HP ════════════════════════════
-    {
-        "name":        "ABL_2xGCN_nasLR_v1",
-        "description": "消融 v1：2xGCN + NAS搜出的LR",
-        "operations":  ["GCNConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.00284, "dropout": 0.310, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "ablation_hp",
-    },
-    {
-        "name":        "ABL_2xGCN_nasHP_v2",
-        "description": "消融 v2：2xGCN + NAS全套HP",
-        "operations":  ["GCNConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.00284, "dropout": 0.310, "hidden_dim": 128, "l2": 1e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "ablation_hp",
-    },
-
-    # ══ C. 消融：NAS架构 + 默认HP ══════════════════════════════
-    # {
-    #     "name":        "ABL_Phase4arch_defaultHP",
-    #     "description": "消融：Phase4 v9 NAS最优架构 (Dense-5层) + 默认HP",
-    #     "operations":  ['GCNConv', 'GINConv', 'GINConv', 'GATConv', 'GCNConv'],
-    #     "edges":       [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
-    #     "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
-    #     "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-    #     "group":       "ablation_arch",
-    # },
-    {
-        "name":        "NAS_Phase4_Iter80_GIN",
-        "description": "Phase4 80轮最优：4层有效 (GAT+SAGE+GIN+GIN), 极低Dropout(0.1)硬背",
-        "operations":  ['GATConv', 'SAGEConv', 'Identity', 'GINConv', 'GINConv'],
-        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
-        "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "ablation_arch",
-    },
-
-
-    {
-        "name":        "ABL_Phase3arch_defaultHP",
-        "description": "消融：Phase3架构 (GAT+SAGE+SAGE) + 默认HP",
-        "operations":  ["GATConv", "SAGEConv", "SAGEConv"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          1e-3, "dropout": 0.5, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "ablation_arch",
-    },
-
-    # ══ D. 全量 NAS v1（架构 + LR/Dropout）════════════════════
-    {
-        "name":        "NAS_v1_Phase4_SAGE_GCN",
-        "description": "NAS v1：Phase4最优架构SAGE+GCN+Identity + v1 HP",
-        "operations":  ["SAGEConv", "GCNConv", "Identity"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.00284, "dropout": 0.310, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "nas_v1",
-    },
-    {
-        "name":        "NAS_v1_Phase3_GCN_GCN_SAGE",
-        "description": "NAS v1：Phase3最优 GCN+GCN+SAGE，LR=0.00248，hd=64",
-        "operations":  ["GCNConv", "GCNConv", "SAGEConv"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.00248, "dropout": 0.555, "hidden_dim": 64, "l2": 5e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "nas_v1",
-    },
-
-
-    # {
-    #     "name":        "NAS_v2_Phase4_Dense",
-    #     "description": "NAS v2：Phase4 v9 最优 Dense-5层，LR=0.00488",
-    #     "operations":  ['GCNConv', 'GINConv', 'GINConv', 'GATConv', 'GCNConv'],
-    #     "edges":       [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
-    #     "lr":          0.00488, "dropout": 0.483, "hidden_dim": 512, "l2": 5e-04,
-    #     "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-    #     "group":       "nas_v2",
-    # },
-
-    {
-        "name":        "NAS_Phase4_Iter80_GIN",
-        "description": "Phase4 80轮最优：4层有效 (GAT+SAGE+GIN+GIN), 极低Dropout(0.1)硬背",
-        "operations":  ['GATConv', 'SAGEConv', 'Identity', 'GINConv', 'GINConv'],
-        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)],
-        "lr":          0.00038, 
-        "dropout":     0.100, 
-        "hidden_dim":  512, 
-        "l2":          1e-05,
-        "gcnii_alpha": 0.1,  
-        "gcnii_theta": 1.0,
-        "group":       "nas_v2",
-    },
-
-    # ══ Iter 60 (高正则 GCNII 残差) ═════════════════
-    {
-        "name":        "NAS_Phase4_Iter60_GCNII",
-        "description": "Phase4 60轮最优：3层有效 (GAT+GCNII+GCN), 高Dropout(0.527)防过拟合",
-        "operations":  ['GATConv', 'GCNII', 'Identity', 'Identity', 'GCNConv'],
-        "edges":       [(0, 1), (1, 2), (2, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (5, 6)],
-        "lr":          0.00062, 
-        "dropout":     0.527, 
-        "hidden_dim":  512, 
-        "l2":          1e-04,
-        "gcnii_alpha": 0.1,  
-        "gcnii_theta": 0.5,
-        "group":       "nas_v2",
-    },
-
-    # ══ F. 诊断候选 2：Phase3 v2 过拟合验证 ════════════════════
-    {
-        "name":        "DIAG_Phase3arch_nasHP_v2",
-        "description": "【诊断2】Phase3 v2 最优配置稳定性验证",
-        "operations":  ["GATConv", "SAGEConv", "SAGEConv"],
-        "edges":       [(0,1),(1,2),(2,3),(3,4)],
-        "lr":          0.01044, "dropout": 0.576, "hidden_dim": 512, "l2": 4e-4,
-        "gcnii_alpha": 0.1,  "gcnii_theta": 0.5,
-        "group":       "diag_overfit",
-    },
+    make_candidate(
+        name="BASE_2xGCN_defaultHP",
+        group="baseline",
+        description="人工基线：2层GCN + 默认全局HP",
+        operations=MANUAL_2GCN_OPS,
+        edges=DEFAULT_EDGES,
+    ),
+    make_candidate(
+        name="BASE_1xGCN_defaultHP",
+        group="baseline",
+        description="人工参考：1层GCN + 默认全局HP",
+        operations=MANUAL_1GCN_OPS,
+        edges=DEFAULT_EDGES,
+    ),
 ]
 
 
 # ============================================================
-# Group-based 安全查询函数（v7 核心：消除硬编码名称）
+# v9：Phase4 best_z_final.pt 自动消融候选
+# ============================================================
+class ArchArgs:
+    max_n           = 7
+    num_vertex_type = 8
+    START_TYPE      = 0
+    END_TYPE        = 1
+    hs              = 501
+    nz              = ARCH_NZ
+    bidirectional   = True
+
+
+def _torch_load(path: str, map_location):
+    """兼容不同 torch 版本的安全加载入口。"""
+    try:
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
+
+
+def load_vae_for_auto(ckpt_path: str):
+    model = JointSpaceVAE(ArchArgs(), hp_latent_dim=4).to(DEVICE)
+    state = _torch_load(ckpt_path, map_location=DEVICE)
+    model.load_state_dict(state)
+    model.eval()
+    logger.info(f"Auto VAE loaded: {ckpt_path}  (arch_nz={ARCH_NZ}, hp_dim=4)")
+    return model
+
+
+def decode_arch_from_z(vae, z_arch: torch.Tensor, n_trials: int = 10):
+    """
+    多次解码并取众数架构，和 Phase4 decode_arch 保持一致。
+    """
+    results = []
+    z_arch = z_arch.detach().float()
+    with torch.no_grad():
+        for _ in range(n_trials):
+            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(DEVICE))
+            g = graphs[0]
+            ops = [vae.op_mapping.get(g.vs[i]['type'], 'Identity')
+                   for i in range(1, g.vcount() - 1)]
+            edges = g.get_edgelist()
+            n_eff = sum(1 for op in ops if op != 'Identity')
+            if n_eff > 0:
+                key = (tuple(ops), tuple(edges))
+                results.append((key, {
+                    'effective_layers': n_eff,
+                    'operations':       ops,
+                    'edges':            edges,
+                }))
+    if not results:
+        return None
+
+    best_key = Counter(r[0] for r in results).most_common(1)[0][0]
+    return next(c for k, c in results if k == best_key)
+
+
+def z_to_condhp(z_search: torch.Tensor, config: dict):
+    """
+    将 Phase4 搜索向量 z[12:16] 反归一化为条件 HP。
+    z[14]/z[15] 仅在架构含 GATConv/SAGEConv 时激活。
+    """
+    if z_search.shape[0] < ARCH_NZ + 4:
+        raise ValueError(
+            f"best_z 维度不足：需要至少 {ARCH_NZ + 4} 维，实际 {z_search.shape[0]} 维")
+
+    log_lr_n = float(z_search[ARCH_NZ])
+    drop_n   = float(z_search[ARCH_NZ + 1])
+    log_lr   = log_lr_n * (args.log_lr_max - args.log_lr_min) + args.log_lr_min
+    dropout  = drop_n * (args.dropout_max - args.dropout_min) + args.dropout_min
+    lr       = float(np.clip(10 ** np.clip(log_lr, -6, 0), 1e-6, 1.0))
+    dr       = float(np.clip(dropout, 0.0, 0.9))
+
+    mask = condition_mask_from_config(config)
+    gat_heads = norm_to_gat_heads(float(z_search[ARCH_NZ + 2])) \
+        if mask['gat_heads'] else 1
+    sage_aggr = norm_to_sage_aggr(float(z_search[ARCH_NZ + 3])) \
+        if mask['sage_aggr'] else 'mean'
+
+    return lr, dr, gat_heads, sage_aggr, mask
+
+
+def candidate_signature(cand: dict) -> tuple:
+    edges = tuple(tuple(e) for e in cand['edges'])
+    return (
+        tuple(cand['operations']),
+        edges,
+        round(float(cand['lr']), 12),
+        round(float(cand['dropout']), 12),
+        int(cand.get('hidden_dim', args.hidden_dim)),
+        round(float(cand.get('l2', args.weight_decay)), 12),
+        int(cand.get('gat_heads', DEFAULT_GAT_HEADS)),
+        cand.get('sage_aggr', DEFAULT_SAGE_AGGR),
+        round(float(cand.get('gcnii_alpha', args.gcnii_alpha)), 12),
+        round(float(cand.get('gcnii_theta', args.gcnii_theta)), 12),
+    )
+
+
+def append_unique_candidate(target: list, cand: dict, seen: set) -> bool:
+    sig = candidate_signature(cand)
+    if sig in seen:
+        logger.info(f"跳过冗余消融候选: {cand['name']}  ({cand['description']})")
+        return False
+    seen.add(sig)
+    target.append(cand)
+    return True
+
+
+def build_auto_ablation_candidates(existing_candidates=None):
+    if args.disable_auto_best:
+        logger.info("Auto best_z ablation disabled by --disable_auto_best")
+        return []
+
+    if not os.path.exists(args.auto_best_z):
+        logger.warning(f"未找到 auto_best_z，跳过自动消融候选: {args.auto_best_z}")
+        return []
+    if not os.path.exists(args.checkpoint):
+        logger.warning(f"未找到 checkpoint，跳过自动消融候选: {args.checkpoint}")
+        return []
+
+    vae = load_vae_for_auto(args.checkpoint)
+    z_obj = _torch_load(args.auto_best_z, map_location='cpu')
+    z_search = torch.as_tensor(z_obj, dtype=torch.float32).view(-1)
+
+    config = decode_arch_from_z(
+        vae, z_search[:ARCH_NZ], n_trials=args.auto_decode_trials)
+    if config is None:
+        logger.warning(f"best_z 架构解码失败，跳过自动消融候选: {args.auto_best_z}")
+        return []
+
+    lr, dropout, gat_heads, sage_aggr, mask = z_to_condhp(z_search, config)
+
+    source_meta = {
+        'source_best_z': args.auto_best_z,
+        'source_checkpoint': args.checkpoint,
+        'condition_mask': mask,
+    }
+    nas_ops = config['operations']
+    nas_edges = config['edges']
+
+    added = []
+    seen = {candidate_signature(c) for c in (existing_candidates or [])}
+
+    append_unique_candidate(added, make_candidate(
+        name="ABL_manualArch_searchGlobalHP",
+        group="hp_on_manual",
+        description="HP-only：2xGCN 手工架构 + Phase4 搜索出的 lr/dropout",
+        operations=MANUAL_2GCN_OPS,
+        edges=DEFAULT_EDGES,
+        lr=lr,
+        dropout=dropout,
+        **source_meta,
+    ), seen)
+
+    append_unique_candidate(added, make_candidate(
+        name="ABL_NASArch_defaultHP",
+        group="arch_only",
+        description="Arch-only：Phase4 解码架构 + 默认全局HP + 默认条件HP",
+        operations=nas_ops,
+        edges=nas_edges,
+        **source_meta,
+    ), seen)
+
+    has_nondefault_cond = (
+        (mask['gat_heads'] and gat_heads != DEFAULT_GAT_HEADS) or
+        (mask['sage_aggr'] and sage_aggr != DEFAULT_SAGE_AGGR)
+    )
+
+    if has_nondefault_cond:
+        append_unique_candidate(added, make_candidate(
+            name="ABL_NASArch_condHPOnly",
+            group="cond_only",
+            description="Cond-only：Phase4 解码架构 + 默认 lr/dropout + 搜索条件HP",
+            operations=nas_ops,
+            edges=nas_edges,
+            gat_heads=gat_heads,
+            sage_aggr=sage_aggr,
+            **source_meta,
+        ), seen)
+
+        append_unique_candidate(added, make_candidate(
+            name="ABL_NASArch_globalHPOnly",
+            group="arch_global_hp",
+            description="GlobalHP-only：Phase4 解码架构 + 搜索 lr/dropout + 默认条件HP",
+            operations=nas_ops,
+            edges=nas_edges,
+            lr=lr,
+            dropout=dropout,
+            **source_meta,
+        ), seen)
+    else:
+        logger.info("搜索到的条件HP与默认值一致或无激活条件参数，跳过 cond-only/globalHP-only 重复消融")
+
+    append_unique_candidate(added, make_candidate(
+        name=args.auto_name,
+        group="full_condhp",
+        description="Full：Phase4 解码架构 + 搜索 lr/dropout + 搜索条件HP",
+        operations=nas_ops,
+        edges=nas_edges,
+        lr=lr,
+        dropout=dropout,
+        gat_heads=gat_heads,
+        sage_aggr=sage_aggr,
+        **source_meta,
+    ), seen)
+
+    logger.info("已生成 Phase4 condHP v5 消融候选：")
+    logger.info(f"  ops={nas_ops}")
+    logger.info(f"  lr={lr:.5f}  dropout={dropout:.3f}  "
+                f"gat_heads={gat_heads}  sage_aggr={sage_aggr}")
+    logger.info(f"  mask={mask}")
+    logger.info(f"  added={len(added)}")
+    return added
+
+
+# ============================================================
+# Group-based 安全查询函数
 # ============================================================
 def get_best_by_group(summary: list, group: str):
     """
@@ -294,8 +476,8 @@ def get_best_by_group(summary: list, group: str):
 
 def get_nth_by_group(summary: list, group: str, n: int):
     """
-    按 group 字段查询第 n 个候选（0-indexed，按 CANDIDATES 顺序）。
-    用于 3×3 消融矩阵等需要指定位置的场景。
+    按 group 字段查询第 n 个候选（0-indexed，按候选列表顺序）。
+    用于保留人工基线的固定顺序。
     """
     rows = [r for r in summary if r.get('group') == group]
     return rows[n] if len(rows) > n else None
@@ -314,12 +496,14 @@ def _safe_test(entry) -> tuple:
 
 
 # ============================================================
-# 多种子评估（v7：删除 _train_and_eval_with_test，直接调用 eval_utils）
+# 多种子评估（v9：条件参数透传 + eval_utils 统一）
 # ============================================================
 def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
     """
     多种子评估单个候选架构。
 
+    v9 保留：
+      - 透传条件参数 gat_heads/sage_aggr
     v7 修复：
       - 完全删除 _train_and_eval_with_test（与 eval_utils 重复）
       - 直接调用 train_and_eval_arch(track_test=True) 获取 val+test
@@ -332,13 +516,15 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
     }
     hidden_dim   = cand.get('hidden_dim', args.hidden_dim)
     weight_decay = cand.get('l2', args.weight_decay)
-    gcnii_alpha  = cand.get('gcnii_alpha', args.gcnii_alpha)   # v7 透传
-    gcnii_theta  = cand.get('gcnii_theta', args.gcnii_theta)   # v7 透传
+    gcnii_alpha  = cand.get('gcnii_alpha', args.gcnii_alpha)
+    gcnii_theta  = cand.get('gcnii_theta', args.gcnii_theta)
+    gat_heads    = cand.get('gat_heads', 1)
+    sage_aggr    = cand.get('sage_aggr', 'mean')
 
     val_accs, test_accs = [], []
 
     for seed in range(args.n_seeds):
-        # v7：直接调用 eval_utils 的 train_and_eval_arch(track_test=True)
+        # 直接调用 eval_utils 的 train_and_eval_arch(track_test=True)
         val_acc, is_valid, test_acc = train_and_eval_arch(
             config       = config,
             data         = data,
@@ -350,6 +536,8 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
             weight_decay = weight_decay,
             gcnii_alpha  = gcnii_alpha,
             gcnii_theta  = gcnii_theta,
+            gat_heads    = gat_heads,
+            sage_aggr    = sage_aggr,
             device       = DEVICE,
             max_epochs   = args.eval_epochs,
             patience     = args.patience,
@@ -377,6 +565,13 @@ def run_eval(cand: dict, data, in_ch: int, out_ch: int) -> dict:
         'l2':          weight_decay,
         'gcnii_alpha': gcnii_alpha,
         'gcnii_theta': gcnii_theta,
+        'gat_heads':   gat_heads,
+        'sage_aggr':   sage_aggr,
+        'operations':  cand['operations'],
+        'edges':       cand['edges'],
+        'source_best_z': cand.get('source_best_z'),
+        'source_checkpoint': cand.get('source_checkpoint'),
+        'condition_mask': cand.get('condition_mask'),
     }
 
 
@@ -397,8 +592,11 @@ def main():
     logger.info(f"gcnii_alpha(default)={args.gcnii_alpha}  "
                 f"gcnii_theta(default)={args.gcnii_theta}")
 
+    candidates = list(CANDIDATES)
+    candidates.extend(build_auto_ablation_candidates(existing_candidates=candidates))
+
     summary = []
-    for cand in CANDIDATES:
+    for cand in candidates:
         logger.info(f"\n{'='*66}")
         logger.info(f"[{cand['group'].upper()}]  {cand['name']}")
         logger.info(f"  {cand['description']}")
@@ -406,7 +604,11 @@ def main():
         logger.info(f"  lr={cand['lr']:.5f}  dropout={cand['dropout']:.3f}  "
                     f"hidden={cand.get('hidden_dim',64)}  l2={cand.get('l2',5e-4):.0e}  "
                     f"gcnii_α={cand.get('gcnii_alpha',0.1)}  "
-                    f"gcnii_θ={cand.get('gcnii_theta',0.5)}")
+                    f"gcnii_θ={cand.get('gcnii_theta',0.5)}  "
+                    f"gat_heads={cand.get('gat_heads',1)}  "
+                    f"sage_aggr={cand.get('sage_aggr','mean')}")
+        if cand.get('source_best_z'):
+            logger.info(f"  source_best_z={cand['source_best_z']}")
 
         result = run_eval(cand, data, in_ch, out_ch)
         summary.append(result)
@@ -418,7 +620,7 @@ def main():
     _print_summary(summary)
     _print_findings(summary)
 
-    out_path = os.path.join(args.output, 'final_results_v7.json')
+    out_path = os.path.join(args.output, 'final_results_v9.json')
     with open(out_path, 'w') as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     logger.info(f"\n结果已保存: {out_path}")
@@ -435,160 +637,107 @@ def _print_summary(summary):
     logger.info(f"{'='*80}")
 
     group_order = [
-        ('baseline',      'A.  手工基线（默认HP）'),
-        ('baseline_diag', "A'. 诊断1：hd=128 瓶颈验证"),
-        ('ablation_hp',   'B.  消融：手工架构 + NAS HP'),
-        ('ablation_arch', 'C.  消融：NAS架构 + 默认HP'),
-        ('nas_v1',        'D.  完整NAS v1（架构+LR/Dropout）'),
-        ('nas_v2',        'E.  完整NAS v2（架构+LR/Dropout/Hidden/L2）'),
-        ('diag_overfit',  'F.  诊断2：Phase3 v2 过拟合验证'),
+        ('baseline',       'A. 人工基线'),
+        ('hp_on_manual',   'B. HP-only：手工架构 + 搜索全局HP'),
+        ('arch_only',      'C. Arch-only：NAS架构 + 默认HP'),
+        ('cond_only',      'D. Cond-only：NAS架构 + 搜索条件HP'),
+        ('arch_global_hp', 'E. GlobalHP-only：NAS架构 + 搜索全局HP'),
+        ('full_condhp',    'F. Full：NAS架构 + 搜索全局HP + 搜索条件HP'),
     ]
     for gkey, glabel in group_order:
         rows = get_all_by_group(summary, gkey)
         if not rows:
             continue
         logger.info(f"\n  {glabel}")
-        logger.info(f"  {'名称':<44} {'Val':>14} {'Test':>14} {'Hidden':>6} {'L2':>8}")
-        logger.info(f"  {'-'*92}")
+        logger.info(f"  {'名称':<44} {'Val':>14} {'Test':>14} "
+                    f"{'Hidden':>6} {'L2':>8} {'Heads':>5} {'Aggr':>6}")
+        logger.info(f"  {'-'*108}")
         for r in rows:
             vs = f"{r['val_mean']:.3f}±{r['val_std']:.3f}"
             ts = f"{r['test_mean']:.3f}±{r['test_std']:.3f}"
             logger.info(f"  {r['name'][:43]:<44} {vs:>14} {ts:>14} "
-                        f"{r['hidden_dim']:>6} {r['l2']:>8.0e}")
+                        f"{r['hidden_dim']:>6} {r['l2']:>8.0e} "
+                        f"{r.get('gat_heads', 1):>5} {r.get('sage_aggr', 'mean'):>6}")
 
 
 # ============================================================
-# 关键发现打印（v7：全部使用 group-based 安全查询）
+# 关键发现打印（v9：condHP 非冗余消融归因）
 # ============================================================
 def _print_findings(summary):
     logger.info(f"\n{'='*80}")
-    logger.info("关键发现（Key Findings）—— v7 group-based 安全查询")
+    logger.info("关键发现（Key Findings）—— condHP v5 非冗余消融")
     logger.info(f"{'='*80}")
 
-    # ── 按 group + 位置索引提取所有需要的候选 ─────────────────
-    baseline     = get_all_by_group(summary, 'baseline')
-    diag1        = get_all_by_group(summary, 'baseline_diag')
-    ablation_hp  = get_all_by_group(summary, 'ablation_hp')
-    ablation_arch = get_all_by_group(summary, 'ablation_arch')
-    nas_v1       = get_all_by_group(summary, 'nas_v1')
-    nas_v2       = get_all_by_group(summary, 'nas_v2')
-    diag_of      = get_all_by_group(summary, 'diag_overfit')
+    base_2gcn = get_nth_by_group(summary, 'baseline', 0)
+    base_1gcn = get_nth_by_group(summary, 'baseline', 1)
+    hp_manual = get_best_by_group(summary, 'hp_on_manual')
+    arch_default = get_best_by_group(summary, 'arch_only')
+    cond_only = get_best_by_group(summary, 'cond_only')
+    global_only = get_best_by_group(summary, 'arch_global_hp')
+    full = get_best_by_group(summary, 'full_condhp')
 
-    # 取各组关键候选（按 CANDIDATES 中的顺序）
-    # baseline[0] = 2xGCN defaultLR, baseline[1] = 1xGCN defaultLR
-    base_2gcn  = baseline[0] if len(baseline) > 0 else None
-    base_1gcn  = baseline[1] if len(baseline) > 1 else None
-    base_diag  = diag1[0]    if len(diag1) > 0   else None
-    # ablation_hp[0] = NAS LR only, ablation_hp[1] = NAS full HP
-    abl_hp_v1  = ablation_hp[0] if len(ablation_hp) > 0 else None
-    abl_hp_v2  = ablation_hp[1] if len(ablation_hp) > 1 else None
-    # ablation_arch[0] = Phase4 arch, ablation_arch[1] = Phase3 arch
-    abl_arch_p4 = ablation_arch[0] if len(ablation_arch) > 0 else None
-    # nas_v2[0] = Phase3, nas_v2[1] = Phase4
-    nas_v2_p3  = nas_v2[0] if len(nas_v2) > 0 else None
-    nas_v2_p4  = nas_v2[1] if len(nas_v2) > 1 else None
-    diag_ovf   = diag_of[0] if len(diag_of) > 0 else None
+    def line(label, entry):
+        if entry is None:
+            logger.info(f"    {label:<24}: N/A")
+            return
+        logger.info(f"    {label:<24}: test={entry['test_mean']:.3f}"
+                    f"±{entry['test_std']:.3f}")
 
-    # ── Finding 1：v1 HP 搜索贡献 ─────────────────────────
-    if base_1gcn and abl_hp_v1:
-        delta = abl_hp_v1['test_mean'] - base_1gcn['test_mean']
-        var_r = base_1gcn['test_std'] - abl_hp_v1['test_std']
-        logger.info(f"\n  [Finding 1] v1 HP 搜索贡献（仅搜 LR）：")
-        logger.info(f"    可靠基线 1xGCN  : test={base_1gcn['test_mean']:.3f}"
-                    f"±{base_1gcn['test_std']:.3f}")
-        logger.info(f"    2xGCN + NAS LR  : test={abl_hp_v1['test_mean']:.3f}"
-                    f"±{abl_hp_v1['test_std']:.3f}")
-        logger.info(f"    Δtest={delta:+.3f}  方差变化={var_r:+.3f}")
+    def delta(label, target, ref):
+        if target is None or ref is None:
+            return
+        d = target['test_mean'] - ref['test_mean']
+        logger.info(f"    {label:<24}: Δtest={d:+.3f}")
 
-    # ── Finding 2：v2 HP 相对于 v1 增量 ───────────────────
-    if abl_hp_v1 and abl_hp_v2:
-        delta = abl_hp_v2['test_mean'] - abl_hp_v1['test_mean']
-        var_r = abl_hp_v1['test_std']  - abl_hp_v2['test_std']
-        logger.info(f"\n  [Finding 2] v2 HP 相对于 v1 增量（hidden_dim + L2）：")
-        logger.info(f"    2xGCN + NAS v1 HP : test={abl_hp_v1['test_mean']:.3f}"
-                    f"±{abl_hp_v1['test_std']:.3f}")
-        logger.info(f"    2xGCN + NAS v2 HP : test={abl_hp_v2['test_mean']:.3f}"
-                    f"±{abl_hp_v2['test_std']:.3f}")
-        logger.info(f"    Δtest={delta:+.3f}  方差变化={var_r:+.3f}")
-        if delta > 0.01:
-            logger.info(f"    → hidden_dim 和 l2 对性能有实质贡献")
-        else:
-            logger.info(f"    → hidden_dim/l2 边际收益有限，LR 是主要驱动")
+    logger.info("\n  [Finding 1] 人工基线稳定性：")
+    line("2xGCN default", base_2gcn)
+    line("1xGCN default", base_1gcn)
+    delta("1xGCN - 2xGCN", base_1gcn, base_2gcn)
 
-    # ── Finding 3：架构搜索独立贡献 ───────────────────────
-    if base_1gcn and abl_arch_p4:
-        delta = abl_arch_p4['test_mean'] - base_1gcn['test_mean']
-        logger.info(f"\n  [Finding 3] 架构搜索独立贡献（NAS架构 + 默认HP）：")
-        logger.info(f"    基线 1xGCN          : test={base_1gcn['test_mean']:.3f}"
-                    f"±{base_1gcn['test_std']:.3f}")
-        logger.info(f"    NAS架构(P4)+默认HP  : test={abl_arch_p4['test_mean']:.3f}"
-                    f"±{abl_arch_p4['test_std']:.3f}")
-        logger.info(f"    Δtest={delta:+.3f}")
-        if delta < 0:
-            logger.info(f"    → 缺乏 HP 校准时，架构搜索无正向贡献")
-        elif delta > 0.01:
-            logger.info(f"    → NAS 架构本身有正向贡献（独立于 HP 效果）")
-        else:
-            logger.info(f"    → 架构贡献边际，HP 搜索是主要增益来源")
+    if hp_manual:
+        logger.info("\n  [Finding 2] 全局 HP 搜索贡献（固定手工架构）：")
+        line("Manual default HP", base_2gcn)
+        line("Manual searched HP", hp_manual)
+        delta("global HP only", hp_manual, base_2gcn)
 
-    # ── Finding 3b：Phase4 行 HP 贡献隔离 ─────────────────
-    if abl_arch_p4 and nas_v2_p4:
-        delta_hp = nas_v2_p4['test_mean'] - abl_arch_p4['test_mean']
-        var_r    = abl_arch_p4['test_std'] - nas_v2_p4['test_std']
-        logger.info(f"\n  [Finding 3b] Phase4 行 HP 贡献隔离（同一架构）：")
-        logger.info(f"    默认 HP  : test={abl_arch_p4['test_mean']:.3f}"
-                    f"±{abl_arch_p4['test_std']:.3f}")
-        logger.info(f"    NAS v2 HP: test={nas_v2_p4['test_mean']:.3f}"
-                    f"±{nas_v2_p4['test_std']:.3f}")
-        logger.info(f"    Δtest={delta_hp:+.3f}  方差变化={var_r:+.3f}")
-        logger.info(f"    → 上述差异纯粹由 HP 搜索贡献（架构已控制为同一）")
+    if arch_default:
+        logger.info("\n  [Finding 3] 架构搜索贡献（默认 HP 控制）：")
+        line("Manual arch", base_2gcn)
+        line("NAS arch default HP", arch_default)
+        delta("arch only", arch_default, base_2gcn)
 
-    # ── Finding 4：诊断1 hd=64 信息瓶颈 ──────────────────
-    if base_2gcn and base_diag:
-        delta = base_diag['test_mean'] - base_2gcn['test_mean']
-        var_r = base_2gcn['test_std']  - base_diag['test_std']
-        logger.info(f"\n  [Finding 4] 【诊断1】2xGCN 崩溃原因（hd=64 vs hd=128）：")
-        logger.info(f"    2xGCN hd=64  : test={base_2gcn['test_mean']:.3f}"
-                    f"±{base_2gcn['test_std']:.3f}  ← 已知崩溃")
-        logger.info(f"    2xGCN hd=128 : test={base_diag['test_mean']:.3f}"
-                    f"±{base_diag['test_std']:.3f}")
-        logger.info(f"    Δtest={delta:+.3f}  方差变化={var_r:+.3f}")
-        if delta > 0.15 and var_r > 0.10:
-            logger.info(f"    → ✅ 确认：hd=64 是主要瓶颈")
-        elif delta > 0.05:
-            logger.info(f"    → ⚠️  部分改善：hd=64 是诱因之一")
-        else:
-            logger.info(f"    → ❌ hd 不是主因：崩溃来自 LR/weight_decay")
+    if global_only:
+        logger.info("\n  [Finding 4] NAS 架构上的全局 HP 增量：")
+        line("NAS arch default HP", arch_default)
+        line("NAS arch global HP", global_only)
+        delta("global HP on NAS", global_only, arch_default)
 
-    # ── Finding 5：诊断2 Phase3 过拟合验证 ────────────────
-    if diag_ovf:
-        std_val  = diag_ovf['test_std']
-        mean_val = diag_ovf['test_mean']
-        logger.info(f"\n  [Finding 5] 【诊断2】Phase3 v2 最优配置稳定性验证：")
-        logger.info(f"    BO 阶段 val_acc（单次）: 0.8140")
-        logger.info(f"    多种子 test_acc       : {mean_val:.3f}±{std_val:.3f}")
-        if std_val > 0.05:
-            logger.info(f"    → ❌ 证实过拟合：种子极度敏感，BO 搜到验证集局部峰值")
-        elif std_val < 0.02:
-            logger.info(f"    → ✅ 配置稳定：具有真实泛化能力")
-        else:
-            logger.info(f"    → ⚠️  中等稳定性：建议适当降低 LR 再验证")
+    if cond_only:
+        logger.info("\n  [Finding 5] 条件 HP 单独贡献（默认 lr/dropout）：")
+        line("NAS arch default cond", arch_default)
+        line("NAS arch searched cond", cond_only)
+        delta("conditional HP only", cond_only, arch_default)
 
-    # ── Finding 6：NAS v2 全量综合 ────────────────────────
-    if base_1gcn and nas_v2_p4 and nas_v2_p3:
-        logger.info(f"\n  [Finding 6] 完整 NAS v2 vs 可靠基线（1xGCN）：")
-        logger.info(f"    基线 1xGCN    : test={base_1gcn['test_mean']:.3f}"
-                    f"±{base_1gcn['test_std']:.3f}")
-        d4 = nas_v2_p4['test_mean'] - base_1gcn['test_mean']
-        d3 = nas_v2_p3['test_mean'] - base_1gcn['test_mean']
-        logger.info(f"    NAS v2 Phase4 : test={nas_v2_p4['test_mean']:.3f}"
-                    f"±{nas_v2_p4['test_std']:.3f}  Δ={d4:+.3f}")
-        logger.info(f"    NAS v2 Phase3 : test={nas_v2_p3['test_mean']:.3f}"
-                    f"±{nas_v2_p3['test_std']:.3f}  Δ={d3:+.3f}")
+    if full:
+        logger.info("\n  [Finding 6] 完整 condHP 搜索结果：")
+        line("Full condHP", full)
+        if global_only:
+            delta("condHP marginal", full, global_only)
+        elif arch_default:
+            delta("searched HP total", full, arch_default)
+        if base_2gcn:
+            delta("full vs 2xGCN", full, base_2gcn)
+        logger.info(f"    ops                     : {full['operations']}")
+        logger.info(f"    lr/dropout              : {full['lr']:.5f} / {full['dropout']:.3f}")
+        logger.info(f"    gat_heads/sage_aggr     : {full.get('gat_heads', 1)} / "
+                    f"{full.get('sage_aggr', 'mean')}")
+        logger.info(f"    condition_mask          : {full.get('condition_mask')}")
+    else:
+        logger.warning("\n  未生成完整 condHP 候选；请确认 Phase4 best_z_final.pt 和 VAE checkpoint 是否存在。")
 
 
 # ============================================================
-# 可视化（v7：3×3 矩阵改为 group+位置索引取值，消除硬编码名称）
+# 可视化（v9：非冗余候选柱状图 + condHP 2×2 消融矩阵）
 # ============================================================
 def _plot(summary):
     try:
@@ -597,13 +746,12 @@ def _plot(summary):
         from matplotlib.patches import Patch
 
         group_colors = {
-            'baseline':      '#e74c3c',
-            'baseline_diag': '#e67e22',
-            'ablation_hp':   '#f1c40f',
-            'ablation_arch': '#9b59b6',
-            'nas_v1':        '#2ecc71',
-            'nas_v2':        '#3498db',
-            'diag_overfit':  '#1abc9c',
+            'baseline':       '#7f8c8d',
+            'hp_on_manual':   '#f39c12',
+            'arch_only':      '#8e44ad',
+            'cond_only':      '#16a085',
+            'arch_global_hp': '#2980b9',
+            'full_condhp':    '#c0392b',
         }
 
         names  = [r['name'].replace('_', '\n') for r in summary]
@@ -611,7 +759,7 @@ def _plot(summary):
         tstds  = [r['test_std']  for r in summary]
         clrs   = [group_colors.get(r['group'], '#95a5a6') for r in summary]
 
-        fig, axes = plt.subplots(1, 2, figsize=(22, 7))
+        fig, axes = plt.subplots(1, 2, figsize=(18, 7))
 
         # ── 左图：柱状图 ──────────────────────────────────
         ax = axes[0]
@@ -622,55 +770,41 @@ def _plot(summary):
                     bar.get_height() + s + 0.004,
                     f'{m:.3f}', ha='center', va='bottom', fontsize=6.5)
         ax.set_xticks(range(len(names)))
-        ax.set_xticklabels(names, fontsize=5)
+        ax.set_xticklabels(names, fontsize=7)
         ax.set_ylabel('Test Accuracy')
         ax.set_ylim(0.30, 0.93)
-        ax.set_title('Cora Test Accuracy — Search Space v3\n'
-                     '(CosineAnnealingLR + EarlyStopping, 10 seeds)')
+        ax.set_title('Cora Test Accuracy — condHP v5 ablation\n'
+                     '(CosineAnnealingLR + EarlyStopping)')
         ax.grid(axis='y', alpha=0.3)
         ax.legend(handles=[
-            Patch(color='#e74c3c', label='A. Manual Baseline (hd=64)'),
-            Patch(color='#e67e22', label="A'. Diag 1: hd=128 Bottleneck"),
-            Patch(color='#f1c40f', label='B. Manual Arch + NAS HP'),
-            Patch(color='#9b59b6', label='C. NAS Arch + Default HP'),
-            Patch(color='#2ecc71', label='D. Full NAS v1'),
-            Patch(color='#3498db', label='E. Full NAS v2'),
-            Patch(color='#1abc9c', label='F. Diag 2: Overfit Check'),
+            Patch(color='#7f8c8d', label='Manual baseline'),
+            Patch(color='#f39c12', label='HP-only on manual arch'),
+            Patch(color='#8e44ad', label='Arch-only'),
+            Patch(color='#16a085', label='Cond-only'),
+            Patch(color='#2980b9', label='GlobalHP-only'),
+            Patch(color='#c0392b', label='Full condHP'),
         ], fontsize=7, loc='lower right')
 
-        # ── 右图：3×3 消融热图（v7: group-based 取值）────────
-        # 布局：
-        #   行 0: 手工架构 2xGCN
-        #         → baseline[0], ablation_hp[0], ablation_hp[1]
-        #   行 1: NAS Phase4 架构 (SAGE+GCN+Identity)
-        #         → ablation_arch[0], nas_v1[0], nas_v2[1]
-        #   行 2: NAS Phase3 架构 (GAT+SAGE+SAGE)
-        #         → ablation_arch[1], nas_v1[1], nas_v2[0]
+        # ── 右图：固定 NAS 架构后的 2×2 HP 消融热图 ─────────
         ax2 = axes[1]
 
-        def g(group, n):
-            """group+位置索引取 (mean, std)，安全返回 (nan, 0)。"""
-            return _safe_test(get_nth_by_group(summary, group, n))
+        def best(group):
+            return _safe_test(get_best_by_group(summary, group))
 
         mat_mean = np.array([
-            # 行0: 手工架构 2xGCN
-            [g('baseline',      0)[0], g('ablation_hp', 0)[0], g('ablation_hp', 1)[0]],
-            # 行1: NAS Phase4 架构（SAGE+GCN）
-            [g('ablation_arch', 0)[0], g('nas_v1',      0)[0], g('nas_v2',      1)[0]],
-            # 行2: NAS Phase3 架构（GAT+SAGE+SAGE）
-            [g('ablation_arch', 1)[0], g('nas_v1',      1)[0], g('nas_v2',      0)[0]],
+            [best('arch_only')[0],      best('cond_only')[0]],
+            [best('arch_global_hp')[0], best('full_condhp')[0]],
         ])
         mat_std = np.array([
-            [g('baseline',      0)[1], g('ablation_hp', 0)[1], g('ablation_hp', 1)[1]],
-            [g('ablation_arch', 0)[1], g('nas_v1',      0)[1], g('nas_v2',      1)[1]],
-            [g('ablation_arch', 1)[1], g('nas_v1',      1)[1], g('nas_v2',      0)[1]],
+            [best('arch_only')[1],      best('cond_only')[1]],
+            [best('arch_global_hp')[1], best('full_condhp')[1]],
         ])
 
         im = ax2.imshow(mat_mean, cmap='RdYlGn',
                         vmin=0.40, vmax=0.85, aspect='auto')
         plt.colorbar(im, ax=ax2, label='Test Accuracy')
-        for i in range(3):
-            for j in range(3):
+        for i in range(2):
+            for j in range(2):
                 v = mat_mean[i, j]
                 s = mat_std[i, j]
                 txt = f"{v:.3f}\n±{s:.3f}" if not np.isnan(v) else "N/A"
@@ -678,24 +812,22 @@ def _plot(summary):
                 ax2.text(j, i, txt, ha='center', va='center',
                          fontsize=9, fontweight='bold', color=fc)
 
-        ax2.set_xticks([0, 1, 2])
+        ax2.set_xticks([0, 1])
         ax2.set_xticklabels(
-            ['Default HP\n(LR=1e-3, hd=64)',
-             'NAS HP v1\n(LR only)',
-             'NAS HP v2\n(LR+hd+l2)'], fontsize=9)
-        ax2.set_yticks([0, 1, 2])
+            ['Default conditional HP\n(heads=1, aggr=mean)',
+             'Searched conditional HP'], fontsize=8)
+        ax2.set_yticks([0, 1])
         ax2.set_yticklabels(
-            ['Manual Arch\n(2xGCN)',
-             'NAS Arch P4\n(SAGE+GCN)',
-             'NAS Arch P3\n(GAT+SAGE+SAGE)'], fontsize=9)
-        ax2.set_xlabel('Hyperparameter Source', fontsize=11)
-        ax2.set_ylabel('Architecture Source',   fontsize=11)
+            ['Default global HP\n(lr=1e-3, dropout=0.5)',
+             'Searched global HP'], fontsize=8)
+        ax2.set_xlabel('Conditional HP source', fontsize=11)
+        ax2.set_ylabel('Global HP source', fontsize=11)
         ax2.set_title(
-            '3x3 Ablation Matrix: Arch Source × HP Version\n'
-            '[v7: group-based indexing, no hardcoded names]', fontsize=10)
+            '2x2 HP ablation on decoded NAS architecture\n'
+            '[N/A means the candidate was redundant and skipped]', fontsize=10)
 
         plt.tight_layout()
-        path = os.path.join(args.output, 'final_comparison_v7.png')
+        path = os.path.join(args.output, 'final_comparison_v9.png')
         plt.savefig(path, dpi=150, bbox_inches='tight')
         plt.close()
         logger.info(f"Comparison plot saved: {path}")
@@ -710,7 +842,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     logger.info("=" * 70)
-    logger.info(f"final_eval.py  v7  —  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"final_eval.py  v9  —  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 70)
     logger.info(f"Device={DEVICE}  Seeds={args.n_seeds}  "
                 f"Epochs={args.eval_epochs}  Patience={args.patience}")
