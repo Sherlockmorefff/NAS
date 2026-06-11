@@ -1,6 +1,11 @@
 """
-bo_phase4.py  v9  (极限参数透传修复 + 工业级日志)
+bo_phase4.py  v10  (条件核函数 + 工业级日志)
 =================================================================
+v10 变更（相对 v9）：
+  - 新增 --use_conditional_kernel：在 Phase4 GP 中启用条件核函数。
+  - 条件核通过 DVAE soft_decode 得到 GAT/SAGE/GIN 逐层激活概率，
+    仅在对应算子激活时比较该层条件 HP。
+
 v9 变更（相对 v8）：
   - 修复 argparser 缺少 --patience 参数的问题。
   - 修复 eval_z() 函数未将 max_epochs 和 patience 透传给 
@@ -85,7 +90,7 @@ def save_args_json(args, log_filepath: str) -> str:
 # ============================================================
 # 参数解析
 # ============================================================
-parser = argparse.ArgumentParser(description='bo_phase4 v9')
+parser = argparse.ArgumentParser(description='bo_phase4 v10')
 # 原有参数
 parser.add_argument('--checkpoint',      type=str,
                     default='results/joint_search/joint_model_v3_ep100.pth')
@@ -122,6 +127,14 @@ parser.add_argument('--seed',            type=int, default=42)
 parser.add_argument('--hp_dim',          type=int, default=4,
                     choices=[4, HP_DIM_LAYERWISE],
                     help='HP 维度：4=v5 type-wise，17=v6 layer-wise + GIN')
+parser.add_argument('--use_conditional_kernel', action='store_true',
+                    help='启用基于架构 soft mask 的条件核函数')
+parser.add_argument('--cond_kernel_tau', type=float, default=0.3,
+                    help='条件核中 DVAE soft_decode 的温度')
+parser.add_argument('--cond_kernel_mask_weight', type=float, default=1.0,
+                    help='条件核中 active 条件 HP 维度的权重，1.0 表示严格 active/inactive')
+parser.add_argument('--cond_kernel_detach_mask', action='store_true',
+                    help='条件核中停止 mask 对 z_arch 的梯度，仅保留条件距离')
 args = parser.parse_args()
 
 # ── 全局常量 ─────────────────────────────────────────────
@@ -477,6 +490,13 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
                     num_restarts   = 8,
                     raw_samples    = 256,
                     n_extra        = 128,
+                    conditional_kernel = args.use_conditional_kernel,
+                    dvae_diff      = dvae_diff,
+                    arch_nz        = ARCH_NZ,
+                    hp_dim         = HP_DIM,
+                    cond_tau       = args.cond_kernel_tau,
+                    cond_mask_weight = args.cond_kernel_mask_weight,
+                    detach_cond_mask = args.cond_kernel_detach_mask,
                 ).cpu()
             except Exception as e:
                 logger.warning(f"  [iter {it}] acqf error: {e}, random fallback")
@@ -515,7 +535,8 @@ def run_bo(vae, dvae_diff, data, in_ch, out_ch):
     lr_b, dr_b, heads_b, aggr_b, gin_b = z_to_hp(best_z, best_cfg)
 
     logger.info("\n" + "="*70)
-    logger.info(f"  Phase 4 v9 (nz={ARCH_NZ}, GPND-NAS, SEARCH_DIM={SEARCH_DIM}) Final")
+    kernel_name = "ConditionalKernel-GPND-NAS" if args.use_conditional_kernel else "GPND-NAS"
+    logger.info(f"  Phase 4 v10 (nz={ARCH_NZ}, {kernel_name}, SEARCH_DIM={SEARCH_DIM}) Final")
     logger.info("="*70)
     logger.info(f"  Best val_acc  : {max(Y_obs):.4f}")
     logger.info(f"  GNN config    : {best_cfg}")
@@ -558,11 +579,15 @@ if __name__ == '__main__':
     start_time = time.time()
 
     logger.info("=" * 70)
-    logger.info(f"bo_phase4.py  v9  —  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"bo_phase4.py  v10  —  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 70)
     logger.info(f"Device: {DEVICE}")
     logger.info(f"arch_nz={ARCH_NZ}  search_dim={SEARCH_DIM}  seed={args.seed}")
     logger.info(f"novelty_w={args.novelty_w}  tau={args.tau_gumbel}")
+    logger.info(f"conditional_kernel={args.use_conditional_kernel}  "
+                f"cond_tau={args.cond_kernel_tau}  "
+                f"mask_weight={args.cond_kernel_mask_weight}  "
+                f"detach_mask={args.cond_kernel_detach_mask}")
     if HP_DIM >= HP_DIM_LAYERWISE:
         logger.info("conditional HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]")
         logger.info("layer-wise activation for GATConv/SAGEConv/GINConv")

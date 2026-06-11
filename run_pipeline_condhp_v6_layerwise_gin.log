@@ -1,712 +1,0 @@
-================================================================
-  启动 GNN-NAS 条件参数 v6 完整流水线
-  VERSION=condhp_v6_layerwise_gin
-  HP_DIM=17
-  CORA_ROOT=/tmp/Cora
-================================================================
-=== Step 1: 生成 v6 逐层条件参数训练数据集 ===
-生成 3000 个 v3 DAG 样本 (max_n=7, nvt=8, hp_dim=17)...
-  主链: 0→1→2→3→4→5→6  每条跳跃边概率=0.35
-  REAL_OP_TYPES=[2, 3, 4, 5, 7]  ALL_OP_TYPES=[2, 3, 4, 5, 6, 7]
-  HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
-      条件参数按 5 个算子节点逐层激活：GAT/SAGE/GIN 各自监督对应层
-  0%|          | 0/3000 [00:00<?, ?it/s]100%|██████████| 3000/3000 [00:00<00:00, 77139.46it/s]
-
-✅ 数据集保存至: data/mini_gnn_dataset_v6_layerwise_gin.pkl  (3000 条，hp_dim=17)
-
-[自检] 前 3 条样本：
-  [0] types=[0, 2, 2, 7, 4, 3, 1]
-       edges=[(0, 1), (1, 2), (1, 3), (2, 3), (2, 5), (3, 4), (4, 5), (5, 6)]  lr=0.00012  drop=0.209  gat=[0.0, 0.0, 0.0, 0.0, 0.505]  sage=[0.0, 0.0, 0.0, 0.027, 0.0]  gin=[0.0, 0.0, 0.0, 0.0, 0.0]
-  [1] types=[0, 3, 7, 7, 7, 7, 1]
-       edges=[(0, 1), (1, 2), (1, 5), (2, 3), (3, 4), (3, 5), (4, 5), (5, 6)]  lr=0.00114  drop=0.239  gat=[0.215, 0.0, 0.0, 0.0, 0.0]  sage=[0.0, 0.0, 0.0, 0.0, 0.0]  gin=[0.0, 0.0, 0.0, 0.0, 0.0]
-  [2] types=[0, 4, 2, 2, 5, 2, 1]
-       edges=[(0, 1), (1, 2), (1, 4), (1, 5), (2, 3), (2, 4), (3, 4), (3, 5), (4, 5), (5, 6)]  lr=0.02022  drop=0.139  gat=[0.0, 0.0, 0.0, 0.0, 0.0]  sage=[0.293, 0.0, 0.0, 0.0, 0.0]  gin=[0.0, 0.0, 0.0, 0.629, 0.0]
-
-  含跳跃边样本比例: 2780/3000 = 92.7%
-  含 GCNII(type=7) 节点样本比例: 1932/3000 = 64.4%
-=== Step 2: 训练 v6 Joint VAE ===
-[2026-06-09 00:07:43][INFO] ============================================================
-[2026-06-09 00:07:43][INFO] train_joint.py v10 (Search Space v3 + layer-wise conditional HP mask) | Device: cuda:0
-[2026-06-09 00:07:43][INFO] Data: data/mini_gnn_dataset_v6_layerwise_gin.pkl | Beta Max: 0.01
-[2026-06-09 00:07:43][INFO] ============================================================
-[2026-06-09 00:07:43][INFO] HP dim inferred from dataset: 17
-[2026-06-09 00:08:06][INFO] Epoch   1/100 | Loss: 713.33 | RA: 666.25 RH: 47.0760 | KA: 33.7 KH: 10.3 | Beta: 0.0000
-[2026-06-09 00:11:41][INFO] Epoch  10/100 | Loss: 352.09 | RA: 316.78 RH: 35.3022 | KA: 1291.1 KH: 12.8 | Beta: 0.0000
-[2026-06-09 00:15:43][INFO] Epoch  20/100 | Loss: 318.67 | RA: 290.57 RH: 28.1019 | KA: 1422.9 KH: 22.5 | Beta: 0.0000
-[2026-06-09 00:19:44][INFO] Epoch  30/100 | Loss: 293.19 | RA: 276.93 RH: 16.2263 | KA: 732.5 KH: 161.4 | Beta: 0.0017
-[2026-06-09 00:23:43][INFO] Epoch  40/100 | Loss: 287.02 | RA: 275.33 RH: 11.6866 | KA: 650.9 KH: 547.7 | Beta: 0.0033
-[2026-06-09 00:27:46][INFO] Epoch  50/100 | Loss: 282.54 | RA: 271.77 RH: 10.7637 | KA: 632.8 KH: 826.0 | Beta: 0.0050
-[2026-06-09 00:31:44][INFO] Epoch  60/100 | Loss: 257.97 | RA: 247.77 RH: 10.1964 | KA: 638.2 KH: 972.1 | Beta: 0.0067
-[2026-06-09 00:35:39][INFO] Epoch  70/100 | Loss: 256.06 | RA: 246.47 RH: 9.5792 | KA: 614.2 KH: 975.3 | Beta: 0.0083
-[2026-06-09 00:39:34][INFO] Epoch  80/100 | Loss: 255.65 | RA: 246.75 RH: 8.8957 | KA: 626.3 KH: 960.0 | Beta: 0.0100
-[2026-06-09 00:43:29][INFO] Epoch  90/100 | Loss: 248.93 | RA: 240.50 RH: 8.4046 | KA: 633.6 KH: 993.0 | Beta: 0.0100
-[2026-06-09 00:47:23][INFO] Epoch 100/100 | Loss: 256.75 | RA: 248.75 RH: 8.0016 | KA: 621.3 KH: 979.3 | Beta: 0.0100
-[2026-06-09 00:47:23][INFO] 模型已保存至: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth
-[2026-06-09 00:47:23][INFO] ✅ 训练完成。
-=== Step 3: 验证可微解码器 ===
-max_n=7  nvt=8  nz=12
-type_dim=48  edge_dim=36  p_dim=84
-Expected: type_dim=48  edge_dim=36  p_dim=84
-  [GradCheck] device=cpu  nz=12  p_dim=84  grad_norm=0.0517  OK=True
-  ✅ 全部类型掩码验证通过 (50 随机样本, max_n=7, nvt=8)
-
-[Backward Compat] max_n=5, nvt=7, nz=8
-  ✅ Backward compat OK
-
-✅ dvae_differentiable v4 ALL TESTS PASSED
-=== Step 4: 验证 Jacobian 工具 ===
-============================================================
-jacobian_utils v3 Unit Test (nz=12, n_probes=16→12)
-============================================================
-p_dim=84 ✅
-
-[Test 1] finite_diff Jacobian (nz=12):
-  J.shape = torch.Size([84, 12])  expected (84, 12)
-  ✅
-
-[Test 2] random_proj (n_probes=16, nz=12 → actual_n=12):
-  J2.shape     = torch.Size([84, 12])        expected (84, 12)
-  probes.shape = torch.Size([12, 12])   expected (12, 12)
-  ✅
-
-[Test 3] SVD decompose:
-  v_orthogonal shape  : torch.Size([4, 12])
-  singular_values[:5] : [0.10447118431329727, 0.09372901916503906, 0.05696936324238777, 0.044248614460229874, 0.03499330207705498]
-  condition_number    : 26.98
-  rank_estimate       : 12
-  ✅
-
-[Test 4] analyze_latent_smoothness (random_proj, nz=12):
-Analyzing latent smoothness (3 pairs × 6 steps)  nz=12  n_probes=12  method=random_proj
-
-  Condition number : 29.03 ± 6.32
-  Effective rank   : 12.0
-  Avg max sing val : 0.1328
-  ✅ Moderate condition number: usable for geometric BO
-
-✅ All jacobian_utils v3 tests passed.
-=== Step 5: 验证评估工具 ===
-eval_utils v6 self-test (Network Isolated)...
-
-[Test 1] Topology skip-connection
-  Skip-conn output shape: torch.Size([10, 7])  ✅
-  predecessors[3] = [2, 1]  ✅
-
-[Test 2] GCNII x_0 isolation (no main stream pollution)
-  GCNII output shape: torch.Size([10, 7])  ✅
-  input_proj: 1433 → 64  ✅
-
-[Test 3] No input_proj when no GCNII
-  Plain arch output shape: torch.Size([10, 7])  ✅
-
-[Test 4] train_and_eval_arch track_test=True return value
-  track_test=True → val=0.1333  ok=True  test=0.1333  ✅
-  track_test=False → val=0.1333  ok=True  ✅
-
-  norm_to_hidden: [16, 32, 64, 128, 256, 512]
-  norm_to_l2:     [1e-05, 5e-05, 0.0001, 0.0005, 0.001]
-
-✅ eval_utils v6 OK
-=== Step 6: 启动 Phase 2 架构搜索 ===
-[2026-06-09 00:47:34][INFO] 日志文件: logs/bo_phase2/train_condhp_v6_layerwise_gin_0609_0047.log
-[2026-06-09 00:47:34][INFO] ============================================================
-[2026-06-09 00:47:34][INFO] bo_phase2.py  v8  —  2026-06-09 00:47:34
-[2026-06-09 00:47:34][INFO] ============================================================
-[2026-06-09 00:47:34][INFO] Device=cuda:0  arch_nz=12  seed=42
-[2026-06-09 00:47:34][INFO] checkpoint: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth
-[2026-06-09 00:47:34][INFO] VAE loaded: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth  (arch_nz=12)
-[2026-06-09 00:47:34][INFO] Cora: 1433 features, 7 classes  train=140  val=500
-[2026-06-09 00:47:34][INFO] 
-[Step 1] Random init: 10 points  arch_nz=12
-[2026-06-09 00:47:34][INFO]   Eval: max_epochs=100  patience=20  CosineAnnealingLR
-[2026-06-09 00:47:34][INFO]   dropout=0.5  hidden_dim=64  wd=0.0005
-[2026-06-09 00:47:34][INFO]   gcnii_alpha=0.1  gcnii_theta=0.5
-Init:   0%|          | 0/10 [00:00<?, ?it/s][2026-06-09 00:47:36][INFO]   init  0: val_acc=0.7140  [valid]
-Init:  10%|█         | 1/10 [00:01<00:11,  1.27s/it][2026-06-09 00:47:36][INFO]   init  1: val_acc=0.4300  [valid]
-Init:  20%|██        | 2/10 [00:01<00:07,  1.11it/s][2026-06-09 00:47:37][INFO]   init  2: val_acc=0.5440  [valid]
-Init:  30%|███       | 3/10 [00:02<00:06,  1.07it/s][2026-06-09 00:47:38][INFO]   init  3: val_acc=0.4020  [valid]
-Init:  40%|████      | 4/10 [00:03<00:04,  1.43it/s][2026-06-09 00:47:39][INFO]   init  4: val_acc=0.5940  [valid]
-Init:  50%|█████     | 5/10 [00:04<00:04,  1.20it/s][2026-06-09 00:47:39][INFO]   init  5: val_acc=0.1560  [valid]
-Init:  60%|██████    | 6/10 [00:04<00:02,  1.63it/s][2026-06-09 00:47:39][INFO]   init  6: val_acc=0.1700  [valid]
-Init:  70%|███████   | 7/10 [00:04<00:01,  2.07it/s][2026-06-09 00:47:40][INFO]   init  7: val_acc=0.3220  [valid]
-Init:  80%|████████  | 8/10 [00:05<00:01,  1.70it/s][2026-06-09 00:47:40][INFO]   init  8: val_acc=0.4840  [valid]
-Init:  90%|█████████ | 9/10 [00:05<00:00,  1.80it/s][2026-06-09 00:47:41][INFO]   init  9: val_acc=0.3280  [valid]
-Init: 100%|██████████| 10/10 [00:06<00:00,  1.86it/s]Init: 100%|██████████| 10/10 [00:06<00:00,  1.54it/s]
-[2026-06-09 00:47:41][INFO] 
-Init done. Best val_acc=0.7140
-[2026-06-09 00:47:41][INFO] 
-[Step 2] BO: 40 iters
-[2026-06-09 00:47:42][INFO]   iter   0: val_acc=0.3220  (best=0.7140)
-[2026-06-09 00:47:42][INFO]   iter   1: val_acc=0.4620  (best=0.7140)
-[2026-06-09 00:47:43][INFO]   iter   2: val_acc=0.2380  (best=0.7140)
-[2026-06-09 00:47:44][INFO]   iter   3: val_acc=0.7040  (best=0.7140)
-[2026-06-09 00:47:45][INFO]   iter   4: val_acc=0.7240  <-- NEW BEST 🎯
-[2026-06-09 00:47:46][INFO]   iter   5: val_acc=0.5760  (best=0.7240)
-[2026-06-09 00:47:47][INFO]   iter   6: val_acc=0.4640  (best=0.7240)
-[2026-06-09 00:47:48][INFO]   iter   7: val_acc=0.6480  (best=0.7240)
-[2026-06-09 00:47:50][INFO]   iter   8: val_acc=0.5500  (best=0.7240)
-[2026-06-09 00:47:51][INFO]   iter   9: val_acc=0.5380  (best=0.7240)
-[2026-06-09 00:47:51][INFO]   Saved: step9
-[2026-06-09 00:47:53][INFO]   iter  10: val_acc=0.5340  (best=0.7240)
-[2026-06-09 00:47:54][INFO]   iter  11: val_acc=0.5620  (best=0.7240)
-[2026-06-09 00:47:55][INFO]   iter  12: val_acc=0.7320  <-- NEW BEST 🎯
-[2026-06-09 00:47:56][INFO]   iter  13: val_acc=0.4400  (best=0.7320)
-[2026-06-09 00:47:58][INFO]   iter  14: val_acc=0.3840  (best=0.7320)
-[2026-06-09 00:47:59][INFO]   iter  15: val_acc=0.7700  <-- NEW BEST 🎯
-[2026-06-09 00:48:01][INFO]   iter  16: val_acc=0.6560  (best=0.7700)
-[2026-06-09 00:48:03][INFO]   iter  17: val_acc=0.4320  (best=0.7700)
-[2026-06-09 00:48:05][INFO]   iter  18: val_acc=0.4580  (best=0.7700)
-[2026-06-09 00:48:06][INFO]   iter  19: val_acc=0.4780  (best=0.7700)
-[2026-06-09 00:48:06][INFO]   Saved: step19
-[2026-06-09 00:48:07][INFO]   iter  20: val_acc=0.2740  (best=0.7700)
-[2026-06-09 00:48:08][INFO]   iter  21: val_acc=0.3540  (best=0.7700)
-[2026-06-09 00:48:09][INFO]   iter  22: val_acc=0.5000  (best=0.7700)
-[2026-06-09 00:48:10][INFO]   iter  23: val_acc=0.3200  (best=0.7700)
-[2026-06-09 00:48:11][INFO]   iter  24: val_acc=0.5420  (best=0.7700)
-[2026-06-09 00:48:12][INFO]   iter  25: val_acc=0.7140  (best=0.7700)
-[2026-06-09 00:48:13][INFO]   iter  26: val_acc=0.4820  (best=0.7700)
-[2026-06-09 00:48:14][INFO]   iter  27: val_acc=0.5020  (best=0.7700)
-[2026-06-09 00:48:15][INFO]   iter  28: val_acc=0.5020  (best=0.7700)
-[2026-06-09 00:48:17][INFO]   iter  29: val_acc=0.7280  (best=0.7700)
-[2026-06-09 00:48:17][INFO]   Saved: step29
-[2026-06-09 00:48:18][INFO]   iter  30: val_acc=0.7760  <-- NEW BEST 🎯
-[2026-06-09 00:48:19][INFO]   iter  31: val_acc=0.0000  (best=0.7760)  [invalid]
-[2026-06-09 00:48:21][INFO]   iter  32: val_acc=0.4660  (best=0.7760)
-[2026-06-09 00:48:22][INFO]   iter  33: val_acc=0.6120  (best=0.7760)
-[2026-06-09 00:48:23][INFO]   iter  34: val_acc=0.5920  (best=0.7760)
-[2026-06-09 00:48:25][INFO]   iter  35: val_acc=0.7460  (best=0.7760)
-[2026-06-09 00:48:26][INFO]   iter  36: val_acc=0.3720  (best=0.7760)
-[2026-06-09 00:48:28][INFO]   iter  37: val_acc=0.5000  (best=0.7760)
-[2026-06-09 00:48:29][INFO]   iter  38: val_acc=0.6100  (best=0.7760)
-[2026-06-09 00:48:30][INFO]   iter  39: val_acc=0.2500  (best=0.7760)
-[2026-06-09 00:48:30][INFO]   Saved: step39
-[2026-06-09 00:48:30][INFO] 
-=======================================================
-[2026-06-09 00:48:30][INFO]        Phase 2 v8 (nz=12) BO Final Result
-[2026-06-09 00:48:30][INFO] =======================================================
-[2026-06-09 00:48:30][INFO]   Best val_acc : 0.7760
-[2026-06-09 00:48:30][INFO]   GNN config   : {'effective_layers': 5, 'operations': ['GATConv', 'SAGEConv', 'GCNII', 'GATConv', 'GCNConv'], 'edges': [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)]}
-[2026-06-09 00:48:30][INFO] =======================================================
-[2026-06-09 00:48:30][INFO]   Saved: final
-[2026-06-09 00:48:30][INFO] Plot saved: results/bo_phase2_condhp_v6_layerwise_gin/convergence_nz12_v8.png
-[2026-06-09 00:48:30][INFO] 
-✅ 运行完成  总耗时: 0.9 min
-=== Step 7: 启动 Phase 3 NAS + 逐层条件 HP 搜索 ===
-[2026-06-09 00:48:34][INFO] 日志文件: logs/bo_phase3/train_condhp_v6_layerwise_gin_0609_0048.log
-[2026-06-09 00:48:34][INFO] =================================================================
-[2026-06-09 00:48:34][INFO] bo_phase3.py  v7  —  2026-06-09 00:48:34
-[2026-06-09 00:48:34][INFO] =================================================================
-[2026-06-09 00:48:34][INFO] Device=cuda:0  ARCH_NZ=12  SEARCH_DIM=29
-[2026-06-09 00:48:34][INFO] seed=42  version=condhp_v6_layerwise_gin
-[2026-06-09 00:48:34][INFO] VAE loaded: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth  (arch_nz=12)
-[2026-06-09 00:48:34][INFO] Cora: 1433 features, 7 classes
-[2026-06-09 00:48:34][INFO] Search space v3: z_arch(12d) + hp(17d) = 29d
-[2026-06-09 00:48:34][INFO] Warm start: 5 pts near Phase 2 best
-[2026-06-09 00:48:34][INFO] 
-[Step 1] Init: 15 pts  (5 warm + 10 random)
-[2026-06-09 00:48:34][INFO]   ARCH_NZ=12  SEARCH_DIM=29
-[2026-06-09 00:48:34][INFO]   LR: 10^[-4.0,-1.5]  Dropout: [0.1,0.6]
-[2026-06-09 00:48:34][INFO]   conditional HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
-[2026-06-09 00:48:34][INFO]   layer-wise activation for GATConv/SAGEConv/GINConv
-[2026-06-09 00:48:34][INFO]   gcnii_alpha=0.1  gcnii_theta=0.5
-[2026-06-09 00:48:34][INFO]   Eval: max_epochs=150  patience=20  CosineAnnealingLR
-Init:   0%|          | 0/15 [00:00<?, ?it/s]/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:48:35][INFO]   init  0: val=0.6040  lr=0.00048  drop=0.413  heads=[2, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:   7%|▋         | 1/15 [00:01<00:19,  1.37s/it][2026-06-09 00:48:37][INFO]   init  1: val=0.6540  lr=0.00325  drop=0.269  heads=[8, 4, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.1671229600906372, 0.0, 0.0]  [valid]
-Init:  13%|█▎        | 2/15 [00:02<00:18,  1.41s/it][2026-06-09 00:48:37][INFO]   init  2: val=0.7800  lr=0.02150  drop=0.152  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.4181588590145111, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  20%|██        | 3/15 [00:03<00:12,  1.02s/it][2026-06-09 00:48:39][INFO]   init  3: val=0.6980  lr=0.00209  drop=0.366  heads=[1, 8, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.08907407522201538, 0.0, 0.20503643155097961, -0.08080774545669556, 0.0]  [valid]
-Init:  27%|██▋       | 4/15 [00:04<00:11,  1.02s/it][2026-06-09 00:48:40][INFO]   init  4: val=0.6040  lr=0.00030  drop=0.299  heads=[1, 4, 1, 1, 2]  sage=['add', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  33%|███▎      | 5/15 [00:05<00:10,  1.04s/it][2026-06-09 00:48:40][INFO]   init  5: val=0.7940  lr=0.00771  drop=0.597  heads=[1, 1, 2, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  40%|████      | 6/15 [00:05<00:07,  1.15it/s][2026-06-09 00:48:41][INFO]   init  6: val=0.7900  lr=0.03053  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, -0.10994932055473328, 0.0]  [valid]
-Init:  47%|████▋     | 7/15 [00:06<00:05,  1.38it/s][2026-06-09 00:48:42][INFO]   init  7: val=0.7340  lr=0.03087  drop=0.411  heads=[4, 1, 1, 8, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  53%|█████▎    | 8/15 [00:07<00:05,  1.22it/s][2026-06-09 00:48:42][INFO]   init  8: val=0.5680  lr=0.00248  drop=0.431  heads=[1, 1, 8, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  60%|██████    | 9/15 [00:07<00:04,  1.42it/s][2026-06-09 00:48:43][INFO]   init  9: val=0.7600  lr=0.00197  drop=0.284  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  67%|██████▋   | 10/15 [00:08<00:03,  1.45it/s][2026-06-09 00:48:43][INFO]   init 10: val=0.7860  lr=0.02262  drop=0.154  heads=[1, 4, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  73%|███████▎  | 11/15 [00:09<00:02,  1.40it/s][2026-06-09 00:48:44][INFO]   init 11: val=0.0720  lr=0.00026  drop=0.431  heads=[1, 8, 2, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  80%|████████  | 12/15 [00:09<00:01,  1.71it/s][2026-06-09 00:48:44][INFO]   init 12: val=0.7640  lr=0.00611  drop=0.548  heads=[4, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  87%|████████▋ | 13/15 [00:10<00:01,  1.66it/s][2026-06-09 00:48:45][INFO]   init 13: val=0.7760  lr=0.00237  drop=0.170  heads=[4, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  [valid]
-Init:  93%|█████████▎| 14/15 [00:10<00:00,  1.62it/s][2026-06-09 00:48:46][INFO]   init 14: val=0.5000  lr=0.00053  drop=0.595  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.4531991481781006, 0.0, 0.0]  [valid]
-Init: 100%|██████████| 15/15 [00:12<00:00,  1.22it/s]Init: 100%|██████████| 15/15 [00:12<00:00,  1.23it/s]
-[2026-06-09 00:48:46][INFO] 
-Init done. Best=0.7940
-[2026-06-09 00:48:46][INFO] 
-[Step 2] BO: 50 iters  novelty_w=0.1  SEARCH_DIM=29
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:49:08][INFO]   iter   0: val=0.7840  lr=0.01167  drop=0.315  heads=[1, 1, 1, 1, 1]  sage=['add', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7940)
-[2026-06-09 00:49:30][INFO]   iter   1: val=0.7960  lr=0.01294  drop=0.397  heads=[1, 1, 1, 1, 1]  sage=['max', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  <-- NEW BEST 🎯
-[2026-06-09 00:49:52][INFO]   iter   2: val=0.7660  lr=0.00370  drop=0.344  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:50:14][INFO]   iter   3: val=0.7220  lr=0.02554  drop=0.421  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'max', 'mean', 'mean']  gin=[0.5860216021537781, 0.3368431329727173, 0.0, 0.0, 0.0]  (best=0.7960)
-[2026-06-09 00:50:37][INFO]   iter   4: val=0.7420  lr=0.00795  drop=0.140  heads=[1, 1, 4, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.8667023479938507, 0.0, 0.0, 0.2843220829963684]  (best=0.7960)
-[2026-06-09 00:51:00][INFO]   iter   5: val=0.7500  lr=0.00553  drop=0.496  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:51:23][INFO]   iter   6: val=0.7640  lr=0.02135  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:51:46][INFO]   iter   7: val=0.6880  lr=0.00231  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'max', 'add', 'add']  gin=[0.0, 0.8667023479938507, 0.0, 0.0, 0.0]  (best=0.7960)
-[2026-06-09 00:52:09][INFO]   iter   8: val=0.7640  lr=0.02959  drop=0.140  heads=[1, 1, 1, 1, 4]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960)
-[2026-06-09 00:52:32][INFO]   iter   9: val=0.7980  lr=0.01325  drop=0.359  heads=[1, 4, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  <-- NEW BEST 🎯
-[2026-06-09 00:52:32][INFO]   Saved: step9
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:52:55][INFO]   iter  10: val=0.7540  lr=0.00875  drop=0.597  heads=[1, 4, 1, 1, 1]  sage=['add', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.6116882860660553, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:53:18][INFO]   iter  11: val=0.6220  lr=0.01901  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.8667023479938507, -0.09529788792133331, 0.0, 0.0]  (best=0.7980)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:53:41][INFO]   iter  12: val=0.7500  lr=0.01732  drop=0.177  heads=[1, 1, 1, 1, 1]  sage=['max', 'max', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:54:02][INFO]   iter  13: val=0.7680  lr=0.00831  drop=0.342  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.27536189556121826, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:54:25][INFO]   iter  14: val=0.7100  lr=0.02312  drop=0.279  heads=[1, 4, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:54:47][INFO]   iter  15: val=0.7260  lr=0.00561  drop=0.549  heads=[2, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:55:10][INFO]   iter  16: val=0.7660  lr=0.01037  drop=0.449  heads=[1, 1, 1, 1, 1]  sage=['max', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:55:32][INFO]   iter  17: val=0.7080  lr=0.02476  drop=0.271  heads=[1, 1, 1, 1, 1]  sage=['max', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.453021764755249, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:55:55][INFO]   iter  18: val=0.7720  lr=0.00996  drop=0.263  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.21007205545902252, 0.0]  (best=0.7980)
-[2026-06-09 00:56:18][INFO]   iter  19: val=0.7340  lr=0.01321  drop=0.449  heads=[1, 4, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.03664073348045349, 0.0, 0.0, 0.15887092053890228, 0.0]  (best=0.7980)
-[2026-06-09 00:56:18][INFO]   Saved: step19
-[2026-06-09 00:56:41][INFO]   iter  20: val=0.7800  lr=0.01596  drop=0.334  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:57:03][INFO]   iter  21: val=0.7840  lr=0.02404  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:57:26][INFO]   iter  22: val=0.7420  lr=0.01150  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:57:48][INFO]   iter  23: val=0.7540  lr=0.00422  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['add', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:58:11][INFO]   iter  24: val=0.7680  lr=0.01935  drop=0.255  heads=[1, 4, 1, 1, 1]  sage=['mean', 'mean', 'max', 'mean', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7980)
-[2026-06-09 00:58:33][INFO]   iter  25: val=0.8100  lr=0.01292  drop=0.597  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  <-- NEW BEST 🎯
-[2026-06-09 00:58:56][INFO]   iter  26: val=0.7500  lr=0.00389  drop=0.594  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'mean', 'mean', 'mean']  gin=[0.9005452990531921, 0.0, 0.6576533913612366, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 00:59:19][INFO]   iter  27: val=0.8040  lr=0.01305  drop=0.597  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 00:59:41][INFO]   iter  28: val=0.7760  lr=0.01338  drop=0.492  heads=[1, 1, 1, 1, 1]  sage=['add', 'mean', 'max', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:00:05][INFO]   iter  29: val=0.7940  lr=0.01205  drop=0.597  heads=[1, 1, 1, 1, 1]  sage=['max', 'max', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:00:05][INFO]   Saved: step29
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:00:28][INFO]   iter  30: val=0.7580  lr=0.01410  drop=0.578  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'max', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:00:50][INFO]   iter  31: val=0.7680  lr=0.00793  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:01:13][INFO]   iter  32: val=0.7740  lr=0.01381  drop=0.498  heads=[4, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:01:35][INFO]   iter  33: val=0.7140  lr=0.02713  drop=0.140  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.07072986662387848]  (best=0.8100)
-[2026-06-09 01:01:58][INFO]   iter  34: val=0.7620  lr=0.01481  drop=0.323  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.9005452990531921, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:02:20][INFO]   iter  35: val=0.8060  lr=0.01174  drop=0.230  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:02:42][INFO]   iter  36: val=0.7800  lr=0.01125  drop=0.262  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:03:05][INFO]   iter  37: val=0.8020  lr=0.01407  drop=0.535  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:03:28][INFO]   iter  38: val=0.7660  lr=0.02236  drop=0.140  heads=[1, 8, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:03:52][INFO]   iter  39: val=0.6840  lr=0.01155  drop=0.597  heads=[1, 1, 1, 8, 1]  sage=['mean', 'mean', 'max', 'mean', 'mean']  gin=[0.0, 0.7066934704780579, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:03:52][INFO]   Saved: step39
-[2026-06-09 01:04:14][INFO]   iter  40: val=0.7840  lr=0.01218  drop=0.505  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:04:36][INFO]   iter  41: val=0.7820  lr=0.01277  drop=0.321  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:05:00][INFO]   iter  42: val=0.7300  lr=0.02561  drop=0.140  heads=[1, 1, 1, 4, 1]  sage=['mean', 'mean', 'mean', 'mean', 'add']  gin=[0.0, 0.0, 0.013515979051589966, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:05:22][INFO]   iter  43: val=0.7760  lr=0.01735  drop=0.142  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:05:45][INFO]   iter  44: val=0.6960  lr=0.01341  drop=0.570  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.7436089813709259, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:06:09][INFO]   iter  45: val=0.7100  lr=0.01264  drop=0.572  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:06:32][INFO]   iter  46: val=0.7760  lr=0.00955  drop=0.221  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:06:55][INFO]   iter  47: val=0.7920  lr=0.01143  drop=0.384  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:07:19][INFO]   iter  48: val=0.7620  lr=0.01158  drop=0.341  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-/home/fangxy/.conda/envs/nas/lib/python3.10/site-packages/torch_geometric/utils/_scatter.py:91: UserWarning: The usage of `scatter(reduce='max')` can be accelerated via the 'torch-scatter' package, but it was not found
-  warnings.warn(
-[2026-06-09 01:07:42][INFO]   iter  49: val=0.7840  lr=0.01262  drop=0.504  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8100)
-[2026-06-09 01:07:42][INFO]   Saved: step49
-[2026-06-09 01:07:42][INFO] 
-==================================================================
-[2026-06-09 01:07:42][INFO]           Phase 3 v7 (nz=12, SEARCH_DIM=29) Final
-[2026-06-09 01:07:42][INFO] ==================================================================
-[2026-06-09 01:07:42][INFO]   Best val_acc  : 0.8100
-[2026-06-09 01:07:42][INFO]   GNN config    : {'effective_layers': 5, 'operations': ['SAGEConv', 'SAGEConv', 'GCNII', 'GCNII', 'SAGEConv'], 'edges': [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (0, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)]}
-[2026-06-09 01:07:42][INFO]   LR=0.01292  Dropout=0.597  GAT heads=[1, 1, 1, 1, 1]  SAGE aggr=['max', 'max', 'mean', 'mean', 'mean']
-[2026-06-09 01:07:42][INFO]   GIN eps=[0.0, 0.0, 0.0, 0.0, 0.0]
-[2026-06-09 01:07:42][INFO]   gcnii_alpha=0.1  gcnii_theta=0.5
-[2026-06-09 01:07:42][INFO] ==================================================================
-[2026-06-09 01:07:42][INFO]   Saved: final
-[2026-06-09 01:07:42][INFO] Plot saved: results/bo_phase3_condhp_v6_layerwise_gin/convergence_phase3_v7.png
-[2026-06-09 01:07:42][INFO] 
-[Comparison]  Phase2: 0.7960  Phase3v7: 0.8100  Δ=+0.0140
-[2026-06-09 01:07:42][INFO] 
-✅ 运行完成  总耗时: 19.1 min
-=== Step 8: 启动 Phase 4 逐层条件参数 GPND-NAS 搜索 ===
-[2026-06-09 01:07:46][INFO] 日志文件: logs/bo_phase4/train_condhp_v6_layerwise_gin_0609_0107.log
-[2026-06-09 01:07:46][INFO] ======================================================================
-[2026-06-09 01:07:46][INFO] bo_phase4.py  v9  —  2026-06-09 01:07:46
-[2026-06-09 01:07:46][INFO] ======================================================================
-[2026-06-09 01:07:46][INFO] Device: cuda:0
-[2026-06-09 01:07:46][INFO] arch_nz=12  search_dim=29  seed=42
-[2026-06-09 01:07:46][INFO] novelty_w=0.15  tau=0.3
-[2026-06-09 01:07:46][INFO] conditional HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]
-[2026-06-09 01:07:46][INFO] layer-wise activation for GATConv/SAGEConv/GINConv
-[2026-06-09 01:07:46][INFO] GCNII: alpha=0.1  theta=0.5
-[2026-06-09 01:07:46][INFO] VAE loaded: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth  (arch_nz=12, max_n=7, nvt=8)
-[2026-06-09 01:07:46][INFO] 
-DVAE: p_dim=84  (expected 84)
-  [GradCheck] device=cuda:0  nz=12  p_dim=84  grad_norm=1.5313  OK=True
-[2026-06-09 01:07:46][INFO] Cora: 1433 features  7 classes
-[2026-06-09 01:07:46][INFO] 
-[Smoothness Pre-analysis]
-Analyzing latent smoothness (5 pairs × 6 steps)  nz=12  n_probes=12  method=random_proj
-
-  Condition number : 219.42 ± 105.25
-  Effective rank   : 10.0
-  Avg max sing val : 1.7611
-  ✅ Moderate condition number: usable for geometric BO
-[2026-06-09 01:07:48][INFO] 
-[LHS Init] 60 样本 → 目标 20 有效点
-LHS eval:   0%|                                                              | 0/63 [00:00<?, ?it/s]LHS eval:   0%|                                           | 0/63 [00:01<?, ?it/s, valid_best=0.3980]LHS eval:   2%|▌                                  | 1/63 [00:01<01:17,  1.25s/it, valid_best=0.3980]LHS eval:   2%|▌                                  | 1/63 [00:01<01:17,  1.25s/it, valid_best=0.7780]LHS eval:   3%|█                                  | 2/63 [00:01<00:52,  1.16it/s, valid_best=0.7780]LHS eval:   3%|█                                  | 2/63 [00:02<00:52,  1.16it/s, valid_best=0.7780]LHS eval:   5%|█▋                                 | 3/63 [00:02<00:52,  1.13it/s, valid_best=0.7780]LHS eval:   5%|█▋                                 | 3/63 [00:03<00:52,  1.13it/s, valid_best=0.7780]LHS eval:   6%|██▏                                | 4/63 [00:03<00:41,  1.41it/s, valid_best=0.7780]LHS eval:   6%|██▏                                | 4/63 [00:03<00:41,  1.41it/s, valid_best=0.7780]LHS eval:   8%|██▊                                | 5/63 [00:03<00:37,  1.56it/s, valid_best=0.7780]LHS eval:   8%|██▊                                | 5/63 [00:04<00:37,  1.56it/s, valid_best=0.7920]LHS eval:  10%|███▎                               | 6/63 [00:04<00:35,  1.59it/s, valid_best=0.7920]LHS eval:  10%|███▎                               | 6/63 [00:05<00:35,  1.59it/s, valid_best=0.7920]LHS eval:  11%|███▉                               | 7/63 [00:05<00:37,  1.48it/s, valid_best=0.7920]LHS eval:  11%|███▉                               | 7/63 [00:05<00:37,  1.48it/s, valid_best=0.7920]LHS eval:  13%|████▍                              | 8/63 [00:05<00:39,  1.40it/s, valid_best=0.7920]LHS eval:  13%|████▍                              | 8/63 [00:06<00:39,  1.40it/s, valid_best=0.7920]LHS eval:  14%|█████                              | 9/63 [00:06<00:37,  1.43it/s, valid_best=0.7920]LHS eval:  14%|█████                              | 9/63 [00:07<00:37,  1.43it/s, valid_best=0.7920]LHS eval:  16%|█████▍                            | 10/63 [00:07<00:37,  1.42it/s, valid_best=0.7920]LHS eval:  16%|█████▍                            | 10/63 [00:07<00:37,  1.42it/s, valid_best=0.7920]LHS eval:  17%|█████▉                            | 11/63 [00:07<00:29,  1.78it/s, valid_best=0.7920]LHS eval:  17%|█████▉                            | 11/63 [00:07<00:29,  1.78it/s, valid_best=0.7920]LHS eval:  19%|██████▍                           | 12/63 [00:07<00:23,  2.14it/s, valid_best=0.7920]LHS eval:  19%|██████▍                           | 12/63 [00:08<00:23,  2.14it/s, valid_best=0.7920]LHS eval:  21%|███████                           | 13/63 [00:08<00:25,  1.93it/s, valid_best=0.7920]LHS eval:  21%|███████                           | 13/63 [00:08<00:25,  1.93it/s, valid_best=0.7920]LHS eval:  22%|███████▌                          | 14/63 [00:08<00:21,  2.28it/s, valid_best=0.7920]LHS eval:  22%|███████▌                          | 14/63 [00:08<00:21,  2.28it/s, valid_best=0.7920]LHS eval:  24%|████████                          | 15/63 [00:08<00:16,  2.92it/s, valid_best=0.7920]LHS eval:  24%|████████                          | 15/63 [00:09<00:16,  2.92it/s, valid_best=0.7920]LHS eval:  25%|████████▋                         | 16/63 [00:09<00:21,  2.15it/s, valid_best=0.7920]LHS eval:  25%|████████▋                         | 16/63 [00:10<00:21,  2.15it/s, valid_best=0.7920]LHS eval:  27%|█████████▏                        | 17/63 [00:10<00:24,  1.88it/s, valid_best=0.7920]LHS eval:  27%|█████████▏                        | 17/63 [00:10<00:24,  1.88it/s, valid_best=0.7920]LHS eval:  29%|█████████▋                        | 18/63 [00:10<00:22,  1.98it/s, valid_best=0.7920]LHS eval:  29%|█████████▋                        | 18/63 [00:10<00:22,  1.98it/s, valid_best=0.7920]LHS eval:  30%|██████████▎                       | 19/63 [00:10<00:19,  2.23it/s, valid_best=0.7920]LHS eval:  30%|██████████▎                       | 19/63 [00:11<00:19,  2.23it/s, valid_best=0.7920]LHS eval:  32%|██████████▊                       | 20/63 [00:11<00:22,  1.89it/s, valid_best=0.7920]LHS eval:  32%|██████████▊                       | 20/63 [00:12<00:22,  1.89it/s, valid_best=0.7920]LHS eval:  33%|███████████▎                      | 21/63 [00:12<00:23,  1.77it/s, valid_best=0.7920]LHS eval:  33%|███████████▎                      | 21/63 [00:12<00:23,  1.77it/s, valid_best=0.7920]LHS eval:  35%|███████████▊                      | 22/63 [00:12<00:24,  1.67it/s, valid_best=0.7920]LHS eval:  35%|███████████▊                      | 22/63 [00:13<00:24,  1.67it/s, valid_best=0.7920]LHS eval:  37%|████████████▍                     | 23/63 [00:13<00:24,  1.60it/s, valid_best=0.7920]LHS eval:  37%|████████████▍                     | 23/63 [00:14<00:24,  1.60it/s, valid_best=0.7920]LHS eval:  38%|████████████▉                     | 24/63 [00:14<00:29,  1.33it/s, valid_best=0.7920]LHS eval:  38%|████████████▉                     | 24/63 [00:15<00:29,  1.33it/s, valid_best=0.7920]LHS eval:  40%|█████████████▍                    | 25/63 [00:15<00:24,  1.55it/s, valid_best=0.7920]LHS eval:  40%|█████████████▍                    | 25/63 [00:15<00:24,  1.55it/s, valid_best=0.7920]LHS eval:  41%|██████████████                    | 26/63 [00:15<00:25,  1.46it/s, valid_best=0.7920]LHS eval:  41%|██████████████                    | 26/63 [00:16<00:25,  1.46it/s, valid_best=0.7920]LHS eval:  43%|██████████████▌                   | 27/63 [00:16<00:19,  1.81it/s, valid_best=0.7920]LHS eval:  43%|██████████████▌                   | 27/63 [00:16<00:19,  1.81it/s, valid_best=0.7920]LHS eval:  44%|███████████████                   | 28/63 [00:16<00:16,  2.12it/s, valid_best=0.7920]LHS eval:  44%|███████████████                   | 28/63 [00:17<00:16,  2.12it/s, valid_best=0.7920]LHS eval:  46%|███████████████▋                  | 29/63 [00:17<00:18,  1.87it/s, valid_best=0.7920]LHS eval:  46%|███████████████▋                  | 29/63 [00:17<00:18,  1.87it/s, valid_best=0.7920]LHS eval:  48%|████████████████▏                 | 30/63 [00:17<00:20,  1.60it/s, valid_best=0.7920]LHS eval:  48%|████████████████▏                 | 30/63 [00:18<00:20,  1.60it/s, valid_best=0.7960]LHS eval:  49%|████████████████▋                 | 31/63 [00:18<00:20,  1.55it/s, valid_best=0.7960]LHS eval:  49%|████████████████▋                 | 31/63 [00:19<00:20,  1.55it/s, valid_best=0.7960]LHS eval:  51%|█████████████████▎                | 32/63 [00:19<00:17,  1.75it/s, valid_best=0.7960]LHS eval:  51%|█████████████████▎                | 32/63 [00:19<00:17,  1.75it/s, valid_best=0.7960]LHS eval:  52%|█████████████████▊                | 33/63 [00:19<00:20,  1.49it/s, valid_best=0.7960]LHS eval:  52%|█████████████████▊                | 33/63 [00:20<00:20,  1.49it/s, valid_best=0.7960]LHS eval:  54%|██████████████████▎               | 34/63 [00:20<00:21,  1.38it/s, valid_best=0.7960]LHS eval:  54%|██████████████████▎               | 34/63 [00:21<00:21,  1.38it/s, valid_best=0.7960]LHS eval:  56%|██████████████████▉               | 35/63 [00:21<00:16,  1.70it/s, valid_best=0.7960]LHS eval:  56%|██████████████████▉               | 35/63 [00:22<00:16,  1.70it/s, valid_best=0.7960]LHS eval:  57%|███████████████████▍              | 36/63 [00:22<00:19,  1.36it/s, valid_best=0.7960]LHS eval:  57%|███████████████████▍              | 36/63 [00:22<00:19,  1.36it/s, valid_best=0.7960]LHS eval:  59%|███████████████████▉              | 37/63 [00:22<00:16,  1.61it/s, valid_best=0.7960]LHS eval:  59%|███████████████████▉              | 37/63 [00:23<00:16,  1.61it/s, valid_best=0.7960]LHS eval:  60%|████████████████████▌             | 38/63 [00:23<00:18,  1.39it/s, valid_best=0.7960]LHS eval:  60%|████████████████████▌             | 38/63 [00:23<00:18,  1.39it/s, valid_best=0.7960]LHS eval:  62%|█████████████████████             | 39/63 [00:23<00:15,  1.54it/s, valid_best=0.7960]LHS eval:  62%|█████████████████████             | 39/63 [00:24<00:15,  1.54it/s, valid_best=0.7960]LHS eval:  63%|█████████████████████▌            | 40/63 [00:24<00:14,  1.64it/s, valid_best=0.7960]LHS eval:  63%|█████████████████████▌            | 40/63 [00:25<00:14,  1.64it/s, valid_best=0.7960]LHS eval:  65%|██████████████████████▏           | 41/63 [00:25<00:13,  1.58it/s, valid_best=0.7960]LHS eval:  65%|██████████████████████▏           | 41/63 [00:25<00:13,  1.58it/s, valid_best=0.7960]LHS eval:  67%|██████████████████████▋           | 42/63 [00:25<00:14,  1.44it/s, valid_best=0.7960]LHS eval:  67%|██████████████████████▋           | 42/63 [00:27<00:14,  1.44it/s, valid_best=0.7960]LHS eval:  68%|███████████████████████▏          | 43/63 [00:27<00:16,  1.18it/s, valid_best=0.7960]LHS eval:  68%|███████████████████████▏          | 43/63 [00:27<00:16,  1.18it/s, valid_best=0.7960]LHS eval:  70%|███████████████████████▋          | 44/63 [00:27<00:14,  1.34it/s, valid_best=0.7960]LHS eval:  70%|███████████████████████▋          | 44/63 [00:28<00:14,  1.34it/s, valid_best=0.7960]LHS eval:  71%|████████████████████████▎         | 45/63 [00:28<00:14,  1.25it/s, valid_best=0.7960]LHS eval:  71%|████████████████████████▎         | 45/63 [00:29<00:14,  1.25it/s, valid_best=0.7960]LHS eval:  73%|████████████████████████▊         | 46/63 [00:29<00:12,  1.38it/s, valid_best=0.7960]LHS eval:  73%|████████████████████████▊         | 46/63 [00:29<00:12,  1.38it/s, valid_best=0.7960]LHS eval:  75%|█████████████████████████▎        | 47/63 [00:29<00:10,  1.47it/s, valid_best=0.7960]LHS eval:  75%|█████████████████████████▎        | 47/63 [00:30<00:10,  1.47it/s, valid_best=0.7960]LHS eval:  76%|█████████████████████████▉        | 48/63 [00:30<00:08,  1.73it/s, valid_best=0.7960]LHS eval:  76%|█████████████████████████▉        | 48/63 [00:30<00:08,  1.73it/s, valid_best=0.7960]LHS eval:  78%|██████████████████████████▍       | 49/63 [00:30<00:07,  1.81it/s, valid_best=0.7960]LHS eval:  78%|██████████████████████████▍       | 49/63 [00:31<00:07,  1.81it/s, valid_best=0.7960]LHS eval:  79%|██████████████████████████▉       | 50/63 [00:31<00:07,  1.78it/s, valid_best=0.7960]LHS eval:  79%|██████████████████████████▉       | 50/63 [00:32<00:07,  1.78it/s, valid_best=0.7960]LHS eval:  81%|███████████████████████████▌      | 51/63 [00:32<00:07,  1.52it/s, valid_best=0.7960]LHS eval:  81%|███████████████████████████▌      | 51/63 [00:32<00:07,  1.52it/s, valid_best=0.7960]LHS eval:  83%|████████████████████████████      | 52/63 [00:32<00:06,  1.82it/s, valid_best=0.7960]LHS eval:  83%|████████████████████████████      | 52/63 [00:32<00:06,  1.82it/s, valid_best=0.7960]LHS eval:  84%|████████████████████████████▌     | 53/63 [00:32<00:04,  2.30it/s, valid_best=0.7960]LHS eval:  84%|████████████████████████████▌     | 53/63 [00:32<00:04,  2.30it/s, valid_best=0.7960]LHS eval:  86%|█████████████████████████████▏    | 54/63 [00:32<00:03,  2.52it/s, valid_best=0.7960]LHS eval:  86%|█████████████████████████████▏    | 54/63 [00:33<00:03,  2.52it/s, valid_best=0.7960]LHS eval:  87%|█████████████████████████████▋    | 55/63 [00:33<00:04,  1.96it/s, valid_best=0.7960]LHS eval:  87%|█████████████████████████████▋    | 55/63 [00:34<00:04,  1.96it/s, valid_best=0.7960]LHS eval:  89%|██████████████████████████████▏   | 56/63 [00:34<00:03,  1.95it/s, valid_best=0.7960]LHS eval:  89%|██████████████████████████████▏   | 56/63 [00:34<00:03,  1.95it/s, valid_best=0.7960]LHS eval:  90%|██████████████████████████████▊   | 57/63 [00:34<00:02,  2.25it/s, valid_best=0.7960]LHS eval:  90%|██████████████████████████████▊   | 57/63 [00:35<00:02,  2.25it/s, valid_best=0.7960]LHS eval:  92%|███████████████████████████████▎  | 58/63 [00:35<00:02,  1.95it/s, valid_best=0.7960]LHS eval:  92%|███████████████████████████████▎  | 58/63 [00:35<00:02,  1.95it/s, valid_best=0.7960]LHS eval:  94%|███████████████████████████████▊  | 59/63 [00:35<00:02,  1.62it/s, valid_best=0.7960]LHS eval:  94%|███████████████████████████████▊  | 59/63 [00:36<00:02,  1.62it/s, valid_best=0.7960]LHS eval:  95%|████████████████████████████████▍ | 60/63 [00:36<00:01,  1.73it/s, valid_best=0.7960]LHS eval:  95%|████████████████████████████████▍ | 60/63 [00:36<00:01,  1.73it/s, valid_best=0.7960]LHS eval:  97%|████████████████████████████████▉ | 61/63 [00:36<00:01,  1.93it/s, valid_best=0.7960]LHS eval:  97%|████████████████████████████████▉ | 61/63 [00:37<00:01,  1.93it/s, valid_best=0.7960]LHS eval:  98%|█████████████████████████████████▍| 62/63 [00:37<00:00,  1.93it/s, valid_best=0.7960]LHS eval:  98%|█████████████████████████████████▍| 62/63 [00:37<00:00,  1.93it/s, valid_best=0.7960]LHS eval: 100%|██████████████████████████████████| 63/63 [00:37<00:00,  2.00it/s, valid_best=0.7960]LHS eval: 100%|██████████████████████████████████| 63/63 [00:37<00:00,  1.67it/s, valid_best=0.7960]
-[2026-06-09 01:08:26][INFO] 
-Init complete. Best=0.7960  N=20
-[2026-06-09 01:08:26][INFO] Eval: max_epochs=100  patience=20  CosineAnnealingLR
-[2026-06-09 01:08:26][INFO] 
-[Step 2] BO: 60 iters  novelty_w=0.15  SEARCH_DIM=29
-[2026-06-09 01:08:35][INFO]   iter   0: val=0.7440  lr=0.00331  drop=0.574  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=1)
-[2026-06-09 01:08:45][INFO]   iter   1: val=0.6860  lr=0.00214  drop=0.189  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=2)
-[2026-06-09 01:08:55][INFO]   iter   2: val=0.6760  lr=0.00251  drop=0.593  heads=[1, 1, 4, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=3)
-[2026-06-09 01:09:04][INFO]   iter   3: val=0.3640  lr=0.00254  drop=0.593  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, -0.08633626997470856, 0.0, 0.0]  (best=0.7960  stag=4)
-[2026-06-09 01:09:14][INFO]   iter   4: val=0.7500  lr=0.00369  drop=0.222  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'mean', 'mean', 'mean']  gin=[-0.14440618455410004, 0.0, 0.0, 0.42173370718955994, 0.0]  (best=0.7960  stag=5)
-[2026-06-09 01:09:24][INFO]   iter   5: val=0.4660  lr=0.00340  drop=0.424  heads=[2, 1, 1, 1, 8]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=6)
-[2026-06-09 01:09:33][INFO]   iter   6: val=0.7860  lr=0.01257  drop=0.105  heads=[1, 1, 1, 8, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.055984243750572205, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=7)
-[2026-06-09 01:09:43][INFO]   iter   7: val=0.7540  lr=0.00190  drop=0.425  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.7960  stag=8)
-[2026-06-09 01:09:53][INFO]   iter   8: val=0.8020  lr=0.01802  drop=0.273  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  <-- NEW BEST 🎯
-[2026-06-09 01:10:02][INFO]   iter   9: val=0.7280  lr=0.00202  drop=0.593  heads=[1, 1, 1, 1, 1]  sage=['add', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=1)
-[2026-06-09 01:10:02][INFO]   Saved: step9
-[2026-06-09 01:10:12][INFO]   iter  10: val=0.7680  lr=0.01794  drop=0.355  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, -0.08721259236335754, 0.0, 0.0, 0.0]  (best=0.8020  stag=2)
-[2026-06-09 01:10:22][INFO]   iter  11: val=0.7660  lr=0.01766  drop=0.416  heads=[1, 8, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.09524266421794891]  (best=0.8020  stag=3)
-[2026-06-09 01:10:32][INFO]   iter  12: val=0.6760  lr=0.00427  drop=0.303  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=4)
-[2026-06-09 01:10:42][INFO]   iter  13: val=0.7380  lr=0.00279  drop=0.216  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.3506089448928833, 0.0, 0.0]  (best=0.8020  stag=5)
-[2026-06-09 01:10:53][INFO]   iter  14: val=0.7260  lr=0.00292  drop=0.267  heads=[1, 1, 2, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.46674859523773193, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=6)
-[2026-06-09 01:11:04][INFO]   iter  15: val=0.6560  lr=0.00204  drop=0.593  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=7)
-[2026-06-09 01:11:14][INFO]   iter  16: val=0.7720  lr=0.00497  drop=0.302  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=8)
-[2026-06-09 01:11:24][INFO]   iter  17: val=0.6360  lr=0.00200  drop=0.593  heads=[1, 1, 1, 1, 8]  sage=['max', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=9)
-[2026-06-09 01:11:34][INFO]   iter  18: val=0.7700  lr=0.00374  drop=0.343  heads=[1, 1, 1, 1, 1]  sage=['max', 'add', 'add', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=10)
-[2026-06-09 01:11:44][INFO]   iter  19: val=0.7380  lr=0.01062  drop=0.105  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.2141457051038742, 0.18967702984809875, 0.0, 0.0, 0.0]  (best=0.8020  stag=11)
-[2026-06-09 01:11:44][INFO]   Saved: step19
-[2026-06-09 01:11:55][INFO]   iter  20: val=0.7320  lr=0.00326  drop=0.394  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=12)
-[2026-06-09 01:11:56][INFO]   iter  21: val=0.5640  lr=0.03162  drop=0.419  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, -0.38929133117198944, 0.0, 0.0, 0.0]  (best=0.8020  stag=1) [RESTART→random walk HP]
-[2026-06-09 01:12:06][INFO]   iter  22: val=0.7740  lr=0.00188  drop=0.477  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=2)
-[2026-06-09 01:12:16][INFO]   iter  23: val=0.7120  lr=0.01449  drop=0.105  heads=[1, 1, 1, 1, 4]  sage=['max', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=3)
-[2026-06-09 01:12:26][INFO]   iter  24: val=0.3920  lr=0.00201  drop=0.527  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=4)
-[2026-06-09 01:12:36][INFO]   iter  25: val=0.5480  lr=0.00203  drop=0.467  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=5)
-[2026-06-09 01:12:45][INFO]   iter  26: val=0.7900  lr=0.00598  drop=0.105  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=6)
-[2026-06-09 01:12:55][INFO]   iter  27: val=0.7640  lr=0.00218  drop=0.258  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'add']  gin=[0.0, 0.0, 0.0, -0.3436192683875561, 0.0]  (best=0.8020  stag=7)
-[2026-06-09 01:13:05][INFO]   iter  28: val=0.7600  lr=0.00980  drop=0.105  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=8)
-[2026-06-09 01:13:15][INFO]   iter  29: val=0.7660  lr=0.03162  drop=0.180  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.12145964801311493, 0.0, 0.0]  (best=0.8020  stag=9)
-[2026-06-09 01:13:15][INFO]   Saved: step29
-[2026-06-09 01:13:25][INFO]   iter  30: val=0.7300  lr=0.00227  drop=0.211  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.45433399081230164, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=10)
-[2026-06-09 01:13:34][INFO]   iter  31: val=0.6940  lr=0.00478  drop=0.239  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[-0.004323035478591919, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=11)
-[2026-06-09 01:13:44][INFO]   iter  32: val=0.7660  lr=0.00924  drop=0.105  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=12)
-[2026-06-09 01:13:44][INFO]   iter  33: val=0.7100  lr=0.03162  drop=0.321  heads=[4, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=1) [RESTART→random walk HP]
-[2026-06-09 01:13:54][INFO]   iter  34: val=0.7480  lr=0.00647  drop=0.105  heads=[1, 1, 1, 1, 1]  sage=['max', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.06922183930873871, 0.29341959953308105, 0.0, 0.0]  (best=0.8020  stag=2)
-[2026-06-09 01:14:05][INFO]   iter  35: val=0.6080  lr=0.02693  drop=0.413  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=3)
-[2026-06-09 01:14:14][INFO]   iter  36: val=0.7300  lr=0.00549  drop=0.165  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.19126346707344055, 0.0, 0.0, 0.0]  (best=0.8020  stag=4)
-[2026-06-09 01:14:25][INFO]   iter  37: val=0.7680  lr=0.01633  drop=0.223  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=5)
-[2026-06-09 01:14:35][INFO]   iter  38: val=0.6880  lr=0.00237  drop=0.523  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'add', 'mean', 'add']  gin=[0.7337172627449036, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=6)
-[2026-06-09 01:14:45][INFO]   iter  39: val=0.7400  lr=0.00255  drop=0.279  heads=[2, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.17440158128738403, 0.0, 0.0, 0.0]  (best=0.8020  stag=7)
-[2026-06-09 01:14:45][INFO]   Saved: step39
-[2026-06-09 01:14:54][INFO]   iter  40: val=0.3160  lr=0.00106  drop=0.416  heads=[8, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=8)
-[2026-06-09 01:15:04][INFO]   iter  41: val=0.6800  lr=0.00353  drop=0.109  heads=[1, 1, 1, 1, 1]  sage=['mean', 'add', 'add', 'mean', 'max']  gin=[0.29348325729370117, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=9)
-[2026-06-09 01:15:14][INFO]   iter  42: val=0.7540  lr=0.00567  drop=0.315  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'mean']  gin=[0.0, -0.11165909469127655, 0.0, 0.0, 0.0]  (best=0.8020  stag=10)
-[2026-06-09 01:15:24][INFO]   iter  43: val=0.2400  lr=0.00306  drop=0.593  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'add']  gin=[0.0, 0.0, 0.053535208106040955, 0.0, 0.0]  (best=0.8020  stag=11)
-[2026-06-09 01:15:35][INFO]   iter  44: val=0.7780  lr=0.00306  drop=0.593  heads=[1, 2, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=12)
-[2026-06-09 01:15:35][INFO]   iter  45: val=0.7700  lr=0.00497  drop=0.100  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'max', 'add']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=1) [RESTART→random walk HP]
-[2026-06-09 01:15:46][INFO]   iter  46: val=0.6420  lr=0.00598  drop=0.262  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'add', 'max']  gin=[0.0, 0.0, 0.0548071563243866, 0.0, 0.0]  (best=0.8020  stag=2)
-[2026-06-09 01:15:56][INFO]   iter  47: val=0.7500  lr=0.01251  drop=0.100  heads=[1, 4, 1, 1, 1]  sage=['max', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=3)
-[2026-06-09 01:16:07][INFO]   iter  48: val=0.7820  lr=0.00270  drop=0.254  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'add', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=4)
-[2026-06-09 01:16:18][INFO]   iter  49: val=0.7600  lr=0.00986  drop=0.222  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'max', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=5)
-[2026-06-09 01:16:18][INFO]   Saved: step49
-[2026-06-09 01:16:29][INFO]   iter  50: val=0.2920  lr=0.00558  drop=0.321  heads=[1, 8, 1, 1, 8]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=6)
-[2026-06-09 01:16:40][INFO]   iter  51: val=0.6720  lr=0.00316  drop=0.124  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=7)
-[2026-06-09 01:16:51][INFO]   iter  52: val=0.6560  lr=0.00259  drop=0.328  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'mean', 'add', 'add']  gin=[0.6028449535369873, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=8)
-[2026-06-09 01:17:01][INFO]   iter  53: val=0.7860  lr=0.00163  drop=0.211  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.08291536569595337, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=9)
-[2026-06-09 01:17:11][INFO]   iter  54: val=0.3220  lr=0.00251  drop=0.541  heads=[1, 1, 4, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=10)
-[2026-06-09 01:17:21][INFO]   iter  55: val=0.6500  lr=0.00577  drop=0.260  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'max']  gin=[0.0, -0.19880308210849762, 0.0, -0.0704321563243866, 0.0]  (best=0.8020  stag=11)
-[2026-06-09 01:17:32][INFO]   iter  56: val=0.7800  lr=0.00250  drop=0.345  heads=[1, 1, 1, 1, 1]  sage=['mean', 'max', 'max', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=12)
-[2026-06-09 01:17:32][INFO]   iter  57: val=0.7800  lr=0.03162  drop=0.100  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=1) [RESTART→random walk HP]
-[2026-06-09 01:17:42][INFO]   iter  58: val=0.7440  lr=0.00247  drop=0.312  heads=[1, 1, 1, 1, 1]  sage=['mean', 'mean', 'max', 'max', 'mean']  gin=[0.0, 0.0, 0.0, 0.0, 0.0]  (best=0.8020  stag=2)
-[2026-06-09 01:17:52][INFO]   iter  59: val=0.3600  lr=0.00226  drop=0.551  heads=[1, 1, 1, 2, 4]  sage=['mean', 'mean', 'mean', 'mean', 'mean']  gin=[0.0, -0.042581841349601746, 0.0, 0.0, 0.0]  (best=0.8020  stag=3)
-[2026-06-09 01:17:52][INFO]   Saved: step59
-[2026-06-09 01:17:53][INFO] 
-======================================================================
-[2026-06-09 01:17:53][INFO]   Phase 4 v9 (nz=12, GPND-NAS, SEARCH_DIM=29) Final
-[2026-06-09 01:17:53][INFO] ======================================================================
-[2026-06-09 01:17:53][INFO]   Best val_acc  : 0.8020
-[2026-06-09 01:17:53][INFO]   GNN config    : {'effective_layers': 4, 'operations': ['GINConv', 'GATConv', 'SAGEConv', 'Identity', 'GCNII'], 'edges': [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4), (2, 4), (1, 4), (4, 5), (3, 5), (2, 5), (1, 5), (0, 5), (5, 6)]}
-[2026-06-09 01:17:53][INFO]   LR=0.01802  Dropout=0.273  GAT heads=[1, 2, 1, 1, 1]  SAGE aggr=['mean', 'mean', 'max', 'mean', 'mean']
-[2026-06-09 01:17:53][INFO]   GIN eps=[0.6177605390548706, 0.0, 0.0, 0.0, 0.0]
-[2026-06-09 01:17:53][INFO]   gcnii_alpha=0.1  gcnii_theta=0.5
-[2026-06-09 01:17:53][INFO] ======================================================================
-[2026-06-09 01:17:53][INFO]   Saved: final
-[2026-06-09 01:17:53][INFO] 
-[Phase Comparison]
-[2026-06-09 01:17:53][INFO]   vs Phase 2: 0.7960 → 0.8020  ✅ +0.0060
-[2026-06-09 01:17:53][INFO]   vs Phase 3: 0.8040 → 0.8020  ❌ -0.0020
-[2026-06-09 01:17:53][INFO] 
-✅ 运行完成  总耗时: 10.1 min
-=== Step 9: 最终评估，自动读取 Phase 4 best_z_final.pt ===
-[2026-06-09 01:17:56][INFO] 日志文件: logs/final_eval/train_condhp_v6_layerwise_gin_final_0609_0117.log
-[2026-06-09 01:17:56][INFO] ======================================================================
-[2026-06-09 01:17:56][INFO] final_eval.py  v9  —  2026-06-09 01:17:56
-[2026-06-09 01:17:56][INFO] ======================================================================
-[2026-06-09 01:17:56][INFO] Device=cuda:0  Seeds=10  Epochs=200  Patience=30
-[2026-06-09 01:17:56][INFO] version=condhp_v6_layerwise_gin_final  seed=42
-[2026-06-09 01:17:56][INFO] Cora: 1433 个特征  7 个类别
-[2026-06-09 01:17:56][INFO] Seeds=10  Epochs=200  Patience=30  Scheduler=CosineAnnealingLR
-[2026-06-09 01:17:56][INFO] Device: cuda:0
-[2026-06-09 01:17:56][INFO] gcnii_alpha(default)=0.1  gcnii_theta(default)=0.5
-[2026-06-09 01:17:56][INFO] Auto VAE loaded: results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth  (arch_nz=12, hp_dim=17)
-[2026-06-09 01:17:56][INFO] 已生成 Phase4 condHP v6 layer-wise + GIN 消融候选：
-[2026-06-09 01:17:56][INFO]   ops=['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:17:56][INFO]   lr=0.01802  dropout=0.273  gat_heads=1  sage_aggr=max  gin_eps=0.837
-[2026-06-09 01:17:56][INFO]   gat_by_layer=[1, 1, 1, 1, 1]
-[2026-06-09 01:17:56][INFO]   sage_by_layer=['max', 'mean', 'mean', 'mean', 'mean']
-[2026-06-09 01:17:56][INFO]   gin_by_layer=[0.0, 0.0, 0.0, 0.8372902274131775, 0.0]
-[2026-06-09 01:17:56][INFO]   mask={'gat_heads': False, 'sage_aggr': True, 'gin_eps': True, 'gat_by_layer': [False, False, False, False, False], 'sage_by_layer': [True, False, False, False, False], 'gin_by_layer': [False, False, False, True, False]}
-[2026-06-09 01:17:56][INFO]   added=5
-[2026-06-09 01:17:56][INFO] 
-==================================================================
-[2026-06-09 01:17:56][INFO] [BASELINE]  BASE_2xGCN_defaultHP
-[2026-06-09 01:17:56][INFO]   人工基线：2层GCN + 默认全局HP
-[2026-06-09 01:17:56][INFO]   ops=['GCNConv', 'GCNConv', 'Identity']
-[2026-06-09 01:17:56][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean  gin_eps=0.000
-[2026-06-09 01:17:57][INFO]   seed  0: val=0.6860  test=0.6960  [valid]
-[2026-06-09 01:17:58][INFO]   seed  1: val=0.4680  test=0.4780  [valid]
-[2026-06-09 01:17:58][INFO]   seed  2: val=0.6740  test=0.7050  [valid]
-[2026-06-09 01:17:59][INFO]   seed  3: val=0.6340  test=0.6200  [valid]
-[2026-06-09 01:18:00][INFO]   seed  4: val=0.7000  test=0.6950  [valid]
-[2026-06-09 01:18:00][INFO]   seed  5: val=0.0580  test=0.0640  [valid]
-[2026-06-09 01:18:00][INFO]   seed  6: val=0.3160  test=0.3190  [valid]
-[2026-06-09 01:18:00][INFO]   seed  7: val=0.3280  test=0.3530  [valid]
-[2026-06-09 01:18:01][INFO]   seed  8: val=0.7160  test=0.7460  [valid]
-[2026-06-09 01:18:02][INFO]   seed  9: val=0.7160  test=0.7120  [valid]
-[2026-06-09 01:18:02][INFO] 
-  >> Val  : 0.5296 ± 0.2161
-[2026-06-09 01:18:02][INFO]   >> Test : 0.5388 ± 0.2164  ← 报告此值
-[2026-06-09 01:18:02][INFO] 
-==================================================================
-[2026-06-09 01:18:02][INFO] [BASELINE]  BASE_1xGCN_defaultHP
-[2026-06-09 01:18:02][INFO]   人工参考：1层GCN + 默认全局HP
-[2026-06-09 01:18:02][INFO]   ops=['GCNConv', 'Identity', 'Identity']
-[2026-06-09 01:18:02][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean  gin_eps=0.000
-[2026-06-09 01:18:02][INFO]   seed  0: val=0.7540  test=0.7440  [valid]
-[2026-06-09 01:18:03][INFO]   seed  1: val=0.7840  test=0.8000  [valid]
-[2026-06-09 01:18:03][INFO]   seed  2: val=0.7340  test=0.7800  [valid]
-[2026-06-09 01:18:04][INFO]   seed  3: val=0.7380  test=0.7380  [valid]
-[2026-06-09 01:18:04][INFO]   seed  4: val=0.7580  test=0.7790  [valid]
-[2026-06-09 01:18:05][INFO]   seed  5: val=0.6980  test=0.7040  [valid]
-[2026-06-09 01:18:05][INFO]   seed  6: val=0.7180  test=0.7360  [valid]
-[2026-06-09 01:18:05][INFO]   seed  7: val=0.6140  test=0.5880  [valid]
-[2026-06-09 01:18:06][INFO]   seed  8: val=0.7860  test=0.7850  [valid]
-[2026-06-09 01:18:06][INFO]   seed  9: val=0.7580  test=0.7790  [valid]
-[2026-06-09 01:18:06][INFO] 
-  >> Val  : 0.7342 ± 0.0477
-[2026-06-09 01:18:06][INFO]   >> Test : 0.7433 ± 0.0588  ← 报告此值
-[2026-06-09 01:18:06][INFO] 
-==================================================================
-[2026-06-09 01:18:06][INFO] [HP_ON_MANUAL]  ABL_manualArch_searchGlobalHP
-[2026-06-09 01:18:06][INFO]   HP-only：2xGCN 手工架构 + Phase4 搜索出的 lr/dropout
-[2026-06-09 01:18:06][INFO]   ops=['GCNConv', 'GCNConv', 'Identity']
-[2026-06-09 01:18:06][INFO]   lr=0.01802  dropout=0.273  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean  gin_eps=0.000
-[2026-06-09 01:18:06][INFO]   source_best_z=results/bo_phase4_condhp_v6_layerwise_gin/best_z_final.pt
-[2026-06-09 01:18:06][INFO]   seed  0: val=0.7660  test=0.7740  [valid]
-[2026-06-09 01:18:07][INFO]   seed  1: val=0.7780  test=0.7640  [valid]
-[2026-06-09 01:18:07][INFO]   seed  2: val=0.8020  test=0.7910  [valid]
-[2026-06-09 01:18:07][INFO]   seed  3: val=0.7980  test=0.8050  [valid]
-[2026-06-09 01:18:08][INFO]   seed  4: val=0.7880  test=0.7810  [valid]
-[2026-06-09 01:18:08][INFO]   seed  5: val=0.7960  test=0.7840  [valid]
-[2026-06-09 01:18:08][INFO]   seed  6: val=0.7920  test=0.7890  [valid]
-[2026-06-09 01:18:09][INFO]   seed  7: val=0.7900  test=0.7970  [valid]
-[2026-06-09 01:18:09][INFO]   seed  8: val=0.8000  test=0.7860  [valid]
-[2026-06-09 01:18:10][INFO]   seed  9: val=0.7960  test=0.7590  [valid]
-[2026-06-09 01:18:10][INFO] 
-  >> Val  : 0.7906 ± 0.0105
-[2026-06-09 01:18:10][INFO]   >> Test : 0.7830 ± 0.0135  ← 报告此值
-[2026-06-09 01:18:10][INFO] 
-==================================================================
-[2026-06-09 01:18:10][INFO] [ARCH_ONLY]  ABL_NASArch_defaultHP
-[2026-06-09 01:18:10][INFO]   Arch-only：Phase4 解码架构 + 默认全局HP + 默认条件HP
-[2026-06-09 01:18:10][INFO]   ops=['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:18:10][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean  gin_eps=0.000
-[2026-06-09 01:18:10][INFO]   source_best_z=results/bo_phase4_condhp_v6_layerwise_gin/best_z_final.pt
-[2026-06-09 01:18:11][INFO]   seed  0: val=0.7860  test=0.7830  [valid]
-[2026-06-09 01:18:12][INFO]   seed  1: val=0.7940  test=0.7710  [valid]
-[2026-06-09 01:18:13][INFO]   seed  2: val=0.7920  test=0.7880  [valid]
-[2026-06-09 01:18:13][INFO]   seed  3: val=0.7860  test=0.7780  [valid]
-[2026-06-09 01:18:14][INFO]   seed  4: val=0.7800  test=0.7730  [valid]
-[2026-06-09 01:18:15][INFO]   seed  5: val=0.7920  test=0.7800  [valid]
-[2026-06-09 01:18:16][INFO]   seed  6: val=0.8040  test=0.7890  [valid]
-[2026-06-09 01:18:17][INFO]   seed  7: val=0.8020  test=0.7920  [valid]
-[2026-06-09 01:18:18][INFO]   seed  8: val=0.7980  test=0.8020  [valid]
-[2026-06-09 01:18:19][INFO]   seed  9: val=0.7880  test=0.7640  [valid]
-[2026-06-09 01:18:19][INFO] 
-  >> Val  : 0.7922 ± 0.0072
-[2026-06-09 01:18:19][INFO]   >> Test : 0.7820 ± 0.0106  ← 报告此值
-[2026-06-09 01:18:19][INFO] 
-==================================================================
-[2026-06-09 01:18:19][INFO] [COND_ONLY]  ABL_NASArch_condHPOnly
-[2026-06-09 01:18:19][INFO]   Cond-only：Phase4 解码架构 + 默认 lr/dropout + 搜索条件HP
-[2026-06-09 01:18:19][INFO]   ops=['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:18:19][INFO]   lr=0.00100  dropout=0.500  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=max  gin_eps=0.837
-[2026-06-09 01:18:19][INFO]   gat_by_layer=[1, 1, 1, 1, 1]
-[2026-06-09 01:18:19][INFO]   sage_by_layer=['max', 'mean', 'mean', 'mean', 'mean']
-[2026-06-09 01:18:19][INFO]   gin_by_layer=[0.0, 0.0, 0.0, 0.8372902274131775, 0.0]
-[2026-06-09 01:18:19][INFO]   source_best_z=results/bo_phase4_condhp_v6_layerwise_gin/best_z_final.pt
-[2026-06-09 01:18:20][INFO]   seed  0: val=0.7920  test=0.7980  [valid]
-[2026-06-09 01:18:20][INFO]   seed  1: val=0.7860  test=0.7750  [valid]
-[2026-06-09 01:18:21][INFO]   seed  2: val=0.8020  test=0.7770  [valid]
-[2026-06-09 01:18:22][INFO]   seed  3: val=0.7740  test=0.7550  [valid]
-[2026-06-09 01:18:22][INFO]   seed  4: val=0.7880  test=0.7890  [valid]
-[2026-06-09 01:18:23][INFO]   seed  5: val=0.7820  test=0.7620  [valid]
-[2026-06-09 01:18:23][INFO]   seed  6: val=0.7960  test=0.7720  [valid]
-[2026-06-09 01:18:24][INFO]   seed  7: val=0.7880  test=0.7740  [valid]
-[2026-06-09 01:18:25][INFO]   seed  8: val=0.7840  test=0.7800  [valid]
-[2026-06-09 01:18:25][INFO]   seed  9: val=0.7920  test=0.7710  [valid]
-[2026-06-09 01:18:25][INFO] 
-  >> Val  : 0.7884 ± 0.0074
-[2026-06-09 01:18:25][INFO]   >> Test : 0.7753 ± 0.0116  ← 报告此值
-[2026-06-09 01:18:25][INFO] 
-==================================================================
-[2026-06-09 01:18:25][INFO] [ARCH_GLOBAL_HP]  ABL_NASArch_globalHPOnly
-[2026-06-09 01:18:25][INFO]   GlobalHP-only：Phase4 解码架构 + 搜索 lr/dropout + 默认条件HP
-[2026-06-09 01:18:25][INFO]   ops=['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:18:25][INFO]   lr=0.01802  dropout=0.273  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=mean  gin_eps=0.000
-[2026-06-09 01:18:25][INFO]   source_best_z=results/bo_phase4_condhp_v6_layerwise_gin/best_z_final.pt
-[2026-06-09 01:18:26][INFO]   seed  0: val=0.8020  test=0.7810  [valid]
-[2026-06-09 01:18:27][INFO]   seed  1: val=0.7680  test=0.7890  [valid]
-[2026-06-09 01:18:27][INFO]   seed  2: val=0.7800  test=0.7690  [valid]
-[2026-06-09 01:18:28][INFO]   seed  3: val=0.7900  test=0.8030  [valid]
-[2026-06-09 01:18:28][INFO]   seed  4: val=0.7960  test=0.7980  [valid]
-[2026-06-09 01:18:29][INFO]   seed  5: val=0.7840  test=0.7870  [valid]
-[2026-06-09 01:18:29][INFO]   seed  6: val=0.7960  test=0.7900  [valid]
-[2026-06-09 01:18:29][INFO]   seed  7: val=0.7860  test=0.7820  [valid]
-[2026-06-09 01:18:30][INFO]   seed  8: val=0.7920  test=0.7960  [valid]
-[2026-06-09 01:18:31][INFO]   seed  9: val=0.7920  test=0.7880  [valid]
-[2026-06-09 01:18:31][INFO] 
-  >> Val  : 0.7886 ± 0.0092
-[2026-06-09 01:18:31][INFO]   >> Test : 0.7883 ± 0.0092  ← 报告此值
-[2026-06-09 01:18:31][INFO] 
-==================================================================
-[2026-06-09 01:18:31][INFO] [FULL_CONDHP]  NAS_condHP_full
-[2026-06-09 01:18:31][INFO]   Full：Phase4 解码架构 + 搜索 lr/dropout + 搜索条件HP
-[2026-06-09 01:18:31][INFO]   ops=['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:18:31][INFO]   lr=0.01802  dropout=0.273  hidden=64  l2=5e-04  gcnii_α=0.1  gcnii_θ=0.5  gat_heads=1  sage_aggr=max  gin_eps=0.837
-[2026-06-09 01:18:31][INFO]   gat_by_layer=[1, 1, 1, 1, 1]
-[2026-06-09 01:18:31][INFO]   sage_by_layer=['max', 'mean', 'mean', 'mean', 'mean']
-[2026-06-09 01:18:31][INFO]   gin_by_layer=[0.0, 0.0, 0.0, 0.8372902274131775, 0.0]
-[2026-06-09 01:18:31][INFO]   source_best_z=results/bo_phase4_condhp_v6_layerwise_gin/best_z_final.pt
-[2026-06-09 01:18:31][INFO]   seed  0: val=0.7800  test=0.7740  [valid]
-[2026-06-09 01:18:31][INFO]   seed  1: val=0.7780  test=0.7780  [valid]
-[2026-06-09 01:18:32][INFO]   seed  2: val=0.7740  test=0.7590  [valid]
-[2026-06-09 01:18:32][INFO]   seed  3: val=0.7820  test=0.7560  [valid]
-[2026-06-09 01:18:33][INFO]   seed  4: val=0.7720  test=0.7810  [valid]
-[2026-06-09 01:18:33][INFO]   seed  5: val=0.7760  test=0.7690  [valid]
-[2026-06-09 01:18:34][INFO]   seed  6: val=0.7760  test=0.7590  [valid]
-[2026-06-09 01:18:34][INFO]   seed  7: val=0.7820  test=0.7980  [valid]
-[2026-06-09 01:18:35][INFO]   seed  8: val=0.7820  test=0.7930  [valid]
-[2026-06-09 01:18:35][INFO]   seed  9: val=0.7800  test=0.7820  [valid]
-[2026-06-09 01:18:35][INFO] 
-  >> Val  : 0.7782 ± 0.0034
-[2026-06-09 01:18:35][INFO]   >> Test : 0.7749 ± 0.0136  ← 报告此值
-[2026-06-09 01:18:35][INFO] 
-================================================================================
-[2026-06-09 01:18:35][INFO] 完整结果汇总表
-[2026-06-09 01:18:35][INFO] ================================================================================
-[2026-06-09 01:18:35][INFO] 
-  A. 人工基线
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   BASE_2xGCN_defaultHP                            0.530±0.216    0.539±0.216     64    5e-04     1   mean   0.000
-[2026-06-09 01:18:35][INFO]   BASE_1xGCN_defaultHP                            0.734±0.048    0.743±0.059     64    5e-04     1   mean   0.000
-[2026-06-09 01:18:35][INFO] 
-  B. HP-only：手工架构 + 搜索全局HP
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   ABL_manualArch_searchGlobalHP                   0.791±0.011    0.783±0.013     64    5e-04     1   mean   0.000
-[2026-06-09 01:18:35][INFO] 
-  C. Arch-only：NAS架构 + 默认HP
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   ABL_NASArch_defaultHP                           0.792±0.007    0.782±0.011     64    5e-04     1   mean   0.000
-[2026-06-09 01:18:35][INFO] 
-  D. Cond-only：NAS架构 + 搜索条件HP
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   ABL_NASArch_condHPOnly                          0.788±0.007    0.775±0.012     64    5e-04     1    max   0.837
-[2026-06-09 01:18:35][INFO] 
-  E. GlobalHP-only：NAS架构 + 搜索全局HP
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   ABL_NASArch_globalHPOnly                        0.789±0.009    0.788±0.009     64    5e-04     1   mean   0.000
-[2026-06-09 01:18:35][INFO] 
-  F. Full：NAS架构 + 搜索全局HP + 搜索条件HP
-[2026-06-09 01:18:35][INFO]   名称                                                      Val           Test Hidden       L2 Heads   Aggr  GINeps
-[2026-06-09 01:18:35][INFO]   ----------------------------------------------------------------------------------------------------------------------
-[2026-06-09 01:18:35][INFO]   NAS_condHP_full                                 0.778±0.003    0.775±0.014     64    5e-04     1    max   0.837
-[2026-06-09 01:18:35][INFO] 
-================================================================================
-[2026-06-09 01:18:35][INFO] 关键发现（Key Findings）—— condHP v6 layer-wise + GIN 非冗余消融
-[2026-06-09 01:18:35][INFO] ================================================================================
-[2026-06-09 01:18:35][INFO] 
-  [Finding 1] 人工基线稳定性：
-[2026-06-09 01:18:35][INFO]     2xGCN default           : test=0.539±0.216
-[2026-06-09 01:18:35][INFO]     1xGCN default           : test=0.743±0.059
-[2026-06-09 01:18:35][INFO]     1xGCN - 2xGCN           : Δtest=+0.205
-[2026-06-09 01:18:35][INFO] 
-  [Finding 2] 全局 HP 搜索贡献（固定手工架构）：
-[2026-06-09 01:18:35][INFO]     Manual default HP       : test=0.539±0.216
-[2026-06-09 01:18:35][INFO]     Manual searched HP      : test=0.783±0.013
-[2026-06-09 01:18:35][INFO]     global HP only          : Δtest=+0.244
-[2026-06-09 01:18:35][INFO] 
-  [Finding 3] 架构搜索贡献（默认 HP 控制）：
-[2026-06-09 01:18:35][INFO]     Manual arch             : test=0.539±0.216
-[2026-06-09 01:18:35][INFO]     NAS arch default HP     : test=0.782±0.011
-[2026-06-09 01:18:35][INFO]     arch only               : Δtest=+0.243
-[2026-06-09 01:18:35][INFO] 
-  [Finding 4] NAS 架构上的全局 HP 增量：
-[2026-06-09 01:18:35][INFO]     NAS arch default HP     : test=0.782±0.011
-[2026-06-09 01:18:35][INFO]     NAS arch global HP      : test=0.788±0.009
-[2026-06-09 01:18:35][INFO]     global HP on NAS        : Δtest=+0.006
-[2026-06-09 01:18:35][INFO] 
-  [Finding 5] 条件 HP 单独贡献（默认 lr/dropout）：
-[2026-06-09 01:18:35][INFO]     NAS arch default cond   : test=0.782±0.011
-[2026-06-09 01:18:35][INFO]     NAS arch searched cond  : test=0.775±0.012
-[2026-06-09 01:18:35][INFO]     conditional HP only     : Δtest=-0.007
-[2026-06-09 01:18:35][INFO] 
-  [Finding 6] 完整 condHP 搜索结果：
-[2026-06-09 01:18:35][INFO]     Full condHP             : test=0.775±0.014
-[2026-06-09 01:18:35][INFO]     condHP marginal         : Δtest=-0.013
-[2026-06-09 01:18:35][INFO]     full vs 2xGCN           : Δtest=+0.236
-[2026-06-09 01:18:35][INFO]     ops                     : ['SAGEConv', 'GCNII', 'Identity', 'GINConv', 'GCNConv']
-[2026-06-09 01:18:35][INFO]     lr/dropout              : 0.01802 / 0.273
-[2026-06-09 01:18:35][INFO]     gat_heads/sage_aggr     : 1 / max
-[2026-06-09 01:18:35][INFO]     gin_eps                 : 0.837
-[2026-06-09 01:18:35][INFO]     gat_heads_by_layer      : [1, 1, 1, 1, 1]
-[2026-06-09 01:18:35][INFO]     sage_aggr_by_layer      : ['max', 'mean', 'mean', 'mean', 'mean']
-[2026-06-09 01:18:35][INFO]     gin_eps_by_layer        : [0.0, 0.0, 0.0, 0.8372902274131775, 0.0]
-[2026-06-09 01:18:35][INFO]     condition_mask          : {'gat_heads': False, 'sage_aggr': True, 'gin_eps': True, 'gat_by_layer': [False, False, False, False, False], 'sage_by_layer': [True, False, False, False, False], 'gin_by_layer': [False, False, False, True, False]}
-[2026-06-09 01:18:35][INFO] 
-结果已保存: results/final_eval_condhp_v6_layerwise_gin/final_results_v9.json
-[2026-06-09 01:18:35][INFO] Comparison plot saved: results/final_eval_condhp_v6_layerwise_gin/final_comparison_v9.png
-[2026-06-09 01:18:35][INFO] 
-✅ 运行完成  总耗时: 0.7 min
-================================================================
-  条件参数 v6 NAS 流水线完成
-  VAE checkpoint : results/joint_search/joint_model_condhp_v6_layerwise_gin_ep100.pth
-  Phase 2 output : results/bo_phase2_condhp_v6_layerwise_gin
-  Phase 3 output : results/bo_phase3_condhp_v6_layerwise_gin
-  Phase 4 output : results/bo_phase4_condhp_v6_layerwise_gin
-  Final eval out : results/final_eval_condhp_v6_layerwise_gin
-================================================================

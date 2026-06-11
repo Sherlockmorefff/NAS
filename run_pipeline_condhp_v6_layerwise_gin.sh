@@ -87,7 +87,7 @@ python bo_phase3.py \
   --version "${VERSION}" \
   --seed 42
 
-echo "=== Step 8: 启动 Phase 4 逐层条件参数 GPND-NAS 搜索 ==="
+echo "=== Step 8: 启动 Phase 4 条件核函数 + 逐层条件参数 GPND-NAS 搜索 ==="
 python bo_phase4.py \
   --checkpoint "${VAE_CKPT}" \
   --hp_dim "${HP_DIM}" \
@@ -103,6 +103,9 @@ python bo_phase4.py \
   --tau_gumbel 0.3 \
   --n_probes 12 \
   --lhs_oversample 3 \
+  --use_conditional_kernel \
+  --cond_kernel_tau 0.3 \
+  --cond_kernel_mask_weight 1.0 \
   --gcnii_alpha 0.1 \
   --gcnii_theta 0.5 \
   --version "${VERSION}" \
