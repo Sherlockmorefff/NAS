@@ -12,3 +12,6 @@ results/
 *.pdf
 *.png
 *.jpg
+# Local LHS experiment outputs
+results-1-LHS/
+logs-LHS/

@@ -1,248 +1,225 @@
-"""
-generate_mini_data.py  v6
-=========================
-Search Space v3: max_n=7 (5 算子节点), nvt=8 (含 GCNII=type 7)
-HP 向量升级为 layer-wise 条件参数：
-[lr_norm, dropout_norm, gat_heads_i, sage_aggr_i, gin_eps_i]
+"""Generate mini NAS datasets for hp_mode-driven joint VAE training.
 
-v6 变更（相对 v5）：
-  - 新增 hp_dim=17：
-      [0] lr_norm
-      [1] dropout_norm
-      [2:7]   gat_heads_norm_i，仅第 i 个算子节点为 GATConv(type=3) 时生效
-      [7:12]  sage_aggr_norm_i，仅第 i 个算子节点为 SAGEConv(type=4) 时生效
-      [12:17] gin_eps_norm_i，仅第 i 个算子节点为 GINConv(type=5) 时生效
-  - 保留 hp_dim=4 的 v5 type-wise 条件参数兼容。
+Search space v3:
+    - max_n = 7
+    - 5 operator nodes between START and END
+    - operator types include GCNConv, GATConv, SAGEConv, GINConv, GCNII,
+      and Identity on the middle optional nodes.
 
-v5 变更（相对 v4）：
-  - HP 从普通 4 维改为条件参数 4 维，与 nas_space.py v5 对齐：
-      [0] log_lr_norm     ∈ [0, 1]，映射至 log_lr ∈ [-4.0, -1.5]
-      [1] dropout_norm    ∈ [0, 1]，映射至 dropout ∈ [0.1, 0.6]
-      [2] gat_heads_norm  ∈ [0, 1]，仅当架构包含 GATConv(type=3) 时生效
-      [3] sage_aggr_norm  ∈ [0, 1]，仅当架构包含 SAGEConv(type=4) 时生效
-  - 对无 GAT/SAGE 的样本，将对应条件位置 0，避免无效条件参数随机漂移。
-  - 输出文件默认命名为 mini_gnn_dataset_v5.pkl
-  - 向后兼容：可通过 --hp_dim=2 生成旧格式（仅 log_lr + dropout）
-
-节点编号 (7 节点, 索引 0~6)：
-  0 = START
-  1 = Node1 (算子, 禁止 Identity)
-  2 = Node2 (算子/Identity)
-  3 = Node3 (算子/Identity)
-  4 = Node4 (算子/Identity)
-  5 = Node5 (算子, 禁止 Identity)
-  6 = END
+Main HP modes:
+    global4:
+        [lr, dropout, hidden_dim, l2]
+    hybrid_cond7:
+        [lr, dropout, hidden_dim, l2, gat_heads, sage_aggr, gin_eps]
+    layer_cond19:
+        [lr, dropout, hidden_dim, l2,
+         gat_heads_0..4, sage_aggr_0..4, gin_eps_0..4]
 """
 
+from __future__ import annotations
+
+import argparse
+import os
 import pickle
 import random
-import argparse
+
 import numpy as np
-from tqdm import tqdm
 
-# ============================================================
-# 节点类型常量（与 nas_space.py 保持一致）
-# ============================================================
-START_TYPE    = 0
-END_TYPE      = 1
-# v3: 新增 GCNII = 7
-REAL_OP_TYPES = [2, 3, 4, 5, 7]    # GCNConv, GATConv, SAGEConv, GINConv, GCNII
-ALL_OP_TYPES  = [2, 3, 4, 5, 6, 7] # 上述 + Identity
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable, **_kwargs):
+        return iterable
 
-# ============================================================
-# HP 采样范围（与 BO 脚本默认值保持一致）
-# ============================================================
-LOG_LR_MIN    = -4.0
-LOG_LR_MAX    = -1.5
-DROPOUT_MIN   = 0.1
-DROPOUT_MAX   = 0.6
-MAX_OP_NODES  = 5
-HP_DIM_LAYERWISE = 2 + 3 * MAX_OP_NODES
+from hp_modes import (
+    HP_MODE_SPECS,
+    MAX_OP_NODES,
+    condition_mask_vector_from_ops,
+    hp_dim_from_mode,
+    hp_names_from_mode,
+    validate_hp_mode,
+)
 
 
-def _sample_hp4(types: list) -> list:
-    """采样 4 维条件参数：[lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]。"""
-    lr_n        = random.random()
-    dropout_n   = random.random()
-    gat_heads_n = random.random() if 3 in types else 0.0
-    sage_aggr_n = random.random() if 4 in types else 0.0
-    return [lr_n, dropout_n, gat_heads_n, sage_aggr_n]
+START_TYPE = 0
+END_TYPE = 1
+
+REAL_OP_TYPES = [2, 3, 4, 5, 7]
+ALL_OP_TYPES = [2, 3, 4, 5, 6, 7]
+
+TYPE_TO_OP = {
+    2: "GCNConv",
+    3: "GATConv",
+    4: "SAGEConv",
+    5: "GINConv",
+    6: "Identity",
+    7: "GCNII",
+}
+
+DEFAULT_OUTPUT_BY_MODE = {
+    "global4": "data/mini_gnn_dataset_global4.pkl",
+    "hybrid_cond7": "data/mini_gnn_dataset_hybrid_cond7.pkl",
+    "layer_cond19": "data/mini_gnn_dataset_layer_cond19.pkl",
+}
 
 
-def _sample_hp17(types: list) -> list:
-    """采样 17 维 layer-wise 条件参数。"""
-    op_types = types[1:1 + MAX_OP_NODES]
-    lr_n = random.random()
-    dropout_n = random.random()
-    gat_heads = [random.random() if t == 3 else 0.0 for t in op_types]
-    sage_aggr = [random.random() if t == 4 else 0.0 for t in op_types]
-    gin_eps = [random.random() if t == 5 else 0.0 for t in op_types]
-    return [lr_n, dropout_n] + gat_heads + sage_aggr + gin_eps
+def ops_from_types(types: list[int]) -> list[str]:
+    op_types = list(types)[1:1 + MAX_OP_NODES]
+    if len(op_types) < MAX_OP_NODES:
+        op_types.extend([6] * (MAX_OP_NODES - len(op_types)))
+    return [TYPE_TO_OP.get(int(t), "Identity") for t in op_types]
 
 
-def _sample_hp2() -> list:
-    """向后兼容：采样旧格式 2 维 HP 向量：[log_lr, dropout]。"""
-    log_lr  = random.uniform(LOG_LR_MIN, LOG_LR_MAX)
-    dropout = random.uniform(DROPOUT_MIN, DROPOUT_MAX)
-    return [log_lr, dropout]
+def sample_hp_by_mode(types: list[int], hp_mode: str) -> list[float]:
+    hp_mode = validate_hp_mode(hp_mode)
+    ops = ops_from_types(types)
+    mask = condition_mask_vector_from_ops(ops, hp_mode)
+    return [random.random() if active > 0.0 else 0.0 for active in mask]
 
 
-def generate_mini_dataset(
-    output_file: str = 'data/mini_gnn_dataset_v6_layerwise_gin.pkl',
-    num_samples: int = 3000,
-    skip_prob: float = 0.35,
-    hp_dim: int      = HP_DIM_LAYERWISE,
-) -> str:
-    """
-    生成 num_samples 个 v3 空间合法 DAG 样本。
-
-    Parameters
-    ----------
-    output_file : str    输出 .pkl 文件路径
-    num_samples : int    样本数量
-    skip_prob   : float  跳跃边生成概率（每条潜在跳跃边独立）
-    hp_dim      : int    HP 维度；17=v6 layer-wise，4=v5 type-wise，2=向后兼容
-    """
-    assert hp_dim in (2, 4, HP_DIM_LAYERWISE), \
-        f"hp_dim 必须为 2、4 或 {HP_DIM_LAYERWISE}，当前: {hp_dim}"
-    dataset = []
-    print(f"生成 {num_samples} 个 v3 DAG 样本 (max_n=7, nvt=8, hp_dim={hp_dim})...")
-    print(f"  主链: 0→1→2→3→4→5→6  每条跳跃边概率={skip_prob}")
-    print(f"  REAL_OP_TYPES={REAL_OP_TYPES}  ALL_OP_TYPES={ALL_OP_TYPES}")
-    if hp_dim == HP_DIM_LAYERWISE:
-        print("  HP: [lr, dropout, gat_heads_i, sage_aggr_i, gin_eps_i]")
-        print("      条件参数按 5 个算子节点逐层激活：GAT/SAGE/GIN 各自监督对应层")
-    elif hp_dim == 4:
-        print(f"  HP: [lr_norm, dropout_norm, gat_heads_norm, sage_aggr_norm]")
-        print(f"      lr/dropout 全局生效；gat_heads 仅 GATConv 生效；"
-              f"sage_aggr 仅 SAGEConv 生效")
-    else:
-        print(f"  HP: [log_lr ∈ ({LOG_LR_MIN},{LOG_LR_MAX}), "
-              f"dropout ∈ ({DROPOUT_MIN},{DROPOUT_MAX})]")
-
-    for _ in tqdm(range(num_samples)):
-        # ── 节点类型 ──────────────────────────────────────
-        types = [
-            START_TYPE,
-            random.choice(REAL_OP_TYPES),   # Node1: 禁 Identity
-            random.choice(ALL_OP_TYPES),    # Node2: 任意
-            random.choice(ALL_OP_TYPES),    # Node3: 任意
-            random.choice(ALL_OP_TYPES),    # Node4: 任意
-            random.choice(REAL_OP_TYPES),   # Node5: 禁 Identity
-            END_TYPE,
-        ]
-
-        # ── 邻接矩阵（严格上三角） ────────────────────────
-        adj = np.zeros((7, 7), dtype=np.int8)
-
-        # 主链（强制）
-        for i in range(6):
-            adj[i, i+1] = 1
-
-        # 可选跳跃边: Node_i → Node_j，条件 1 ≤ i < j-1 ≤ 4
-        for i in range(1, 5):        # i: 1,2,3,4
-            for j in range(i+2, 6):  # j: i+2 .. 5
-                if random.random() < skip_prob:
-                    adj[i, j] = 1
-
-        # 完整性断言（开发期调试，生产可移除）
-        _assert_valid_v3(types, adj)
-
-        # ── HP 采样 ───────────────────────────────────────
-        if hp_dim == HP_DIM_LAYERWISE:
-            hp = _sample_hp17(types)
-        elif hp_dim == 4:
-            hp = _sample_hp4(types)
-        else:
-            hp = _sample_hp2()
-        dataset.append((types, adj, hp))
-
-    with open(output_file, 'wb') as f:
-        pickle.dump(dataset, f)
-    print(f"\n✅ 数据集保存至: {output_file}  ({len(dataset)} 条，hp_dim={hp_dim})")
-
-    # ── 自检 ──────────────────────────────────────────────
-    print("\n[自检] 前 3 条样本：")
-    for i, (t, a, hp) in enumerate(dataset[:3]):
-        edges = [(r, c) for r in range(7) for c in range(7) if a[r, c]]
-        if len(hp) == HP_DIM_LAYERWISE:
-            lr_actual = 10 ** (hp[0] * (LOG_LR_MAX - LOG_LR_MIN) + LOG_LR_MIN)
-            drop_actual = hp[1] * (DROPOUT_MAX - DROPOUT_MIN) + DROPOUT_MIN
-            hp_str = f"lr={lr_actual:.5f}  drop={drop_actual:.3f}"
-            hp_str += f"  gat={np.round(hp[2:7], 3).tolist()}"
-            hp_str += f"  sage={np.round(hp[7:12], 3).tolist()}"
-            hp_str += f"  gin={np.round(hp[12:17], 3).tolist()}"
-        elif len(hp) >= 4:
-            lr_actual = 10 ** (hp[0] * (LOG_LR_MAX - LOG_LR_MIN) + LOG_LR_MIN)
-            drop_actual = hp[1] * (DROPOUT_MAX - DROPOUT_MIN) + DROPOUT_MIN
-            hp_str = f"lr={lr_actual:.5f}  drop={drop_actual:.3f}"
-            hp_str += f"  gat_heads_n={hp[2]:.3f}  sage_aggr_n={hp[3]:.3f}"
-        else:
-            hp_str = f"lr={10 ** hp[0]:.5f}  drop={hp[1]:.3f}"
-        print(f"  [{i}] types={t}")
-        print(f"       edges={edges}  {hp_str}")
-
-    # ── 统计跳跃边比例 ────────────────────────────────────
-    n_skip = sum(
-        1 for _, a, _ in dataset
-        if any(a[i, j] for i in range(1, 5) for j in range(i+2, 6)))
-    print(f"\n  含跳跃边样本比例: {n_skip}/{len(dataset)} = "
-          f"{n_skip/len(dataset):.1%}")
-
-    # ── GCNII 采样统计 ────────────────────────────────────
-    n_gcnii = sum(
-        1 for t, _, _ in dataset if 7 in t)
-    print(f"  含 GCNII(type=7) 节点样本比例: {n_gcnii}/{len(dataset)} = "
-          f"{n_gcnii/len(dataset):.1%}")
-
-    return output_file
-
-
-def _assert_valid_v3(types, adj):
-    """完整性断言，失败时抛出 AssertionError。"""
-    # 主链
+def assert_valid_v3(types: list[int], adj: np.ndarray) -> None:
     for i in range(6):
-        assert adj[i, i+1] == 1, f"主链 {i}→{i+1} 缺失"
-    # Node 0 只能指向 Node 1
+        assert adj[i, i + 1] == 1, f"main-chain edge {i}->{i + 1} is missing"
+
     for j in range(2, 7):
-        assert adj[0, j] == 0, f"非法边 0→{j}"
-    # Node 6 只能接收来自 Node 5
+        assert adj[0, j] == 0, f"illegal edge 0->{j}"
+
     for i in range(5):
-        assert adj[i, 6] == 0, f"非法边 {i}→6"
-    # 禁止反向边
+        assert adj[i, 6] == 0, f"illegal edge {i}->6"
+
     for i in range(7):
         for j in range(i + 1):
             if i != j:
-                assert adj[i, j] == 0, f"反向边 {i}→{j}"
-    # Node 1 和 Node 5 不能是 Identity
-    assert types[1] != 6, f"Node1 是 Identity，违规！"
-    assert types[5] != 6, f"Node5 是 Identity，违规！"
-    # 首尾
+                assert adj[i, j] == 0, f"backward edge {i}->{j}"
+
+    assert types[1] != 6, "Node1 cannot be Identity"
+    assert types[5] != 6, "Node5 cannot be Identity"
     assert types[0] == START_TYPE
     assert types[6] == END_TYPE
 
 
+def generate_one_graph(skip_prob: float) -> tuple[list[int], np.ndarray]:
+    types = [
+        START_TYPE,
+        random.choice(REAL_OP_TYPES),
+        random.choice(ALL_OP_TYPES),
+        random.choice(ALL_OP_TYPES),
+        random.choice(ALL_OP_TYPES),
+        random.choice(REAL_OP_TYPES),
+        END_TYPE,
+    ]
+
+    adj = np.zeros((7, 7), dtype=np.int8)
+    for i in range(6):
+        adj[i, i + 1] = 1
+
+    for i in range(1, 5):
+        for j in range(i + 2, 6):
+            if random.random() < skip_prob:
+                adj[i, j] = 1
+
+    assert_valid_v3(types, adj)
+    return types, adj
+
+
+def generate_mini_dataset(
+    output_file: str,
+    num_samples: int = 3000,
+    skip_prob: float = 0.35,
+    hp_mode: str = "global4",
+    hp_dim: int | None = None,
+) -> str:
+    hp_mode = validate_hp_mode(hp_mode)
+    expected_hp_dim = hp_dim_from_mode(hp_mode)
+    if hp_dim is not None and hp_dim != expected_hp_dim:
+        raise ValueError(
+            f"--hp_dim={hp_dim} does not match hp_mode={hp_mode} "
+            f"(expected {expected_hp_dim})"
+        )
+
+    dataset = []
+    print(
+        f"Generating {num_samples} v3 DAG samples "
+        f"(max_n=7, nvt=8, hp_mode={hp_mode}, hp_dim={expected_hp_dim})"
+    )
+    print(f"  HP names: {hp_names_from_mode(hp_mode)}")
+    print("  Mask rule:")
+    if hp_mode == "global4":
+        print("    [lr, dropout, hidden_dim, l2] are always active")
+    elif hp_mode == "hybrid_cond7":
+        print("    global dims always active; gat_heads/sage_aggr/gin_eps are type-conditional")
+    else:
+        print("    global dims always active; GAT/SAGE/GIN params are layer-conditional")
+
+    for _ in tqdm(range(num_samples)):
+        types, adj = generate_one_graph(skip_prob)
+        hp = sample_hp_by_mode(types, hp_mode)
+        dataset.append((types, adj, hp))
+
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
+    with open(output_file, "wb") as f:
+        pickle.dump(dataset, f)
+
+    print(f"\nSaved dataset: {output_file} ({len(dataset)} samples)")
+    print(f"  hp_mode={hp_mode}")
+    print(f"  hp_dim={expected_hp_dim}")
+    print(f"  HP_MODE_SPECS[{hp_mode!r}]={HP_MODE_SPECS[hp_mode]}")
+
+    print("\n[Self-check] First 3 samples:")
+    for i, (types, adj, hp) in enumerate(dataset[:3]):
+        edges = [(r, c) for r in range(7) for c in range(7) if int(adj[r, c]) == 1]
+        ops = ops_from_types(types)
+        mask = condition_mask_vector_from_ops(ops, hp_mode)
+        print(f"  [{i}] types={types}")
+        print(f"      ops={ops}")
+        print(f"      edges={edges}")
+        print(f"      hp={np.round(hp, 3).tolist()}")
+        print(f"      mask={mask}")
+
+    n_skip = sum(
+        1
+        for _, adj, _ in dataset
+        if any(adj[i, j] for i in range(1, 5) for j in range(i + 2, 6))
+    )
+    n_gcnii = sum(1 for types, _, _ in dataset if 7 in types)
+    print(f"\n  skip-edge sample ratio: {n_skip}/{len(dataset)} = {n_skip / len(dataset):.1%}")
+    print(f"  GCNII sample ratio: {n_gcnii}/{len(dataset)} = {n_gcnii / len(dataset):.1%}")
+
+    return output_file
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="generate_mini_data hp_mode")
+    parser.add_argument("--output", type=str, default=None)
+    parser.add_argument("--num_samples", type=int, default=3000)
+    parser.add_argument("--skip_prob", type=float, default=0.35)
+    parser.add_argument(
+        "--hp_mode",
+        type=str,
+        default="global4",
+        choices=["global4", "hybrid_cond7", "layer_cond19"],
+    )
+    parser.add_argument(
+        "--hp_dim",
+        type=int,
+        default=None,
+        help="Deprecated compatibility guard. If provided, must match hp_mode.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    import os
-    os.makedirs('data', exist_ok=True)
+    args = parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
 
-    parser = argparse.ArgumentParser(description='generate_mini_data v6')
-    parser.add_argument('--output',      type=str,
-                        default='data/mini_gnn_dataset_v6_layerwise_gin.pkl')
-    parser.add_argument('--num_samples', type=int,  default=3000)
-    parser.add_argument('--skip_prob',   type=float, default=0.35)
-    parser.add_argument('--hp_dim',      type=int,  default=HP_DIM_LAYERWISE,
-                        choices=[2, 4, HP_DIM_LAYERWISE],
-                        help='HP 维度：17=v6逐层条件参数，4=v5条件参数，2=向后兼容')
-    parser.add_argument('--seed',        type=int,  default=42)
-    cli_args = parser.parse_args()
-
-    random.seed(cli_args.seed)
-    np.random.seed(cli_args.seed)
-
+    hp_mode = validate_hp_mode(args.hp_mode)
+    output = args.output or DEFAULT_OUTPUT_BY_MODE[hp_mode]
     generate_mini_dataset(
-        output_file = cli_args.output,
-        num_samples = cli_args.num_samples,
-        skip_prob   = cli_args.skip_prob,
-        hp_dim      = cli_args.hp_dim,
+        output_file=output,
+        num_samples=args.num_samples,
+        skip_prob=args.skip_prob,
+        hp_mode=hp_mode,
+        hp_dim=args.hp_dim,
     )
