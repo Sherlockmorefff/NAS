@@ -94,6 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=str, default="results/joint_search/joint_model_global4_best.pth")
     parser.add_argument("--auto_best_z", type=str, default="results/bo_phase4/best_z_final.pt")
     parser.add_argument("--disable_auto_best", action="store_true")
+    parser.add_argument("--include_official_2gcn_baseline", action="store_true")
     parser.add_argument("--auto_name", type=str, default="NAS_full")
     parser.add_argument("--auto_decode_trials", type=int, default=10)
     parser.add_argument("--log_lr_min", type=float, default=-4.0)
@@ -216,6 +217,20 @@ def default_hp(config: dict[str, Any], args: argparse.Namespace) -> dict[str, An
         "hp_mode": args.hp_mode,
         "hp_dim": hp_dim_from_mode(args.hp_mode),
     }
+
+
+def official_2gcn_hp(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    hp = default_hp(config, args)
+    hp.update(
+        {
+            "lr": 0.01,
+            "dropout": 0.5,
+            "hidden_dim": 16,
+            "weight_decay": 5e-4,
+            "l2": 5e-4,
+        }
+    )
+    return hp
 
 
 def candidate_signature(cand: dict[str, Any]) -> tuple:
@@ -453,6 +468,19 @@ def build_candidates(args: argparse.Namespace, device: torch.device, logger) -> 
             args,
         ),
     ]
+    if args.include_official_2gcn_baseline:
+        append_unique(
+            candidates,
+            make_candidate(
+                "BASE_2xGCN_officialHP",
+                "baseline_official_hp",
+                "Manual 2xGCN baseline with official GCN paper-style HP.",
+                base_2gcn,
+                official_2gcn_hp(base_2gcn, args),
+                args,
+            ),
+            logger,
+        )
     for cand in build_auto_candidates(args, device, logger):
         append_unique(candidates, cand, logger)
     return candidates
@@ -466,6 +494,7 @@ def run_eval(cand: dict[str, Any], data, in_ch: int, out_ch: int, args: argparse
     }
     val_accs: list[float] = []
     test_accs: list[float] = []
+    valid_list: list[bool] = []
 
     for seed in range(int(args.n_seeds)):
         val_acc, is_valid, test_acc = train_and_eval_arch(
@@ -493,22 +522,54 @@ def run_eval(cand: dict[str, Any], data, in_ch: int, out_ch: int, args: argparse
         )
         val_accs.append(float(val_acc))
         test_accs.append(float(test_acc))
+        valid_list.append(bool(is_valid))
         logger.info(
             f"  seed {seed:>2d}: val={val_acc:.4f} test={test_acc:.4f} "
             f"{'[valid]' if is_valid else '[invalid]'}"
         )
+
+    valid_val_accs = [value for value, is_valid in zip(val_accs, valid_list) if is_valid]
+    valid_test_accs = [value for value, is_valid in zip(test_accs, valid_list) if is_valid]
+    n_valid = len(valid_val_accs)
+    n_invalid = len(valid_list) - n_valid
+    val_mean_all = float(np.mean(val_accs))
+    val_std_all = float(np.std(val_accs))
+    test_mean_all = float(np.mean(test_accs))
+    test_std_all = float(np.std(test_accs))
+    if n_valid:
+        val_mean_valid_only = float(np.mean(valid_val_accs))
+        val_std_valid_only = float(np.std(valid_val_accs))
+        test_mean_valid_only = float(np.mean(valid_test_accs))
+        test_std_valid_only = float(np.std(valid_test_accs))
+    else:
+        val_mean_valid_only = None
+        val_std_valid_only = None
+        test_mean_valid_only = None
+        test_std_valid_only = None
+        logger.warning(f"all seeds invalid for final-eval candidate: {cand['name']}")
 
     return {
         "name": cand["name"],
         "group": cand["group"],
         "description": cand["description"],
         "hp_mode": args.hp_mode,
-        "val_mean": float(np.mean(val_accs)),
-        "val_std": float(np.std(val_accs)),
+        "val_mean": val_mean_all,
+        "val_std": val_std_all,
         "val_list": val_accs,
-        "test_mean": float(np.mean(test_accs)),
-        "test_std": float(np.std(test_accs)),
+        "test_mean": test_mean_all,
+        "test_std": test_std_all,
         "test_list": test_accs,
+        "valid_list": valid_list,
+        "n_valid": n_valid,
+        "n_invalid": n_invalid,
+        "val_mean_all": val_mean_all,
+        "val_std_all": val_std_all,
+        "test_mean_all": test_mean_all,
+        "test_std_all": test_std_all,
+        "val_mean_valid_only": val_mean_valid_only,
+        "val_std_valid_only": val_std_valid_only,
+        "test_mean_valid_only": test_mean_valid_only,
+        "test_std_valid_only": test_std_valid_only,
         "lr": float(cand["lr"]),
         "dropout": float(cand["dropout"]),
         "hidden_dim": int(cand["hidden_dim"]),
@@ -530,6 +591,8 @@ def run_eval(cand: dict[str, Any], data, in_ch: int, out_ch: int, args: argparse
 
 def main() -> None:
     args = parse_args()
+    if args.n_seeds <= 0:
+        raise ValueError("--n_seeds must be positive")
     args.hp_mode = validate_hp_mode(args.hp_mode)
     hp_dim = hp_dim_from_mode(args.hp_mode)
     search_dim = int(args.arch_nz) + hp_dim

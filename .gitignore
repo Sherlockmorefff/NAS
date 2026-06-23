@@ -15,3 +15,7 @@ results/
 # Local LHS experiment outputs
 results-1-LHS/
 logs-LHS/
+# 忽略实验结果分析
+results_analysis_bundle/
+result*
+log*
