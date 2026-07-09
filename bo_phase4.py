@@ -1,4 +1,4 @@
-"""Phase 4 BO search using an offline accuracy GP and pure qLogEI.
+"""Phase 4 BO search using checkpoint or scratch accuracy GP initialization and pure qLogEI.
 
 Search vector:
 
@@ -145,7 +145,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n_extra", type=int, default=128)
     parser.add_argument("--use_conditional_kernel", action="store_true")
 
-    parser.add_argument("--gp_checkpoint", required=True)
+    parser.add_argument("--gp_init_mode", choices=("checkpoint", "scratch"), default="checkpoint")
+    parser.add_argument("--gp_checkpoint", default=None)
+    parser.add_argument("--scratch_gp_min_points", type=int, default=3)
     parser.add_argument("--gp_update_mode", choices=("warm_refit", "append_only"), default="warm_refit")
     parser.add_argument("--gp_refit_every", type=int, default=5)
     parser.add_argument("--gp_refit_steps", type=int, default=20)
@@ -384,6 +386,24 @@ def _holdout_leakage_reason(
     if holdout_keys and _architecture_key_from_result(result, z_search) in holdout_keys:
         return "fixed_holdout_architecture_overlap"
     return ""
+
+
+def _null_gp_record_fields(train_size_before: int = 0, train_size_after: int = 0) -> dict[str, Any]:
+    """Prediction-record fields used before a scratch GP exists."""
+
+    return {
+        "gp_pred_mean": None,
+        "gp_pred_std": None,
+        "gp_pred_95_low": None,
+        "gp_pred_95_high": None,
+        "gp_residual": None,
+        "gp_abs_error": None,
+        "gp_squared_error": None,
+        "gp_standardized_residual": None,
+        "gp_covered_by_95": None,
+        "gp_train_size_before": int(train_size_before),
+        "gp_train_size_after": int(train_size_after),
+    }
 
 
 def history_record(
@@ -683,10 +703,10 @@ def _append_eval(
     step: int,
     record_type: str,
     logger,
-    predictor: AccuracyGPPredictor,
+    predictor: AccuracyGPPredictor | None,
     prediction_records: list[dict[str, Any]],
     gp_stage: str,
-    logei_value: float,
+    logei_value: float | None,
     update_online: bool,
     online_valid_count: int,
     condition_mask: list[float],
@@ -695,25 +715,37 @@ def _append_eval(
     """Predict, evaluate, record, and optionally update in that strict order."""
 
     step_started = time.monotonic()
-    train_size_before = predictor.train_size
-    prediction = predictor.predict(
-        z_search,
-        condition_mask=condition_mask if predictor.use_conditional_kernel else None,
-    )
+    if update_online and predictor is None:
+        raise RuntimeError("online GP update requested before a GP predictor exists")
+    train_size_before = 0 if predictor is None else predictor.train_size
+    prediction: dict[str, float] | None = None
+    if predictor is not None:
+        prediction = predictor.predict(
+            z_search,
+            condition_mask=condition_mask if predictor.use_conditional_kernel else None,
+        )
     eval_started = time.monotonic()
     z_search, result = eval_candidate(vae, z_search, data, in_ch, out_ch, args, device)
     eval_seconds = time.monotonic() - eval_started
     acc = float(result.get("val_acc", 0.0))
     valid = bool(result.get("valid", False))
-    gp_update_skipped_reason = _holdout_leakage_reason(predictor, z_search, result, valid)
+    gp_update_skipped_reason = (
+        "invalid_sample" if predictor is None and not valid
+        else "" if predictor is None
+        else _holdout_leakage_reason(predictor, z_search, result, valid)
+    )
     safe_for_gp_training = valid and not gp_update_skipped_reason
-    gp_fields = prediction_record_fields(prediction, acc, train_size_before, train_size_before)
+    gp_fields = (
+        _null_gp_record_fields(train_size_before, train_size_before)
+        if prediction is None
+        else prediction_record_fields(prediction, acc, train_size_before, train_size_before)
+    )
     gp_fields.update(
         {
-            "logei": float(logei_value),
+            "logei": None if logei_value is None else float(logei_value),
             "best_val_before": None if best_acc is None else float(best_acc),
             "gp_update_mode": args.gp_update_mode,
-            "gp_checkpoint_source": args.gp_checkpoint,
+            "gp_checkpoint_source": args.gp_checkpoint if args.gp_init_mode == "checkpoint" else None,
             "gp_stage": gp_stage,
             "gp_update_performed": False,
             "gp_update_skipped_reason": gp_update_skipped_reason,
@@ -744,6 +776,7 @@ def _append_eval(
     if update_online and safe_for_gp_training:
         update_started = time.monotonic()
         try:
+            assert predictor is not None
             predictor.append_observation(
                 z_search,
                 acc,
@@ -779,7 +812,12 @@ def _append_eval(
         f"drop={float(hp.get('dropout', result.get('dropout', 0.0))):.3f} "
         f"hidden={int(hp.get('hidden_dim', result.get('hidden_dim', 64)))} "
         f"l2={float(hp.get('weight_decay', hp.get('l2', result.get('l2', 0.0)))):.1e} "
-        f"valid={valid} gp={prediction['mean']:.4f}+/-{prediction['std']:.4f}"
+        f"valid={valid} "
+        + (
+            "gp=None"
+            if prediction is None
+            else f"gp={prediction['mean']:.4f}+/-{prediction['std']:.4f}"
+        )
     )
     return acc, valid, condition_mask, safe_for_gp_training
 
@@ -810,7 +848,7 @@ def _training_best(predictor: AccuracyGPPredictor) -> float:
 
 
 def _score_logei(
-    predictor: AccuracyGPPredictor,
+    predictor: AccuracyGPPredictor | None,
     z_search: torch.Tensor,
     condition_mask: list[float],
     best_f: float,
@@ -846,9 +884,17 @@ def run_gmm_init(
     if int(args.gmm_init_trials) <= 0:
         logger.info("Skipping GMM init: gmm_init_trials <= 0")
         return step
+    if args.gp_init_mode == "scratch":
+        logger.info(
+            "Skipping GMM init in scratch GP mode: weighted GMM requires previous history, "
+            "and scratch mode is configured to avoid old history."
+        )
+        return step
     if not args.gmm_init_history:
         logger.info("Skipping GMM init: no --gmm_init_history provided")
         return step
+    if predictor is None:
+        raise RuntimeError("checkpoint-mode GMM scoring requires a loaded GP predictor")
 
     search_dim = ARCH_NZ + hp_dim_from_mode(args.hp_mode)
     args.search_dim = search_dim
@@ -923,6 +969,135 @@ def run_gmm_init(
     return step
 
 
+def _scratch_random_candidate(args: argparse.Namespace, seed: int) -> torch.Tensor:
+    unit = torch.tensor(
+        _sample_unit_lhs(1, _search_dim(args), int(seed)),
+        dtype=torch.float32,
+    )
+    raw = denormalize_search_vector(
+        unit,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+    ).reshape(-1)
+    clipped = clip_z_search_by_mode(raw, args.hp_mode, ARCH_NZ, args.z_bound)
+    return torch.tensor(clipped, dtype=torch.float32)
+
+
+def _ensure_scratch_min_points(
+    vae: JointSpaceVAE,
+    data,
+    in_ch: int,
+    out_ch: int,
+    args: argparse.Namespace,
+    device: torch.device,
+    logger,
+    history: list[dict[str, Any]],
+    X_obs: list[torch.Tensor],
+    Y_obs: list[float],
+    prediction_records: list[dict[str, Any]],
+    init_valid: list[tuple[torch.Tensor, float, list[float]]],
+    step: int,
+) -> int:
+    required = int(args.scratch_gp_min_points)
+    if len(init_valid) >= required:
+        return step
+    max_extra = max(int(args.n_lhs_candidates), required * 10, 10)
+    logger.warning(
+        "Scratch GP has %d valid init samples; sampling up to %d extra LHS/random points to reach %d.",
+        len(init_valid), max_extra, required,
+    )
+    attempts = 0
+    while len(init_valid) < required and attempts < max_extra:
+        z = _scratch_random_candidate(args, int(args.seed) + 170003 + attempts)
+        condition_mask = _mask_for_candidate(vae, z, args, device, logger)
+        best_before = max(Y_obs) if Y_obs else None
+        acc, valid, used_mask, safe_for_gp_training = _append_eval(
+            vae,
+            z,
+            data,
+            in_ch,
+            out_ch,
+            args,
+            device,
+            history,
+            X_obs,
+            Y_obs,
+            step,
+            "scratch_extra_init",
+            logger,
+            None,
+            prediction_records,
+            "scratch_init_no_gp",
+            None,
+            False,
+            0,
+            condition_mask,
+            best_acc=best_before,
+        )
+        if safe_for_gp_training:
+            init_valid.append((z, acc, used_mask))
+        step += 1
+        attempts += 1
+    if len(init_valid) < required:
+        raise RuntimeError(
+            f"cold-start GP training requires at least {required} valid initialization "
+            f"samples, but only {len(init_valid)} were collected after {attempts} extra attempts"
+        )
+    return step
+
+
+def _fit_scratch_predictor(
+    init_valid: list[tuple[torch.Tensor, float, list[float]]],
+    args: argparse.Namespace,
+    device: torch.device,
+    logger,
+) -> AccuracyGPPredictor:
+    if len(init_valid) < int(args.scratch_gp_min_points):
+        raise RuntimeError(
+            f"scratch GP requires at least {args.scratch_gp_min_points} valid samples, got {len(init_valid)}"
+        )
+    init_X = torch.stack([item[0] for item in init_valid])
+    init_y = [item[1] for item in init_valid]
+    init_masks = [item[2] for item in init_valid]
+    metadata = {
+        "gp_init_mode": "scratch",
+        "offline_train_size": 0,
+        "used_previous_history": False,
+        "used_offline_checkpoint": False,
+        "scratch_initial_train_size": int(len(init_valid)),
+        "dataset": "Cora",
+        "metric": "val_acc",
+        "eval_epochs": int(args.eval_epochs),
+        "patience": int(args.patience),
+        "vae_checkpoint": args.checkpoint,
+        "vae_version": args.version,
+        "seed": int(args.seed),
+    }
+    started = time.monotonic()
+    predictor = AccuracyGPPredictor.fit_offline(
+        init_X,
+        init_y,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        use_conditional_kernel=bool(args.use_conditional_kernel),
+        condition_masks=init_masks if args.use_conditional_kernel else None,
+        metadata=metadata,
+        device=device,
+        fit_steps=int(args.gp_refit_steps),
+    )
+    predictor.offline_train_size = 0
+    predictor.metadata.update(metadata)
+    path = os.path.join(args.output, "accuracy_gp_scratch_initial.pt")
+    predictor.save(path)
+    logger.info(
+        "Scratch GP initial fit: train_size=%d seconds=%.3f saved=%s",
+        predictor.train_size, time.monotonic() - started, path,
+    )
+    return predictor
+
+
 def run_bo(
     vae: JointSpaceVAE,
     data,
@@ -931,7 +1106,7 @@ def run_bo(
     args: argparse.Namespace,
     device: torch.device,
     logger,
-    predictor: AccuracyGPPredictor,
+    predictor: AccuracyGPPredictor | None,
 ) -> None:
     history: list[dict[str, Any]] = []
     X_obs: list[torch.Tensor] = []
@@ -943,6 +1118,8 @@ def run_bo(
     run_started = time.monotonic()
 
     logger.info(f"\n[Step 1] LHS init: n_init={args.n_init}")
+    logger.info(f"  gp_init_mode={args.gp_init_mode}")
+    logger.info("  adaptive sampling budgets count online BO samples after initial GP fit")
     logger.info(f"  hp_mode={args.hp_mode}")
     logger.info(f"  hp_dim={hp_dim_from_mode(args.hp_mode)}")
     logger.info(f"  hp_names={hp_names_from_mode(args.hp_mode)}")
@@ -954,10 +1131,15 @@ def run_bo(
     for z in tqdm(initial_points(args, logger), desc="LHS init"):
         condition_mask = _mask_for_candidate(vae, z, args, device, logger)
         best_before = max(Y_obs) if Y_obs else None
-        logei_value = _score_logei(
-            predictor, z, condition_mask,
-            best_before if best_before is not None else _training_best(predictor),
-        )
+        if predictor is None:
+            logei_value = None
+            gp_stage = "scratch_init_no_gp"
+        else:
+            logei_value = _score_logei(
+                predictor, z, condition_mask,
+                best_before if best_before is not None else _training_best(predictor),
+            )
+            gp_stage = "offline_init"
         acc, valid, used_mask, safe_for_gp_training = _append_eval(
             vae,
             z,
@@ -974,7 +1156,7 @@ def run_bo(
             logger,
             predictor,
             prediction_records,
-            "offline_init",
+            gp_stage,
             logei_value,
             False,
             0,
@@ -1005,14 +1187,46 @@ def run_bo(
         step,
     )
 
-    if not init_valid:
+    if args.gp_init_mode == "scratch":
+        step = _ensure_scratch_min_points(
+            vae,
+            data,
+            in_ch,
+            out_ch,
+            args,
+            device,
+            logger,
+            history,
+            X_obs,
+            Y_obs,
+            prediction_records,
+            init_valid,
+            step,
+        )
+        predictor = _fit_scratch_predictor(init_valid, args, device, logger)
+        logger.info(
+            "Scratch init summary: scratch_init_samples=%d scratch_init_valid_samples=%d "
+            "total_evaluated_samples=%d",
+            len([row for row in prediction_records if row["gp_stage"] == "scratch_init_no_gp"]),
+            len(init_valid),
+            len(history),
+        )
+    elif not init_valid:
         logger.error("All LHS/warm-start/GMM initialization points were invalid.")
+        assert predictor is not None
         predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
         summary = {
+            "gp_init_mode": args.gp_init_mode,
+            "used_previous_history": True,
+            "used_offline_checkpoint": True,
             "converged": False,
             "stop_reason": "no_valid_initialization_samples",
             "offline_train_size": predictor.offline_train_size,
             "online_added": 0,
+            "scratch_init_samples": 0,
+            "scratch_init_valid_samples": 0,
+            "online_bo_samples": 0,
+            "total_evaluated_samples": len(history),
             "gp_train_size_final": predictor.train_size,
             "best_actual_val_acc": float(max(Y_obs)) if Y_obs else 0.0,
             "elapsed_seconds": float(time.monotonic() - run_started),
@@ -1020,8 +1234,8 @@ def run_bo(
         atomic_json_dump(summary, os.path.join(args.output, "gp_metrics.json"))
         _save(history, X_obs, Y_obs, args, logger, "final", predictor=predictor, summary=summary)
         return
-
-    if init_valid:
+    else:
+        assert predictor is not None
         init_X = torch.stack([item[0] for item in init_valid])
         init_y = [item[1] for item in init_valid]
         init_masks = [item[2] for item in init_valid]
@@ -1036,6 +1250,7 @@ def run_bo(
             len(init_valid), predictor.train_size, time.monotonic() - update_started,
         )
 
+    assert predictor is not None
     best_acc = max(Y_obs)
     logger.info(
         f"\n[Step 3] BO: n_iter={args.n_iter} "
@@ -1153,8 +1368,9 @@ def run_bo(
         if args.adaptive_sampling:
             stop_reason = "sample_budget_reached"
 
+    online_bo_samples = len([row for row in prediction_records if row["gp_stage"] == "online_bo"])
     final_decision = monitor.stop_decision(
-        len([row for row in prediction_records if row["gp_stage"] == "online_bo"]),
+        online_bo_samples,
         time.monotonic() - run_started,
         monitor.history[-1]["estimated_next_step_seconds"] if monitor.history else 0.0,
     )
@@ -1175,10 +1391,19 @@ def run_bo(
 
     predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
     summary = {
+        "gp_init_mode": args.gp_init_mode,
+        "used_previous_history": bool(args.gp_init_mode == "checkpoint"),
+        "used_offline_checkpoint": bool(args.gp_init_mode == "checkpoint"),
         "converged": bool(final_decision.converged),
         "stop_reason": stop_reason,
         "offline_train_size": int(predictor.offline_train_size),
         "online_added": int(predictor.train_size - predictor.offline_train_size),
+        "scratch_init_samples": int(
+            len([row for row in prediction_records if row["gp_stage"] == "scratch_init_no_gp"])
+        ),
+        "scratch_init_valid_samples": int(len(init_valid)) if args.gp_init_mode == "scratch" else 0,
+        "online_bo_samples": int(online_bo_samples),
+        "total_evaluated_samples": int(len(history)),
         "gp_train_size_final": predictor.train_size,
         "best_actual_val_acc": float(max(Y_obs)),
         "elapsed_seconds": float(time.monotonic() - run_started),
@@ -1312,9 +1537,12 @@ def main() -> None:
         "gp_refit_every", "gp_refit_steps", "gp_save_every", "min_bo_samples",
         "max_bo_samples", "convergence_check_every", "convergence_patience",
         "prequential_window", "best_acc_patience", "probe_pool_size",
+        "scratch_gp_min_points",
     ):
         if int(getattr(args, name)) <= 0:
             raise ValueError(f"--{name} must be positive")
+    if int(args.scratch_gp_min_points) < 2:
+        raise ValueError("--scratch_gp_min_points must be at least 2 for Exact GP training")
     if int(args.n_extra) < 0:
         raise ValueError("--n_extra must be non-negative")
     if int(args.min_bo_samples) > int(args.max_bo_samples):
@@ -1324,6 +1552,14 @@ def main() -> None:
     if float(args.novelty_w) != 0.0:
         warnings.warn(
             "--novelty_w is deprecated and ignored; Phase4 candidate selection is pure qLogExpectedImprovement",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if args.gp_init_mode == "checkpoint" and not args.gp_checkpoint:
+        raise ValueError("--gp_checkpoint is required when --gp_init_mode checkpoint")
+    if args.gp_init_mode == "scratch" and args.gp_checkpoint:
+        warnings.warn(
+            "--gp_checkpoint is ignored when --gp_init_mode scratch",
             RuntimeWarning,
             stacklevel=2,
         )
@@ -1342,32 +1578,43 @@ def main() -> None:
     logger.info(f"Device={device} ARCH_NZ={ARCH_NZ} SEARCH_DIM={search_dim}")
     logger.info(f"hp_mode={args.hp_mode} hp_dim={hp_dim} hp_names={hp_names_from_mode(args.hp_mode)}")
     logger.info(f"z_bound={args.z_bound}")
+    logger.info(f"gp_init_mode={args.gp_init_mode}")
 
     vae = load_vae(args, device, logger)
     data, in_ch, out_ch = load_cora(args.cora_root, device, logger)
     logger.info(f"Cora: {in_ch} features, {out_ch} classes")
 
-    predictor = AccuracyGPPredictor.load(
-        args.gp_checkpoint,
-        device=device,
-        expected={
-            "arch_nz": ARCH_NZ,
-            "hp_mode": args.hp_mode,
-            "search_dim": search_dim,
-            "z_bound": float(args.z_bound),
-            "dataset": "Cora",
-            "eval_epochs": int(args.eval_epochs),
-            "patience": int(args.patience),
-            "vae_checkpoint": args.checkpoint,
-            "vae_version": os.path.basename(args.checkpoint),
-            "use_conditional_kernel": bool(args.use_conditional_kernel),
-        },
-    )
-    holdout_size = 0 if predictor.holdout_Y is None else int(predictor.holdout_Y.numel())
-    logger.info(
-        "Accuracy GP loaded: source=%s model=SingleTaskGP kernel=%s offline_train=%d holdout=%d",
-        args.gp_checkpoint, predictor.kernel_type, predictor.offline_train_size, holdout_size,
-    )
+    predictor: AccuracyGPPredictor | None = None
+    if args.gp_init_mode == "checkpoint":
+        predictor = AccuracyGPPredictor.load(
+            args.gp_checkpoint,
+            device=device,
+            expected={
+                "arch_nz": ARCH_NZ,
+                "hp_mode": args.hp_mode,
+                "search_dim": search_dim,
+                "z_bound": float(args.z_bound),
+                "dataset": "Cora",
+                "eval_epochs": int(args.eval_epochs),
+                "patience": int(args.patience),
+                "vae_checkpoint": args.checkpoint,
+                "vae_version": os.path.basename(args.checkpoint),
+                "use_conditional_kernel": bool(args.use_conditional_kernel),
+            },
+        )
+        holdout_size = 0 if predictor.holdout_Y is None else int(predictor.holdout_Y.numel())
+        logger.info(
+            "Accuracy GP loaded: source=%s model=SingleTaskGP kernel=%s offline_train=%d holdout=%d",
+            args.gp_checkpoint, predictor.kernel_type, predictor.offline_train_size, holdout_size,
+        )
+    else:
+        logger.info(
+            "Scratch GP mode: no previous history and no offline GP checkpoint will be used; "
+            "initial GP will be trained after at least %d valid initialization samples.",
+            int(args.scratch_gp_min_points),
+        )
+        if args.gmm_init_history:
+            logger.warning("Ignoring --gmm_init_history in scratch GP mode to avoid previous-history leakage.")
 
     run_bo(vae, data, in_ch, out_ch, args, device, logger, predictor)
     elapsed = time.time() - start_time

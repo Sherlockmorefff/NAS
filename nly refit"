@@ -1,0 +1,654 @@
+[1mdiff --git a/surrogate/accuracy_gp.py b/surrogate/accuracy_gp.py[m
+[1mindex eecb10f..baf086c 100644[m
+[1m--- a/surrogate/accuracy_gp.py[m
+[1m+++ b/surrogate/accuracy_gp.py[m
+[36m@@ -3,23 +3,90 @@[m
+ from __future__ import annotations[m
+ [m
+ import math[m
+[32m+[m[32mfrom contextlib import ExitStack, contextmanager[m
+ from pathlib import Path[m
+ from typing import Any[m
+ [m
+[32m+[m[32mimport gpytorch[m
+ import numpy as np[m
+ import torch[m
+ from botorch.acquisition.logei import qLogExpectedImprovement[m
+ from botorch.fit import fit_gpytorch_mll[m
+ from botorch.models import SingleTaskGP[m
+[32m+[m[32mfrom gpytorch.constraints import GreaterThan[m
+ from gpytorch.kernels import Kernel, ScaleKernel[m
+ from gpytorch.mlls import ExactMarginalLogLikelihood[m
+ [m
+[32m+[m[32mtry:[m
+[32m+[m[32m    from linear_operator.utils.errors import NotPSDError[m
+[32m+[m[32mexcept ImportError:  # pragma: no cover - compatibility with older GPyTorch stacks.[m
+[32m+[m[32m    from gpytorch.utils.errors import NotPSDError[m
+[32m+[m
+ from hp_modes import hp_dim_from_mode, validate_hp_mode[m
+ from surrogate.checkpoint_io import atomic_torch_save, torch_load_compat[m
+ [m
+ [m
+ X_TRANSFORM_VERSION = "fixed_search_domain_v1"[m
+ CHECKPOINT_FORMAT_VERSION = 1[m
+[32m+[m[32mGP_NOISE_FLOOR = 1e-4[m
+[32m+[m[32mGP_RECOVERY_NOISE_FLOORS = (GP_NOISE_FLOOR, 1e-3, 1e-2)[m
+[32m+[m[32mGP_CHOLESKY_JITTERS = (1e-6, 1e-5, 1e-4, 1e-3, 1e-2)[m
+[32m+[m[32mGP_CHOLESKY_MAX_TRIES = 8[m
+[32m+[m[32mEXACT_DUPLICATE_ATOL = 1e-10[m
+[32m+[m
+[32m+[m
+[32m+[m[32m@contextmanager[m
+[32m+[m[32mdef _safe_gpytorch_context(jitter: float = GP_NOISE_FLOOR):[m
+[32m+[m[32m    """Use conservative GPyTorch linear algebra settings for Exact GP calls."""[m
+[32m+[m
+[32m+[m[32m    with ExitStack() as stack:[m
+[32m+[m[32m        cholesky_jitter = getattr(gpytorch.settings, "cholesky_jitter", None)[m
+[32m+[m[32m        if cholesky_jitter is not None:[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                stack.enter_context([m
+[32m+[m[32m                    cholesky_jitter([m
+[32m+[m[32m                        float_value=float(jitter),[m
+[32m+[m[32m                        double_value=float(jitter),[m
+[32m+[m[32m                        half_value=float(jitter),[m
+[32m+[m[32m                    )[m
+[32m+[m[32m                )[m
+[32m+[m[32m            except TypeError:[m
+[32m+[m[32m                stack.enter_context(cholesky_jitter(float(jitter)))[m
+[32m+[m[32m        cholesky_max_tries = getattr(gpytorch.settings, "cholesky_max_tries", None)[m
+[32m+[m[32m        if cholesky_max_tries is not None:[m
+[32m+[m[32m            stack.enter_context(cholesky_max_tries(GP_CHOLESKY_MAX_TRIES))[m
+[32m+[m[32m        fast_pred_var = getattr(gpytorch.settings, "fast_pred_var", None)[m
+[32m+[m[32m        if fast_pred_var is not None:[m
+[32m+[m[32m            stack.enter_context(fast_pred_var(False))[m
+[32m+[m[32m        yield[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef _is_recoverable_gp_error(exc: BaseException) -> bool:[m
+[32m+[m[32m    if isinstance(exc, NotPSDError):[m
+[32m+[m[32m        return True[m
+[32m+[m[32m    if not isinstance(exc, RuntimeError):[m
+[32m+[m[32m        return False[m
+[32m+[m[32m    text = str(exc).lower()[m
+[32m+[m[32m    return any([m
+[32m+[m[32m        token in text[m
+[32m+[m[32m        for token in ([m
+[32m+[m[32m            "not positive definite",[m
+[32m+[m[32m            "notpsd",[m
+[32m+[m[32m            "psd",[m
+[32m+[m[32m            "cholesky",[m
+[32m+[m[32m            "singular",[m
+[32m+[m[32m            "covariance",[m
+[32m+[m[32m            "non-finite gp posterior",[m
+[32m+[m[32m        )[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m
+[32m+[m[32mclass StableQLogExpectedImprovement(qLogExpectedImprovement):[m
+[32m+[m[32m    """qLogExpectedImprovement evaluated under stable GPyTorch settings."""[m
+[32m+[m
+[32m+[m[32m    def forward(self, X: torch.Tensor) -> torch.Tensor:[m
+[32m+[m[32m        with _safe_gpytorch_context(GP_NOISE_FLOOR):[m
+[32m+[m[32m            return super().forward(X)[m
+ [m
+ [m
+ def _expected_dim(arch_nz: int, hp_mode: str) -> int:[m
+[36m@@ -163,6 +230,7 @@[m [mclass AccuracyGPPredictor:[m
+         self.device = torch.device(device)[m
+         self.train_X_norm = torch.empty(0, self.search_dim, dtype=torch.double, device=self.device)[m
+         self.train_Y_norm = torch.empty(0, 1, dtype=torch.double, device=self.device)[m
+[32m+[m[32m        self.train_observation_counts = torch.empty(0, dtype=torch.long, device=self.device)[m
+         self.train_condition_masks: torch.Tensor | None = None[m
+         self.model: SingleTaskGP | None = None[m
+         self.holdout_X_raw: torch.Tensor | None = None[m
+[36m@@ -211,6 +279,113 @@[m [mclass AccuracyGPPredictor:[m
+         masks = self._validate_masks(condition_masks, X_norm.shape[0])[m
+         return torch.cat((X_norm, masks), dim=-1)[m
+ [m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def _clone_state_dict(model: SingleTaskGP | None) -> dict[str, torch.Tensor] | None:[m
+[32m+[m[32m        if model is None:[m
+[32m+[m[32m            return None[m
+[32m+[m[32m        return {[m
+[32m+[m[32m            key: value.detach().clone()[m
+[32m+[m[32m            for key, value in model.state_dict().items()[m
+[32m+[m[32m            if isinstance(value, torch.Tensor)[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def _coerce_state_value(value: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:[m
+[32m+[m[32m        if reference.is_floating_point():[m
+[32m+[m[32m            return value.to(device=reference.device, dtype=reference.dtype)[m
+[32m+[m[32m        return value.to(device=reference.device)[m
+[32m+[m
+[32m+[m[32m    @classmethod[m
+[32m+[m[32m    def _load_compatible_state([m
+[32m+[m[32m        cls,[m
+[32m+[m[32m        model: SingleTaskGP,[m
+[32m+[m[32m        state_dict: dict[str, torch.Tensor] | None,[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        strict_first: bool = True,[m
+[32m+[m[32m    ) -> None:[m
+[32m+[m[32m        if state_dict is None:[m
+[32m+[m[32m            return[m
+[32m+[m[32m        strict_load_failed = False[m
+[32m+[m[32m        if strict_first:[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                model.load_state_dict(state_dict, strict=True)[m
+[32m+[m[32m                return[m
+[32m+[m[32m            except RuntimeError:[m
+[32m+[m[32m                strict_load_failed = True[m
+[32m+[m
+[32m+[m[32m        current = model.state_dict()[m
+[32m+[m[32m        compatible: dict[str, torch.Tensor] = {}[m
+[32m+[m[32m        for key, value in state_dict.items():[m
+[32m+[m[32m            if key not in current or not isinstance(value, torch.Tensor):[m
+[32m+[m[32m                continue[m
+[32m+[m[32m            reference = current[key][m
+[32m+[m[32m            if tuple(value.shape) == tuple(reference.shape):[m
+[32m+[m[32m                compatible[key] = cls._coerce_state_value(value, reference)[m
+[32m+[m[32m                continue[m
+[32m+[m[32m            # Backward compatibility for early conditional-kernel checkpoints[m
+[32m+[m[32m            # that stored feature-only ARD lengthscales.  The current kernel is[m
+[32m+[m[32m            # built over [features, masks], so duplicate a neutral value into[m
+[32m+[m[32m            # the mask half while preserving the learned feature half.[m
+[32m+[m[32m            if ([m
+[32m+[m[32m                key.endswith("raw_lengthscale")[m
+[32m+[m[32m                and value.ndim >= 1[m
+[32m+[m[32m                and reference.ndim == value.ndim[m
+[32m+[m[32m                and tuple(value.shape[:-1]) == tuple(reference.shape[:-1])[m
+[32m+[m[32m                and int(reference.shape[-1]) == 2 * int(value.shape[-1])[m
+[32m+[m[32m            ):[m
+[32m+[m[32m                expanded = reference.detach().clone()[m
+[32m+[m[32m                coerced = cls._coerce_state_value(value, reference)[m
+[32m+[m[32m                expanded[..., : value.shape[-1]] = coerced[m
+[32m+[m[32m                expanded[..., value.shape[-1] :] = coerced.mean(dim=-1, keepdim=True).expand([m
+[32m+[m[32m                    *coerced.shape[:-1],[m
+[32m+[m[32m                    reference.shape[-1] - value.shape[-1],[m
+[32m+[m[32m                )[m
+[32m+[m[32m                compatible[key] = expanded[m
+[32m+[m[32m        if not compatible:[m
+[32m+[m[32m            if strict_load_failed:[m
+[32m+[m[32m                model.load_state_dict(state_dict, strict=True)[m
+[32m+[m[32m                return[m
+[32m+[m[32m            model.load_state_dict(state_dict, strict=True)[m
+[32m+[m[32m            return[m
+[32m+[m[32m        model.load_state_dict(compatible, strict=False)[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def _ensure_likelihood_noise_floor(model: SingleTaskGP, noise_floor: float = GP_NOISE_FLOOR) -> None:[m
+[32m+[m[32m        likelihood = getattr(model, "likelihood", None)[m
+[32m+[m[32m        noise_covar = getattr(likelihood, "noise_covar", None)[m
+[32m+[m[32m        if likelihood is None or noise_covar is None or not hasattr(likelihood, "noise"):[m
+[32m+[m[32m            return[m
+[32m+[m[32m        floor = float(noise_floor)[m
+[32m+[m[32m        if not math.isfinite(floor) or floor <= 0.0:[m
+[32m+[m[32m            raise ValueError(f"noise_floor must be positive and finite, got {noise_floor}")[m
+[32m+[m[32m        constraint_update_failed = False[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            constraint = getattr(noise_covar, "raw_noise_constraint", None)[m
+[32m+[m[32m            lower_bound = None if constraint is None else getattr(constraint, "lower_bound", None)[m
+[32m+[m[32m            constraint_floor = floor * 0.999[m
+[32m+[m[32m            if lower_bound is None or float(torch.as_tensor(lower_bound).detach().max().cpu()) < constraint_floor:[m
+[32m+[m[32m                noise_covar.register_constraint("raw_noise", GreaterThan(constraint_floor))[m
+[32m+[m[32m        except (AttributeError, RuntimeError, TypeError, ValueError):[m
+[32m+[m[32m            # Some likelihood variants do not expose replaceable raw_noise[m
+[32m+[m[32m            # constraints.  The explicit noise clamp below is still the[m
+[32m+[m[32m            # important numerical guard for this predictor.[m
+[32m+[m[32m            constraint_update_failed = True[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            with torch.no_grad():[m
+[32m+[m[32m                current_noise = likelihood.noise.detach()[m
+[32m+[m[32m                finite_noise = torch.nan_to_num([m
+[32m+[m[32m                    current_noise,[m
+[32m+[m[32m                    nan=floor,[m
+[32m+[m[32m                    posinf=floor,[m
+[32m+[m[32m                    neginf=floor,[m
+[32m+[m[32m                )[m
+[32m+[m[32m                clamped_noise = finite_noise.clamp_min(floor)[m
+[32m+[m[32m                if not torch.allclose(current_noise, clamped_noise):[m
+[32m+[m[32m                    likelihood.noise = clamped_noise.to(device=current_noise.device, dtype=current_noise.dtype)[m
+[32m+[m[32m        except (AttributeError, RuntimeError, TypeError, ValueError):[m
+[32m+[m[32m            if not constraint_update_failed:[m
+[32m+[m[32m                return[m
+[32m+[m
+     def _build_model(self) -> SingleTaskGP:[m
+         if self.train_size < 2:[m
+             raise ValueError("at least two training samples are required for an Exact GP")[m
+[36m@@ -227,28 +402,52 @@[m [mclass AccuracyGPPredictor:[m
+             input_transform=None,[m
+             outcome_transform=None,[m
+         )[m
+[31m-        return model.to(device=self.device, dtype=torch.double)[m
+[32m+[m[32m        model = model.to(device=self.device, dtype=torch.double)[m
+[32m+[m[32m        self._ensure_likelihood_noise_floor(model, GP_NOISE_FLOOR)[m
+[32m+[m[32m        return model[m
+ [m
+     @staticmethod[m
+[31m-    def _optimize_model(model: SingleTaskGP, steps: int | None = None) -> None:[m
+[32m+[m[32m    def _optimize_model([m
+[32m+[m[32m        model: SingleTaskGP,[m
+[32m+[m[32m        steps: int | None = None,[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        noise_floor: float = GP_NOISE_FLOOR,[m
+[32m+[m[32m    ) -> None:[m
+         mll = ExactMarginalLogLikelihood(model.likelihood, model)[m
+[31m-        if steps is None:[m
+[31m-            fit_gpytorch_mll(mll)[m
+[31m-            return[m
+[31m-        if int(steps) <= 0:[m
+[32m+[m[32m        AccuracyGPPredictor._ensure_likelihood_noise_floor(model, noise_floor)[m
+[32m+[m[32m        if steps is not None and int(steps) <= 0:[m
+             raise ValueError("refit steps must be positive")[m
+[31m-        model.train()[m
+[31m-        model.likelihood.train()[m
+[31m-        optimizer = torch.optim.Adam(model.parameters(), lr=0.05)[m
+[31m-        targets = model.train_targets[m
+[31m-        for _ in range(int(steps)):[m
+[31m-            optimizer.zero_grad(set_to_none=True)[m
+[31m-            output = model(*model.train_inputs)[m
+[31m-            loss = -mll(output, targets).sum()[m
+[31m-            if not torch.isfinite(loss):[m
+[31m-                raise RuntimeError("non-finite marginal likelihood during GP refit")[m
+[31m-            loss.backward()[m
+[31m-            optimizer.step()[m
+[32m+[m[32m        last_exc: BaseException | None = None[m
+[32m+[m[32m        for floor in GP_RECOVERY_NOISE_FLOORS:[m
+[32m+[m[32m            floor = max(float(floor), float(noise_floor))[m
+[32m+[m[32m            AccuracyGPPredictor._ensure_likelihood_noise_floor(model, floor)[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                with _safe_gpytorch_context(max(GP_NOISE_FLOOR, floor)):[m
+[32m+[m[32m                    if steps is None:[m
+[32m+[m[32m                        fit_gpytorch_mll(mll)[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                        model.train()[m
+[32m+[m[32m                        model.likelihood.train()[m
+[32m+[m[32m                        optimizer = torch.optim.Adam(model.parameters(), lr=0.05)[m
+[32m+[m[32m                        targets = model.train_targets[m
+[32m+[m[32m                        for _ in range(int(steps)):[m
+[32m+[m[32m                            optimizer.zero_grad(set_to_none=True)[m
+[32m+[m[32m                            output = model(*model.train_inputs)[m
+[32m+[m[32m                            loss = -mll(output, targets).sum()[m
+[32m+[m[32m                            if not torch.isfinite(loss):[m
+[32m+[m[32m                                raise RuntimeError("non-finite marginal likelihood during GP refit")[m
+[32m+[m[32m                            loss.backward()[m
+[32m+[m[32m                            optimizer.step()[m
+[32m+[m[32m                            AccuracyGPPredictor._ensure_likelihood_noise_floor(model, floor)[m
+[32m+[m[32m                AccuracyGPPredictor._ensure_likelihood_noise_floor(model, floor)[m
+[32m+[m[32m                return[m
+[32m+[m[32m            except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m                if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                    raise[m
+[32m+[m[32m                last_exc = exc[m
+[32m+[m[32m        raise RuntimeError([m
+[32m+[m[32m            "GP hyperparameter optimization remained non-PSD after jitter/noise recovery"[m
+[32m+[m[32m        ) from last_exc[m
+ [m
+     @classmethod[m
+     def fit_offline([m
+[36m@@ -292,12 +491,13 @@[m [mclass AccuracyGPPredictor:[m
+             raw, arch_nz=arch_nz, hp_mode=hp_mode, z_bound=z_bound[m
+         ).to(dtype=torch.double, device=predictor.device)[m
+         predictor.train_Y_norm = (targets.to(predictor.device) - y_mean) / y_std[m
+[32m+[m[32m        predictor.train_observation_counts = torch.ones([m
+[32m+[m[32m            predictor.train_X_norm.shape[0], dtype=torch.long, device=predictor.device[m
+[32m+[m[32m        )[m
+         if use_conditional_kernel:[m
+             predictor.train_condition_masks = predictor._validate_masks(condition_masks, raw.shape[0])[m
+[31m-        predictor.model = predictor._build_model()[m
+[31m-        predictor._optimize_model(predictor.model, steps=fit_steps)[m
+[31m-        predictor.model.eval()[m
+[31m-        predictor.model.likelihood.eval()[m
+[32m+[m[32m        predictor._aggregate_duplicate_training_rows()[m
+[32m+[m[32m        predictor.refit(optimize=True, steps=fit_steps)[m
+         predictor.offline_train_size = predictor.train_size[m
+         if holdout_X_raw is not None:[m
+             predictor._set_holdout([m
+[36m@@ -339,6 +539,165 @@[m [mclass AccuracyGPPredictor:[m
+         )[m
+         return normalized.to(device=self.device, dtype=torch.double)[m
+ [m
+[32m+[m[32m    def _duplicate_index([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        x_norm: torch.Tensor,[m
+[32m+[m[32m        condition_mask: torch.Tensor | None = None,[m
+[32m+[m[32m    ) -> int | None:[m
+[32m+[m[32m        if self.train_size == 0:[m
+[32m+[m[32m            return None[m
+[32m+[m[32m        matches = torch.isclose([m
+[32m+[m[32m            self.train_X_norm,[m
+[32m+[m[32m            x_norm.view(1, -1),[m
+[32m+[m[32m            rtol=0.0,[m
+[32m+[m[32m            atol=EXACT_DUPLICATE_ATOL,[m
+[32m+[m[32m        ).all(dim=-1)[m
+[32m+[m[32m        if self.use_conditional_kernel:[m
+[32m+[m[32m            if self.train_condition_masks is None or condition_mask is None:[m
+[32m+[m[32m                return None[m
+[32m+[m[32m            mask_matches = torch.isclose([m
+[32m+[m[32m                self.train_condition_masks,[m
+[32m+[m[32m                condition_mask.view(1, -1),[m
+[32m+[m[32m                rtol=0.0,[m
+[32m+[m[32m                atol=EXACT_DUPLICATE_ATOL,[m
+[32m+[m[32m            ).all(dim=-1)[m
+[32m+[m[32m            matches = matches & mask_matches[m
+[32m+[m[32m        indices = torch.nonzero(matches, as_tuple=False).reshape(-1)[m
+[32m+[m[32m        return None if indices.numel() == 0 else int(indices[0].item())[m
+[32m+[m
+[32m+[m[32m    def _aggregate_observation_at(self, index: int, y_norm: torch.Tensor) -> None:[m
+[32m+[m[32m        count = self.train_observation_counts[index].to(dtype=self.train_Y_norm.dtype).clamp_min(1.0)[m
+[32m+[m[32m        self.train_Y_norm[index] = (self.train_Y_norm[index] * count + y_norm.view(1)) / (count + 1.0)[m
+[32m+[m[32m        self.train_observation_counts[index] += 1[m
+[32m+[m
+[32m+[m[32m    def _aggregate_duplicate_training_rows(self) -> None:[m
+[32m+[m[32m        if self.train_size <= 1:[m
+[32m+[m[32m            return[m
+[32m+[m[32m        old_X = self.train_X_norm[m
+[32m+[m[32m        old_Y = self.train_Y_norm[m
+[32m+[m[32m        old_masks = self.train_condition_masks[m
+[32m+[m[32m        old_counts = ([m
+[32m+[m[32m            self.train_observation_counts[m
+[32m+[m[32m            if self.train_observation_counts.shape == (old_X.shape[0],)[m
+[32m+[m[32m            else torch.ones(old_X.shape[0], dtype=torch.long, device=self.device)[m
+[32m+[m[32m        )[m
+[32m+[m[32m        keep_X: list[torch.Tensor] = [][m
+[32m+[m[32m        keep_Y: list[torch.Tensor] = [][m
+[32m+[m[32m        keep_counts: list[int] = [][m
+[32m+[m[32m        keep_masks: list[torch.Tensor] = [][m
+[32m+[m[32m        for idx in range(old_X.shape[0]):[m
+[32m+[m[32m            found = None[m
+[32m+[m[32m            for keep_idx, kept_x in enumerate(keep_X):[m
+[32m+[m[32m                same_x = torch.isclose([m
+[32m+[m[32m                    kept_x, old_X[idx], rtol=0.0, atol=EXACT_DUPLICATE_ATOL[m
+[32m+[m[32m                ).all()[m
+[32m+[m[32m                same_mask = True[m
+[32m+[m[32m                if self.use_conditional_kernel:[m
+[32m+[m[32m                    same_mask = torch.isclose([m
+[32m+[m[32m                        keep_masks[keep_idx], old_masks[idx], rtol=0.0, atol=EXACT_DUPLICATE_ATOL[m
+[32m+[m[32m                    ).all()[m
+[32m+[m[32m                if bool(same_x and same_mask):[m
+[32m+[m[32m                    found = keep_idx[m
+[32m+[m[32m                    break[m
+[32m+[m[32m            if found is None:[m
+[32m+[m[32m                keep_X.append(old_X[idx].clone())[m
+[32m+[m[32m                keep_Y.append(old_Y[idx].clone())[m
+[32m+[m[32m                keep_counts.append(int(old_counts[idx].item()))[m
+[32m+[m[32m                if self.use_conditional_kernel:[m
+[32m+[m[32m                    keep_masks.append(old_masks[idx].clone())[m
+[32m+[m[32m                continue[m
+[32m+[m[32m            old_count = float(max(keep_counts[found], 1))[m
+[32m+[m[32m            new_count = float(max(int(old_counts[idx].item()), 1))[m
+[32m+[m[32m            keep_Y[found] = (keep_Y[found] * old_count + old_Y[idx] * new_count) / (old_count + new_count)[m
+[32m+[m[32m            keep_counts[found] += int(new_count)[m
+[32m+[m[32m        if len(keep_X) == old_X.shape[0]:[m
+[32m+[m[32m            return[m
+[32m+[m[32m        self.train_X_norm = torch.stack(keep_X).to(device=self.device, dtype=torch.double)[m
+[32m+[m[32m        self.train_Y_norm = torch.stack(keep_Y).to(device=self.device, dtype=torch.double).reshape(-1, 1)[m
+[32m+[m[32m        self.train_observation_counts = torch.as_tensor(keep_counts, dtype=torch.long, device=self.device)[m
+[32m+[m[32m        if self.use_conditional_kernel:[m
+[32m+[m[32m            self.train_condition_masks = torch.stack(keep_masks).to(device=self.device, dtype=torch.double)[m
+[32m+[m
+[32m+[m[32m    @staticmethod[m
+[32m+[m[32m    def _posterior_moments([m
+[32m+[m[32m        model: SingleTaskGP,[m
+[32m+[m[32m        model_input: torch.Tensor,[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        jitter: float,[m
+[32m+[m[32m    ) -> tuple[torch.Tensor, torch.Tensor]:[m
+[32m+[m[32m        with _safe_gpytorch_context(jitter):[m
+[32m+[m[32m            posterior = model.posterior(model_input)[m
+[32m+[m[32m            mean = posterior.mean[m
+[32m+[m[32m            variance = posterior.variance[m
+[32m+[m[32m        if not torch.isfinite(mean).all() or not torch.isfinite(variance).all():[m
+[32m+[m[32m            raise RuntimeError("non-finite GP posterior during prediction")[m
+[32m+[m[32m        return mean, variance[m
+[32m+[m
+[32m+[m[32m    def _check_candidate_model_posterior([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        model: SingleTaskGP,[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        noise_floor: float,[m
+[32m+[m[32m    ) -> None:[m
+[32m+[m[32m        model.eval()[m
+[32m+[m[32m        model.likelihood.eval()[m
+[32m+[m[32m        self._ensure_likelihood_noise_floor(model, noise_floor)[m
+[32m+[m[32m        masks = None if not self.use_conditional_kernel else self.train_condition_masks[-1:][m
+[32m+[m[32m        probe = self._model_inputs(self.train_X_norm[-1:], masks)[m
+[32m+[m[32m        last_exc: BaseException | None = None[m
+[32m+[m[32m        for jitter in GP_CHOLESKY_JITTERS:[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                self._posterior_moments(model, probe, jitter=max(float(jitter), float(noise_floor)))[m
+[32m+[m[32m                return[m
+[32m+[m[32m            except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m                if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                    raise[m
+[32m+[m[32m                last_exc = exc[m
+[32m+[m[32m        raise RuntimeError([m
+[32m+[m[32m            "GP posterior remained non-PSD after jitter/noise recovery"[m
+[32m+[m[32m        ) from last_exc[m
+[32m+[m
+[32m+[m[32m    def _posterior_moments_with_recovery([m
+[32m+[m[32m        self,[m
+[32m+[m[32m        model_input: torch.Tensor,[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        purpose: str,[m
+[32m+[m[32m    ) -> tuple[torch.Tensor, torch.Tensor]:[m
+[32m+[m[32m        if self.model is None:[m
+[32m+[m[32m            raise RuntimeError("GP predictor is not fitted")[m
+[32m+[m[32m        self.model.eval()[m
+[32m+[m[32m        self.model.likelihood.eval()[m
+[32m+[m[32m        last_exc: BaseException | None = None[m
+[32m+[m[32m        for noise_floor in GP_RECOVERY_NOISE_FLOORS:[m
+[32m+[m[32m            self._ensure_likelihood_noise_floor(self.model, noise_floor)[m
+[32m+[m[32m            for jitter in GP_CHOLESKY_JITTERS:[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    return self._posterior_moments([m
+[32m+[m[32m                        self.model,[m
+[32m+[m[32m                        model_input,[m
+[32m+[m[32m                        jitter=max(float(jitter), float(noise_floor)),[m
+[32m+[m[32m                    )[m
+[32m+[m[32m                except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m                    if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                        raise[m
+[32m+[m[32m                    last_exc = exc[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            self.refit(optimize=False)[m
+[32m+[m[32m            if self.model is not None:[m
+[32m+[m[32m                self._ensure_likelihood_noise_floor(self.model, GP_RECOVERY_NOISE_FLOORS[-1])[m
+[32m+[m[32m                return self._posterior_moments([m
+[32m+[m[32m                    self.model,[m
+[32m+[m[32m                    model_input,[m
+[32m+[m[32m                    jitter=GP_CHOLESKY_JITTERS[-1],[m
+[32m+[m[32m                )[m
+[32m+[m[32m        except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m            if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                raise[m
+[32m+[m[32m            last_exc = exc[m
+[32m+[m[32m        raise RuntimeError([m
+[32m+[m[32m            f"GP posterior remained non-PSD after jitter/noise recovery during {purpose}"[m
+[32m+[m[32m        ) from last_exc[m
+[32m+[m
+     def predict_batch(self, X_raw: Any, condition_masks: Any = None) -> list[dict[str, float]]:[m
+         if self.model is None:[m
+             raise RuntimeError("GP predictor is not fitted")[m
+[36m@@ -347,9 +706,12 @@[m [mclass AccuracyGPPredictor:[m
+         self.model.eval()[m
+         self.model.likelihood.eval()[m
+         with torch.no_grad():[m
+[31m-            posterior = self.model.posterior(model_input)[m
+[31m-            means = posterior.mean.reshape(-1) * self.y_std + self.y_mean[m
+[31m-            stds = posterior.variance.clamp_min(1e-16).sqrt().reshape(-1) * self.y_std[m
+[32m+[m[32m            mean, variance = self._posterior_moments_with_recovery([m
+[32m+[m[32m                model_input,[m
+[32m+[m[32m                purpose="predict_batch",[m
+[32m+[m[32m            )[m
+[32m+[m[32m            means = mean.reshape(-1) * self.y_std + self.y_mean[m
+[32m+[m[32m            stds = variance.clamp_min(1e-16).sqrt().reshape(-1) * self.y_std[m
+         results = [][m
+         for mean_value, std_value in zip(means, stds):[m
+             mean = float(mean_value.detach().cpu())[m
+[36m@@ -371,7 +733,17 @@[m [mclass AccuracyGPPredictor:[m
+         best_normalized = (float(best_f) - self.y_mean) / self.y_std[m
+         self.model.eval()[m
+         self.model.likelihood.eval()[m
+[31m-        return qLogExpectedImprovement(self.model, best_f=best_normalized)[m
+[32m+[m[32m        self._ensure_likelihood_noise_floor(self.model, GP_NOISE_FLOOR)[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            self._check_candidate_model_posterior(self.model, noise_floor=GP_NOISE_FLOOR)[m
+[32m+[m[32m        except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m            if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                raise[m
+[32m+[m[32m            self.refit(optimize=False)[m
+[32m+[m[32m            if self.model is None:[m
+[32m+[m[32m                raise RuntimeError("GP predictor is not fitted after LogEI recovery") from exc[m
+[32m+[m[32m            self._check_candidate_model_posterior(self.model, noise_floor=GP_NOISE_FLOOR)[m
+[32m+[m[32m        return StableQLogExpectedImprovement(self.model, best_f=best_normalized)[m
+ [m
+     def acquisition_inputs(self, X_raw: Any, condition_masks: Any = None) -> torch.Tensor:[m
+         """Return the exact transformed model inputs used for LogEI scoring."""[m
+[36m@@ -398,13 +770,41 @@[m [mclass AccuracyGPPredictor:[m
+         masks = None[m
+         if self.use_conditional_kernel:[m
+             masks = self._validate_masks(condition_masks, X_norm.shape[0])[m
+[31m-        self.train_X_norm = torch.cat((self.train_X_norm, X_norm), dim=0)[m
+[31m-        self.train_Y_norm = torch.cat((self.train_Y_norm, (targets - self.y_mean) / self.y_std), dim=0)[m
+[31m-        if self.use_conditional_kernel:[m
+[31m-            if self.train_condition_masks is None:[m
+[31m-                self.train_condition_masks = masks[m
+[31m-            else:[m
+[31m-                self.train_condition_masks = torch.cat((self.train_condition_masks, masks), dim=0)[m
+[32m+[m[32m        if self.train_observation_counts.shape != (self.train_size,):[m
+[32m+[m[32m            self.train_observation_counts = torch.ones([m
+[32m+[m[32m                self.train_size, dtype=torch.long, device=self.device[m
+[32m+[m[32m            )[m
+[32m+[m[32m        append_X: list[torch.Tensor] = [][m
+[32m+[m[32m        append_y: list[torch.Tensor] = [][m
+[32m+[m[32m        append_masks: list[torch.Tensor] = [][m
+[32m+[m[32m        for row_idx in range(X_norm.shape[0]):[m
+[32m+[m[32m            row_mask = None if masks is None else masks[row_idx][m
+[32m+[m[32m            y_norm = ((targets[row_idx] - self.y_mean) / self.y_std).view(1)[m
+[32m+[m[32m            duplicate_idx = self._duplicate_index(X_norm[row_idx], row_mask)[m
+[32m+[m[32m            if duplicate_idx is not None:[m
+[32m+[m[32m                self._aggregate_observation_at(duplicate_idx, y_norm)[m
+[32m+[m[32m                continue[m
+[32m+[m[32m            append_X.append(X_norm[row_idx])[m
+[32m+[m[32m            append_y.append(y_norm)[m
+[32m+[m[32m            if self.use_conditional_kernel:[m
+[32m+[m[32m                append_masks.append(row_mask)[m
+[32m+[m[32m        if append_X:[m
+[32m+[m[32m            self.train_X_norm = torch.cat((self.train_X_norm, torch.stack(append_X)), dim=0)[m
+[32m+[m[32m            self.train_Y_norm = torch.cat((self.train_Y_norm, torch.stack(append_y).reshape(-1, 1)), dim=0)[m
+[32m+[m[32m            self.train_observation_counts = torch.cat([m
+[32m+[m[32m                ([m
+[32m+[m[32m                    self.train_observation_counts,[m
+[32m+[m[32m                    torch.ones(len(append_X), dtype=torch.long, device=self.device),[m
+[32m+[m[32m                ),[m
+[32m+[m[32m                dim=0,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            if self.use_conditional_kernel:[m
+[32m+[m[32m                stacked_masks = torch.stack(append_masks).to(device=self.device, dtype=torch.double)[m
+[32m+[m[32m                if self.train_condition_masks is None:[m
+[32m+[m[32m                    self.train_condition_masks = stacked_masks[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    self.train_condition_masks = torch.cat((self.train_condition_masks, stacked_masks), dim=0)[m
+[32m+[m[32m        self._aggregate_duplicate_training_rows()[m
+         self._check_training_data()[m
+ [m
+     def is_holdout_point(self, X_raw: Any) -> bool:[m
+[36m@@ -424,6 +824,12 @@[m [mclass AccuracyGPPredictor:[m
+             raise RuntimeError("GP train_X shape invariant failed")[m
+         if self.train_Y_norm.shape != (self.train_size, 1):[m
+             raise RuntimeError("GP train_Y shape invariant failed")[m
+[32m+[m[32m        if self.train_observation_counts.shape != (self.train_size,):[m
+[32m+[m[32m            raise RuntimeError("GP train observation-count shape invariant failed")[m
+[32m+[m[32m        if not torch.isfinite(self.train_observation_counts.to(dtype=torch.double)).all():[m
+[32m+[m[32m            raise RuntimeError("GP train observation counts contain non-finite values")[m
+[32m+[m[32m        if bool((self.train_observation_counts < 1).any()):[m
+[32m+[m[32m            raise RuntimeError("GP train observation counts must be positive")[m
+         if not torch.isfinite(self.train_X_norm).all() or not torch.isfinite(self.train_Y_norm).all():[m
+             raise RuntimeError("GP training data contains non-finite values")[m
+         if self.use_conditional_kernel and ([m
+[36m@@ -462,20 +868,29 @@[m [mclass AccuracyGPPredictor:[m
+         """Rebuild the Exact GP, optionally warm-optimizing its hyperparameters."""[m
+ [m
+         self._check_training_data()[m
+[31m-        old_state = None if self.model is None else self.model.state_dict()[m
+[31m-        model = self._build_model()[m
+[31m-        if old_state is not None:[m
+[31m-            model.load_state_dict(old_state, strict=True)[m
+[31m-        if optimize:[m
+[31m-            self._optimize_model(model, steps=steps)[m
+[31m-        model.eval()[m
+[31m-        model.likelihood.eval()[m
+[31m-        self.model = model[m
+[31m-        with torch.no_grad():[m
+[31m-            probe = self._model_inputs(self.train_X_norm[-1:], None if not self.use_conditional_kernel else self.train_condition_masks[-1:])[m
+[31m-            posterior = self.model.posterior(probe)[m
+[31m-            if not torch.isfinite(posterior.mean).all() or not torch.isfinite(posterior.variance).all():[m
+[31m-                raise RuntimeError("GP posterior became non-finite after update")[m
+[32m+[m[32m        old_state = self._clone_state_dict(self.model)[m
+[32m+[m[32m        last_exc: BaseException | None = None[m
+[32m+[m[32m        for noise_floor in GP_RECOVERY_NOISE_FLOORS:[m
+[32m+[m[32m            model = self._build_model()[m
+[32m+[m[32m            self._load_compatible_state(model, old_state, strict_first=True)[m
+[32m+[m[32m            self._ensure_likelihood_noise_floor(model, noise_floor)[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                if optimize:[m
+[32m+[m[32m                    self._optimize_model(model, steps=steps, noise_floor=noise_floor)[m
+[32m+[m[32m                else:[m
+[32m+[m[32m                    self._ensure_likelihood_noise_floor(model, noise_floor)[m
+[32m+[m[32m                model.eval()[m
+[32m+[m[32m                model.likelihood.eval()[m
+[32m+[m[32m                self._check_candidate_model_posterior(model, noise_floor=noise_floor)[m
+[32m+[m[32m                self.model = model[m
+[32m+[m[32m                return[m
+[32m+[m[32m            except (NotPSDError, RuntimeError) as exc:[m
+[32m+[m[32m                if not _is_recoverable_gp_error(exc):[m
+[32m+[m[32m                    raise[m
+[32m+[m[32m                last_exc = exc[m
+[32m+[m[32m        raise RuntimeError([m
+[32m+[m[32m            "GP posterior remained non-PSD after jitter/noise recovery"[m
+[32m+[m[32m        ) from last_exc[m
+ [m
+     def checkpoint_payload(self) -> dict[str, Any]:[m
+         if self.model is None:[m
+[36m@@ -490,6 +905,7 @@[m [mclass AccuracyGPPredictor:[m
+             "condition_mask_dim": self.condition_mask_dim,[m
+             "train_X_norm": self.train_X_norm.detach().cpu(),[m
+             "train_Y_norm": self.train_Y_norm.detach().cpu(),[m
+[32m+[m[32m            "train_observation_counts": self.train_observation_counts.detach().cpu(),[m
+             "train_condition_masks": None if self.train_condition_masks is None else self.train_condition_masks.detach().cpu(),[m
+             "model_state_dict": {key: value.detach().cpu() for key, value in self.model.state_dict().items()},[m
+             "arch_nz": self.arch_nz,[m
+[36m@@ -577,7 +993,7 @@[m [mclass AccuracyGPPredictor:[m
+         structural_keys = {[m
+             "format_version", "model_type", "kernel_type", "use_conditional_kernel",[m
+             "condition_mask_dim", "train_X_norm", "train_Y_norm", "train_condition_masks",[m
+[31m-            "model_state_dict", "arch_nz", "hp_mode", "search_dim", "z_bound",[m
+[32m+[m[32m            "train_observation_counts", "model_state_dict", "arch_nz", "hp_mode", "search_dim", "z_bound",[m
+             "x_transform", "y_mean", "y_std", "offline_train_size", "holdout_X_raw",[m
+             "holdout_Y", "holdout_condition_masks",[m
+         }[m
+[36m@@ -593,13 +1009,22 @@[m [mclass AccuracyGPPredictor:[m
+             raise ValueError("GP checkpoint search_dim is inconsistent with arch_nz and hp_mode")[m
+         predictor.train_X_norm = torch.as_tensor(payload["train_X_norm"], dtype=torch.double, device=device)[m
+         predictor.train_Y_norm = torch.as_tensor(payload["train_Y_norm"], dtype=torch.double, device=device)[m
+[32m+[m[32m        if payload.get("train_observation_counts") is None:[m
+[32m+[m[32m            predictor.train_observation_counts = torch.ones([m
+[32m+[m[32m                predictor.train_X_norm.shape[0], dtype=torch.long, device=device[m
+[32m+[m[32m            )[m
+[32m+[m[32m        else:[m
+[32m+[m[32m            predictor.train_observation_counts = torch.as_tensor([m
+[32m+[m[32m                payload["train_observation_counts"], dtype=torch.long, device=device[m
+[32m+[m[32m            ).reshape(-1)[m
+         if predictor.use_conditional_kernel:[m
+             if payload.get("train_condition_masks") is None:[m
+                 raise ValueError("conditional GP checkpoint has no training masks")[m
+             predictor.train_condition_masks = torch.as_tensor(payload["train_condition_masks"], dtype=torch.double, device=device)[m
+         predictor._check_training_data()[m
+         predictor.model = predictor._build_model()[m
+[31m-        predictor.model.load_state_dict(payload["model_state_dict"], strict=True)[m
+[32m+[m[32m        predictor._load_compatible_state(predictor.model, payload["model_state_dict"], strict_first=True)[m
+[32m+[m[32m        predictor._ensure_likelihood_noise_floor(predictor.model, GP_NOISE_FLOOR)[m
+         predictor.model.eval()[m
+         predictor.model.likelihood.eval()[m
+         predictor.offline_train_size = int(payload["offline_train_size"])[m
