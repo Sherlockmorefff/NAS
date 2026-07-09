@@ -57,6 +57,7 @@ def test_fit_save_load_append_and_warm_refit(tmp_path):
     )
     after = loaded.predict(X[0])
     assert after == pytest.approx(before, rel=1e-7, abs=1e-7)
+    assert float(loaded.likelihood.noise.detach().min()) >= 1e-4 * 0.999
 
     loaded.append_observation(X[0] * 0.95, float(y[0]))
     loaded.refit(optimize=False)
@@ -86,6 +87,23 @@ def test_holdout_vectors_are_not_appendable():
     )
     with pytest.raises(ValueError, match="fixed holdout"):
         predictor.append_observation(X[8], float(y[8]))
+
+
+def test_exact_duplicate_append_aggregates_and_refits():
+    X, y = _synthetic_data(8)
+    predictor = AccuracyGPPredictor.fit_offline(
+        X, y, arch_nz=12, hp_mode="global4", z_bound=2.5, fit_steps=2,
+    )
+    before_size = predictor.train_size
+    before_mean = predictor.train_Y_norm[0].clone()
+    predictor.append_observation(X[0], float(y[0]) + 0.02)
+    assert predictor.train_size == before_size
+    assert int(predictor.train_observation_counts[0]) == 2
+    assert not torch.allclose(predictor.train_Y_norm[0], before_mean)
+    predictor.refit(optimize=False)
+    prediction = predictor.predict(X[0])
+    assert math.isfinite(prediction["mean"])
+    assert float(predictor.likelihood.noise.detach().min()) >= 1e-4 * 0.999
 
 
 def test_conditional_kernel_masks_survive_online_update():
