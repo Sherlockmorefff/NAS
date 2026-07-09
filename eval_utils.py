@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
+import warnings
 
 import numpy as np
 import torch
@@ -61,6 +62,44 @@ OP_REG = {
     "SAGEConv": SAGEConv,
     "GINConv": GINConv,
 }
+
+
+def _match_feature_dim(x: torch.Tensor, target_dim: int) -> torch.Tensor:
+    """Return ``x`` with feature width matched to ``target_dim``.
+
+    The decoded search space can produce skip/identity wiring where the tensor
+    reaching a layer does not have the static width used when that layer was
+    constructed.  Truncating or zero-padding preserves the original device,
+    dtype, and autograd path for the existing feature columns.
+    """
+
+    target_dim = int(target_dim)
+    if target_dim <= 0:
+        raise ValueError(f"target_dim must be positive, got {target_dim}")
+    if x.shape[1] == target_dim:
+        return x
+    if x.shape[1] > target_dim:
+        return x[:, :target_dim]
+    pad = x.new_zeros(x.shape[0], target_dim - x.shape[1])
+    return torch.cat([x, pad], dim=1)
+
+
+def _invalid_eval_result(track_test: bool) -> tuple:
+    return (0.0, False, 0.0) if track_test else (0.0, False)
+
+
+def _empty_cuda_cache_if_oom(exc: BaseException) -> None:
+    if isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower():
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
+def _warn_dynamic_gnn_failure(stage: str, exc: BaseException) -> None:
+    warnings.warn(
+        f"[DynamicGNN {stage} failed] {type(exc).__name__}: {exc}",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def _clip01(x: float) -> float:
@@ -366,6 +405,7 @@ class DynamicGNN(torch.nn.Module):
             self.input_proj = None
 
         self.layers = ModuleList()
+        self.layer_input_dims: list[int | None] = []
         gcnii_layer_idx = 1
         node_out_dim = {0: in_ch}
 
@@ -376,9 +416,11 @@ class DynamicGNN(torch.nn.Module):
 
             if op == "Identity":
                 self.layers.append(None)
+                self.layer_input_dims.append(None)
                 node_out_dim[node_idx] = in_dim
 
             elif op == "GINConv":
+                self.layer_input_dims.append(in_dim)
                 mlp = Sequential(
                     Linear(in_dim, hidden_dim),
                     ReLU(),
@@ -394,6 +436,7 @@ class DynamicGNN(torch.nn.Module):
                 node_out_dim[node_idx] = hidden_dim
 
             elif op == "GCNII":
+                self.layer_input_dims.append(hidden_dim)
                 self.layers.append(
                     GCN2Conv(
                         channels=hidden_dim,
@@ -407,6 +450,7 @@ class DynamicGNN(torch.nn.Module):
                 node_out_dim[node_idx] = hidden_dim
 
             elif op == "GATConv":
+                self.layer_input_dims.append(in_dim)
                 self.layers.append(
                     GATConv(
                         in_dim,
@@ -418,6 +462,7 @@ class DynamicGNN(torch.nn.Module):
                 node_out_dim[node_idx] = hidden_dim
 
             elif op == "SAGEConv":
+                self.layer_input_dims.append(in_dim)
                 self.layers.append(
                     SAGEConv(
                         in_dim,
@@ -428,6 +473,7 @@ class DynamicGNN(torch.nn.Module):
                 node_out_dim[node_idx] = hidden_dim
 
             else:
+                self.layer_input_dims.append(in_dim)
                 self.layers.append(OP_REG[op](in_dim, hidden_dim))
                 node_out_dim[node_idx] = hidden_dim
 
@@ -467,14 +513,20 @@ class DynamicGNN(torch.nn.Module):
             if op == "Identity" or layer is None:
                 out = agg
             elif op == "GCNII":
-                if agg.shape[1] != self.hidden_dim and self.input_proj is not None:
+                expected_input_dim = int(self.layer_input_dims[i] or self.hidden_dim)
+                if agg.shape[1] == self.in_ch and self.input_proj is not None:
                     agg = F.relu(self.input_proj(agg))
+                agg = _match_feature_dim(agg, expected_input_dim)
                 out = F.dropout(
                     F.relu(layer(agg, x_0, edge_index)),
                     self.dropout,
                     self.training,
                 )
             else:
+                expected_input_dim = self.layer_input_dims[i]
+                if expected_input_dim is None:
+                    raise RuntimeError(f"missing input dimension for layer {i} ({op})")
+                agg = _match_feature_dim(agg, expected_input_dim)
                 out = F.dropout(
                     F.relu(layer(agg, edge_index)),
                     self.dropout,
@@ -500,16 +552,7 @@ class DynamicGNN(torch.nn.Module):
         if agg_end is None:
             agg_end = list(node_states.values())[-1]
 
-        if agg_end.shape[1] != self.clf.in_features:
-            if agg_end.shape[1] > self.clf.in_features:
-                agg_end = agg_end[:, :self.clf.in_features]
-            else:
-                pad = torch.zeros(
-                    agg_end.shape[0],
-                    self.clf.in_features - agg_end.shape[1],
-                    device=agg_end.device,
-                )
-                agg_end = torch.cat([agg_end, pad], dim=1)
+        agg_end = _match_feature_dim(agg_end, self.clf.in_features)
 
         return self.clf(agg_end)
 
@@ -563,9 +606,10 @@ def train_and_eval_arch(
             sage_aggr_by_layer=sage_aggr_by_layer,
             gin_eps_by_layer=gin_eps_by_layer,
         ).to(device)
-    except Exception as exc:
-        print(f"  [DynamicGNN build failed] {exc}")
-        return (0.0, False, 0.0) if track_test else (0.0, False)
+    except (RuntimeError, ValueError, TypeError, KeyError) as exc:
+        _empty_cuda_cache_if_oom(exc)
+        _warn_dynamic_gnn_failure("build", exc)
+        return _invalid_eval_result(track_test)
 
     optimizer = torch.optim.Adam(gnn.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -578,37 +622,55 @@ def train_and_eval_arch(
     best_test = 0.0
     no_improve = 0
 
-    for _epoch in range(max_epochs):
-        gnn.train()
-        optimizer.zero_grad()
-        out = gnn(data.x, data.edge_index)
-        loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+    try:
+        for _epoch in range(max_epochs):
+            gnn.train()
+            optimizer.zero_grad()
+            out = gnn(data.x, data.edge_index)
+            if not bool(torch.isfinite(out).all().detach().cpu().item()):
+                raise FloatingPointError("non-finite DynamicGNN training output")
+            loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+            if not bool(torch.isfinite(loss).detach().cpu().item()):
+                raise FloatingPointError("non-finite DynamicGNN training loss")
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-        gnn.eval()
-        with torch.no_grad():
-            pred = gnn(data.x, data.edge_index).argmax(dim=1)
-            val_acc = (
-                pred[data.val_mask].eq(data.y[data.val_mask]).sum().item()
-                / data.val_mask.sum().item()
-            )
-            if track_test:
-                test_acc = (
-                    pred[data.test_mask].eq(data.y[data.test_mask]).sum().item()
-                    / data.test_mask.sum().item()
+            gnn.eval()
+            with torch.no_grad():
+                eval_out = gnn(data.x, data.edge_index)
+                if not bool(torch.isfinite(eval_out).all().detach().cpu().item()):
+                    raise FloatingPointError("non-finite DynamicGNN validation output")
+                pred = eval_out.argmax(dim=1)
+                val_count = int(data.val_mask.sum().item())
+                if val_count <= 0:
+                    raise ValueError("validation mask is empty")
+                val_acc = (
+                    pred[data.val_mask].eq(data.y[data.val_mask]).sum().item()
+                    / val_count
                 )
+                if track_test:
+                    test_count = int(data.test_mask.sum().item())
+                    if test_count <= 0:
+                        raise ValueError("test mask is empty")
+                    test_acc = (
+                        pred[data.test_mask].eq(data.y[data.test_mask]).sum().item()
+                        / test_count
+                    )
 
-        if val_acc > best_val:
-            best_val = val_acc
-            no_improve = 0
-            if track_test:
-                best_test = test_acc
-        else:
-            no_improve += 1
-            if no_improve >= patience:
-                break
+            if val_acc > best_val:
+                best_val = val_acc
+                no_improve = 0
+                if track_test:
+                    best_test = test_acc
+            else:
+                no_improve += 1
+                if no_improve >= patience:
+                    break
+    except (RuntimeError, ValueError, FloatingPointError) as exc:
+        _empty_cuda_cache_if_oom(exc)
+        _warn_dynamic_gnn_failure("eval", exc)
+        return _invalid_eval_result(track_test)
 
     if track_test:
         return best_val, True, best_test
