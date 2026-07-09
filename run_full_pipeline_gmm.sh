@@ -123,6 +123,10 @@ phase4_tpe_dir() {
   printf 'results/bo_phase4_tpe_%s_gmm' "$1"
 }
 
+accuracy_gp_path() {
+  printf 'results/gp_predictor/%s/accuracy_gp_offline.pt' "$1"
+}
+
 log_line "run_full_pipeline_gmm started"
 log_line "log_file=${LOG_FILE}"
 log_line "cwd=$(pwd)"
@@ -188,10 +192,27 @@ for mode in global4 hybrid_cond7 layer_cond19; do
       --seed "${SEED}"
 done
 
+run_step "train_accuracy_gp_global4" "$(accuracy_gp_path global4)" \
+  "${PYTHON_BIN}" surrogate/train_accuracy_gp.py \
+    --history_paths "$(phase3_dir global4)/history_final.json" \
+    --hp_mode global4 \
+    --arch_nz 12 \
+    --z_bound 2.5 \
+    --holdout_frac 0.2 \
+    --seed "${SEED}" \
+    --checkpoint "$(checkpoint_path global4)" \
+    --dataset Cora \
+    --eval_epochs "${SEARCH_EVAL_EPOCHS}" \
+    --patience "${SEARCH_PATIENCE}" \
+    --output "$(accuracy_gp_path global4)" \
+    --prediction_output results/gp_predictor/global4/offline_holdout_predictions.csv \
+    --metrics_output results/gp_predictor/global4/offline_metrics.json
+
 run_step "phase4_global4_bo_gmm" "results/bo_phase4_global4_bo_gmm/history_final.json" \
   "${PYTHON_BIN}" bo_phase4.py \
     --hp_mode global4 \
     --checkpoint "$(checkpoint_path global4)" \
+    --gp_checkpoint "$(accuracy_gp_path global4)" \
     --warm_start "$(phase3_dir global4)/best_z_final.pt" \
     --cora_root "${CORA_ROOT}" \
     --output results/bo_phase4_global4_bo_gmm \

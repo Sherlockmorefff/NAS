@@ -6,8 +6,13 @@ import argparse
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from surrogate.metrics import prediction_metrics
 
 
 HP_MODE_CHOICES = ("global4", "hybrid_cond7", "layer_cond19")
@@ -25,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hp_mode", choices=HP_MODE_CHOICES, required=True)
     parser.add_argument("--output_dir", type=str, default="")
     parser.add_argument("--arch_nz", type=int, default=12)
+    parser.add_argument("--z_bound", type=float, default=2.5)
     parser.add_argument("--holdout_frac", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--use_canonical_z", action="store_true")
@@ -180,14 +186,6 @@ def matrix_from_history(runtime: dict[str, Any], records: list[dict[str, Any]], 
     return np.asarray(X_rows, dtype=np.float64), np.asarray(y_rows, dtype=np.float64)
 
 
-def minmax_normalize(runtime: dict[str, Any], X):
-    torch = runtime["torch"]
-    X_t = torch.as_tensor(X, dtype=torch.double)
-    xmin = X_t.min(0).values
-    xrng = (X_t.max(0).values - xmin).clamp(min=1e-8)
-    return (X_t - xmin) / xrng, xmin, xrng
-
-
 def y_standardize(runtime: dict[str, Any], y):
     torch = runtime["torch"]
     y_t = torch.as_tensor(y, dtype=torch.double).view(-1, 1)
@@ -208,38 +206,15 @@ def split_indices(runtime: dict[str, Any], n: int, holdout_frac: float, seed: in
     return train, holdout
 
 
-def pearson(values_a: list[float], values_b: list[float]) -> float | None:
-    n = len(values_a)
-    if n < 2:
-        return None
-    ma = sum(values_a) / n
-    mb = sum(values_b) / n
-    da = [v - ma for v in values_a]
-    db = [v - mb for v in values_b]
-    denom = math.sqrt(sum(v * v for v in da) * sum(v * v for v in db))
-    if denom <= 1e-12:
-        return None
-    return sum(a * b for a, b in zip(da, db)) / denom
-
-
-def rank_percentiles(values: list[float]) -> list[float]:
-    n = len(values)
-    if n <= 1:
-        return [100.0 for _ in values]
-    out = [0.0 for _ in values]
-    for rank, (idx, _value) in enumerate(sorted(enumerate(values), key=lambda item: item[1])):
-        out[idx] = 100.0 * rank / (n - 1)
-    return out
-
-
-def spearman(values_a: list[float], values_b: list[float]) -> float | None:
-    return pearson(rank_percentiles(values_a), rank_percentiles(values_b))
-
-
 def fit_and_predict(runtime: dict[str, Any], X, y, args: argparse.Namespace):
     np = runtime["np"]
     torch = runtime["torch"]
-    Xn, _xmin, _xrng = minmax_normalize(runtime, X)
+    from surrogate.accuracy_gp import normalize_search_vector
+
+    Xn = normalize_search_vector(
+        torch.as_tensor(X, dtype=torch.double),
+        arch_nz=args.arch_nz, hp_mode=args.hp_mode, z_bound=args.z_bound
+    )
     train_idx, holdout_idx = split_indices(runtime, X.shape[0], args.holdout_frac, args.seed)
     X_train = Xn[train_idx]
     X_holdout = Xn[holdout_idx]
@@ -279,21 +254,13 @@ def fit_and_predict(runtime: dict[str, Any], X, y, args: argparse.Namespace):
             }
         )
 
-    errors = [row["pred_mean"] - row["true_val_acc"] for row in rows]
-    abs_errors = [abs(err) for err in errors]
-    sq_errors = [err * err for err in errors]
     true_vals = [row["true_val_acc"] for row in rows]
     pred_vals = [row["pred_mean"] for row in rows]
-    summary = {
-        "rmse": math.sqrt(sum(sq_errors) / len(sq_errors)) if sq_errors else None,
-        "mae": sum(abs_errors) / len(abs_errors) if abs_errors else None,
-        "spearman": spearman(pred_vals, true_vals),
-        "pearson": pearson(pred_vals, true_vals),
-        "predictive_95_coverage": sum(1 for row in rows if row["covered_by_95"]) / len(rows) if rows else None,
-        "average_predictive_std": sum(row["pred_std"] for row in rows) / len(rows) if rows else None,
-        "n_train": int(len(train_idx)),
-        "n_holdout": int(len(holdout_idx)),
-    }
+    summary = prediction_metrics(true_vals, pred_vals, [row["pred_std"] for row in rows])
+    summary.update({
+        "average_predictive_std": summary["mean_predictive_std"],
+        "n_train": int(len(train_idx)), "n_holdout": int(len(holdout_idx)),
+    })
     return rows, summary
 
 
@@ -363,7 +330,7 @@ def write_report(path: Path, payload: dict[str, Any]) -> None:
         f"- BoTorch fit function: {payload.get('fit_function')}",
         "- This diagnostic GP uses standard SingleTaskGP only; it does not use ConditionalMaskedKernel.",
         "- This script diagnoses standard GP holdout prediction only.",
-        "- It does not reproduce the full BO acquisition process: qLogExpectedImprovement, optimize_acqf, novelty reranking, candidate clipping, conditional kernel.",
+        "- It does not reproduce the full offline-checkpoint, conditional-mask, pure-qLogEI, and online-update Phase4 process.",
         "- If the original search used --use_conditional_kernel, this diagnostic may differ from the search GP.",
         "- GP surrogate predictions are search-time validation accuracy predictions, not final test accuracy.",
         "- GP posterior std is not multi-seed training std.",
