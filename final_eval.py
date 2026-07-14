@@ -1,48 +1,117 @@
-"""Final multi-seed evaluation for hp_mode-based NAS search results."""
+"""Multi-seed final evaluation of architectures recorded during NAS search."""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
+import math
 import os
 import sys
 import time
-from collections import Counter
 from datetime import datetime
-from typing import Any
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 import torch
-
-sys.path.insert(0, "/mnt/project")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 
-from eval_utils import (
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from eval_utils import (  # noqa: E402
     DEFAULT_GAT_HEADS,
     DEFAULT_GIN_EPS,
     DEFAULT_SAGE_AGGR,
-    decode_hp_by_mode,
     train_and_eval_arch,
 )
-from hp_modes import (
-    condition_mask_dict_from_ops,
-    hp_dim_from_mode,
-    hp_names_from_mode,
-    validate_hp_mode,
-)
-from nas_space import JointSpaceVAE
+from hp_modes import validate_hp_mode  # noqa: E402
 
 
-ARCH_NZ_DEFAULT = 12
 HP_MODE_CHOICES = ("global4", "hybrid_cond7", "layer_cond19")
 DEFAULT_LR = 1e-3
 DEFAULT_DROPOUT = 0.5
 DEFAULT_HIDDEN_DIM = 64
 DEFAULT_L2 = 5e-4
+
+REQUIRED_HISTORY_FIELDS = (
+    "operations",
+    "edges",
+    "val_acc",
+    "valid",
+    "lr",
+    "dropout",
+    "hidden_dim",
+)
+SIGNATURE_FIELDS = (
+    "operations",
+    "edges",
+    "lr",
+    "dropout",
+    "hidden_dim",
+    "l2",
+    "gat_heads",
+    "sage_aggr",
+    "gin_eps",
+    "gat_heads_by_layer",
+    "sage_aggr_by_layer",
+    "gin_eps_by_layer",
+)
+PER_SEED_FIELDS = (
+    "candidate_rank",
+    "source",
+    "name",
+    "search_step",
+    "search_val_acc",
+    "seed",
+    "val_acc",
+    "test_acc",
+    "valid",
+    "train_time_seconds",
+    "operations",
+    "edges",
+    "lr",
+    "dropout",
+    "hidden_dim",
+    "l2",
+    "gat_heads",
+    "sage_aggr",
+    "gin_eps",
+    "gat_heads_by_layer",
+    "sage_aggr_by_layer",
+    "gin_eps_by_layer",
+)
+AGGREGATE_FIELDS = (
+    "candidate_rank",
+    "source",
+    "name",
+    "search_step",
+    "search_val_acc",
+    "val_mean",
+    "val_std",
+    "val_min",
+    "val_max",
+    "test_mean",
+    "test_std",
+    "test_min",
+    "test_max",
+    "n_valid",
+    "n_invalid",
+    "n_seeds",
+    "operations",
+    "edges",
+    "lr",
+    "dropout",
+    "hidden_dim",
+    "l2",
+    "gat_heads",
+    "sage_aggr",
+    "gin_eps",
+    "gat_heads_by_layer",
+    "sage_aggr_by_layer",
+    "gin_eps_by_layer",
+)
 
 
 def setup_logger(log_dir: str, script_name: str, version: str):
@@ -55,75 +124,57 @@ def setup_logger(log_dir: str, script_name: str, version: str):
     logger.setLevel(logging.DEBUG)
     logger.handlers.clear()
 
-    fmt = logging.Formatter(
+    formatter = logging.Formatter(
         "[%(asctime)s][%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = logging.FileHandler(log_path, encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(fmt)
-    logger.addHandler(ch)
-    logger.info(f"log file: {log_path}")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    logger.info("log file: %s", log_path)
     return logger, log_path
 
 
 def save_args_json(args: argparse.Namespace, log_path: str) -> str:
     json_path = log_path.replace(".log", ".json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(vars(args), f, indent=2, ensure_ascii=False)
+    with open(json_path, "w", encoding="utf-8") as file:
+        json.dump(vars(args), file, indent=2, ensure_ascii=False)
     return json_path
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Final evaluation with hp_mode decoding")
-    parser.add_argument("--cora_root", type=str, default="/tmp/Cora")
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Final multi-seed evaluation of real history_final.json records"
+    )
+    parser.add_argument("--history_path", type=str, required=True)
+    parser.add_argument("--top_k", type=int, default=10)
+    parser.add_argument("--history_steps", type=int, nargs="+")
+    parser.add_argument(
+        "--deduplicate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Deduplicate identical architecture and hyperparameter records (default: on).",
+    )
+    parser.add_argument("--sort_by", type=str, default="val_acc")
     parser.add_argument("--n_seeds", type=int, default=10)
-    parser.add_argument("--eval_epochs", type=int, default=200)
-    parser.add_argument("--patience", type=int, default=30)
-    parser.add_argument("--output", type=str, default="results/final_eval")
-    parser.add_argument("--version", type=str, default="final_eval")
-    parser.add_argument("--log_dir", type=str, default="logs/")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--arch_nz", type=int, default=ARCH_NZ_DEFAULT)
+    parser.add_argument("--seed_start", type=int, default=0)
+    parser.add_argument("--eval_epochs", type=int, default=300)
+    parser.add_argument("--patience", type=int, default=80)
     parser.add_argument("--hp_mode", type=str, default="global4", choices=HP_MODE_CHOICES)
-    parser.add_argument("--checkpoint", type=str, default="results/joint_search/joint_model_global4_best.pth")
-    parser.add_argument("--auto_best_z", type=str, default="results/bo_phase4/best_z_final.pt")
-    parser.add_argument("--disable_auto_best", action="store_true")
-    parser.add_argument("--include_official_2gcn_baseline", action="store_true")
-    parser.add_argument("--auto_name", type=str, default="NAS_full")
-    parser.add_argument("--auto_decode_trials", type=int, default=10)
-    parser.add_argument("--log_lr_min", type=float, default=-4.0)
-    parser.add_argument("--log_lr_max", type=float, default=-1.5)
-    parser.add_argument("--dropout_min", type=float, default=0.1)
-    parser.add_argument("--dropout_max", type=float, default=0.6)
-    parser.add_argument("--weight_decay", type=float, default=DEFAULT_L2)
-    parser.add_argument("--hidden_dim", type=int, default=DEFAULT_HIDDEN_DIM)
+    parser.add_argument("--cora_root", type=str, default="/tmp/Cora")
+    parser.add_argument("--output", type=str, default="results/final_eval_history_topk")
+    parser.add_argument("--version", type=str, default="final_eval_history_topk")
+    parser.add_argument("--log_dir", type=str, default="logs/")
+    parser.add_argument("--include_baselines", action="store_true")
     parser.add_argument("--gcnii_alpha", type=float, default=0.1)
     parser.add_argument("--gcnii_theta", type=float, default=0.5)
-    return parser.parse_args()
-
-
-class ArchArgs:
-    def __init__(self, arch_nz: int):
-        self.max_n = 7
-        self.num_vertex_type = 8
-        self.START_TYPE = 0
-        self.END_TYPE = 1
-        self.hs = 501
-        self.nz = int(arch_nz)
-        self.bidirectional = True
-
-
-def _torch_load(path: str, map_location):
-    try:
-        return torch.load(path, map_location=map_location, weights_only=True)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
+    return parser.parse_args(argv)
 
 
 def load_cora(root: str, device: torch.device):
@@ -132,520 +183,606 @@ def load_cora(root: str, device: torch.device):
     return dataset[0].to(device), dataset.num_features, dataset.num_classes
 
 
-def load_vae(args: argparse.Namespace, device: torch.device, logger) -> JointSpaceVAE | None:
-    if not args.checkpoint or not os.path.exists(args.checkpoint):
-        logger.warning(f"checkpoint not found; skip auto best_z candidates: {args.checkpoint}")
-        return None
-    hp_dim = hp_dim_from_mode(args.hp_mode)
-    model = JointSpaceVAE(
-        ArchArgs(args.arch_nz),
-        hp_mode=args.hp_mode,
-        hp_latent_dim=hp_dim,
-        hp_input_dim=hp_dim,
-    ).to(device)
-    state = _torch_load(args.checkpoint, map_location=device)
-    model.load_state_dict(state)
-    model.eval()
-    logger.info(
-        f"VAE loaded: {args.checkpoint} "
-        f"(arch_nz={args.arch_nz}, hp_mode={args.hp_mode}, hp_dim={hp_dim})"
+def _finite_float(value: Any, field: str, record_index: int) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"history record {record_index} has non-numeric {field}: {value!r}"
+        ) from exc
+    if not math.isfinite(number):
+        raise ValueError(f"history record {record_index} has non-finite {field}: {value!r}")
+    return number
+
+
+def _normalize_valid_record(record: dict[str, Any], record_index: int) -> dict[str, Any]:
+    missing = [field for field in REQUIRED_HISTORY_FIELDS if field not in record]
+    if "l2" not in record and "weight_decay" not in record:
+        missing.append("l2 or weight_decay")
+    if missing:
+        raise ValueError(
+            f"valid history record {record_index} is missing required fields: "
+            + ", ".join(missing)
+        )
+    if not isinstance(record["operations"], list):
+        raise ValueError(f"history record {record_index} operations must be a list")
+    if not isinstance(record["edges"], list):
+        raise ValueError(f"history record {record_index} edges must be a list")
+
+    edges: list[list[int]] = []
+    for edge in record["edges"]:
+        if not isinstance(edge, (list, tuple)) or len(edge) != 2:
+            raise ValueError(
+                f"history record {record_index} contains an invalid edge: {edge!r}"
+            )
+        try:
+            edges.append([int(edge[0]), int(edge[1])])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"history record {record_index} contains a non-integer edge: {edge!r}"
+            ) from exc
+
+    normalized = dict(record)
+    normalized["operations"] = [str(operation) for operation in record["operations"]]
+    normalized["edges"] = edges
+    normalized["val_acc"] = _finite_float(record["val_acc"], "val_acc", record_index)
+    normalized["lr"] = _finite_float(record["lr"], "lr", record_index)
+    normalized["dropout"] = _finite_float(record["dropout"], "dropout", record_index)
+    try:
+        normalized["hidden_dim"] = int(record["hidden_dim"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"history record {record_index} has invalid hidden_dim: {record['hidden_dim']!r}"
+        ) from exc
+    if normalized["hidden_dim"] <= 0:
+        raise ValueError(f"history record {record_index} hidden_dim must be positive")
+    l2_value = record["l2"] if "l2" in record else record["weight_decay"]
+    normalized["l2"] = _finite_float(l2_value, "l2", record_index)
+    normalized["gat_heads"] = int(record.get("gat_heads", DEFAULT_GAT_HEADS))
+    normalized["sage_aggr"] = str(record.get("sage_aggr", DEFAULT_SAGE_AGGR))
+    normalized["gin_eps"] = _finite_float(
+        record.get("gin_eps", DEFAULT_GIN_EPS), "gin_eps", record_index
     )
-    return model
+    normalized.setdefault("gat_heads_by_layer", None)
+    normalized.setdefault("sage_aggr_by_layer", None)
+    normalized.setdefault("gin_eps_by_layer", None)
+    normalized.setdefault("condition_mask", None)
+    normalized.setdefault("condition_mask_vector", None)
+    normalized.setdefault("z_search", None)
+    normalized.setdefault("gp_pred_mean", None)
+    normalized.setdefault("gp_pred_std", None)
+    normalized.setdefault("gp_abs_error", None)
+    normalized.setdefault("gp_stage", None)
+    return normalized
 
 
-def decode_arch_from_z(
-    vae: JointSpaceVAE,
-    z_arch: torch.Tensor,
-    device: torch.device,
-    n_trials: int,
-) -> dict[str, Any] | None:
-    results = []
-    z_arch = z_arch.detach().float()
-    with torch.no_grad():
-        for _ in range(int(n_trials)):
-            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(device))
-            graph = graphs[0]
-            ops = [
-                vae.op_mapping.get(graph.vs[i]["type"], "Identity")
-                for i in range(1, graph.vcount() - 1)
-            ]
-            edges = graph.get_edgelist()
-            effective_layers = sum(1 for op in ops if op != "Identity")
-            if effective_layers > 0:
-                key = (tuple(ops), tuple(edges))
-                results.append(
-                    (
-                        key,
-                        {
-                            "effective_layers": effective_layers,
-                            "operations": ops,
-                            "edges": edges,
-                        },
-                    )
-                )
-    if not results:
-        return None
-    best_key = Counter(row[0] for row in results).most_common(1)[0][0]
-    return next(config for key, config in results if key == best_key)
+def load_history_records(history_path: str) -> list[dict[str, Any]]:
+    if not os.path.isfile(history_path):
+        raise FileNotFoundError(f"history file not found: {history_path}")
+    with open(history_path, "r", encoding="utf-8") as file:
+        payload = json.load(file)
+    if not isinstance(payload, list):
+        raise ValueError(f"history file must contain a JSON list: {history_path}")
+
+    records: list[dict[str, Any]] = []
+    for index, raw_record in enumerate(payload):
+        if not isinstance(raw_record, dict):
+            raise ValueError(f"history record {index} must be a JSON object")
+        if "valid" not in raw_record or not isinstance(raw_record["valid"], bool):
+            raise ValueError(f"history record {index} must contain a boolean valid field")
+        record = dict(raw_record)
+        record["_history_index"] = index
+        if raw_record["valid"]:
+            record = _normalize_valid_record(record, index)
+            record["_history_index"] = index
+        records.append(record)
+    return records
 
 
-def config_from_ops(ops: list[str], edges: list[tuple[int, int]] | list[list[int]]) -> dict[str, Any]:
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return tuple(sorted((key, _freeze(item)) for key, item in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+def record_signature(record: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(_freeze(record.get(field)) for field in SIGNATURE_FIELDS)
+
+
+def _sort_value(record: dict[str, Any], sort_by: str) -> float:
+    if sort_by not in record:
+        index = record.get("_history_index", "?")
+        raise ValueError(f"valid history record {index} has no sort field {sort_by!r}")
+    return _finite_float(record[sort_by], sort_by, int(record.get("_history_index", -1)))
+
+
+def select_history_records(
+    records: Sequence[dict[str, Any]],
+    top_k: int,
+    history_steps: Sequence[int] | None = None,
+    sort_by: str = "val_acc",
+    deduplicate: bool = True,
+) -> list[dict[str, Any]]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    valid_records = [record for record in records if record.get("valid") is True]
+
+    if history_steps is not None:
+        by_step: dict[int, list[dict[str, Any]]] = {}
+        for record in valid_records:
+            if record.get("step") is not None:
+                by_step.setdefault(int(record["step"]), []).append(record)
+        available_steps = {
+            int(record["step"])
+            for record in records
+            if isinstance(record.get("step"), (int, float))
+        }
+        missing_steps = [int(step) for step in history_steps if int(step) not in available_steps]
+        if missing_steps:
+            raise ValueError(f"requested history steps not found: {missing_steps}")
+        ordered = [
+            record
+            for step in history_steps
+            for record in by_step.get(int(step), [])
+        ]
+    else:
+        ordered = sorted(valid_records, key=lambda row: _sort_value(row, sort_by), reverse=True)
+
+    selected: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for record in ordered:
+        signature = record_signature(record)
+        if deduplicate and signature in seen:
+            continue
+        seen.add(signature)
+        selected_record = {key: value for key, value in record.items() if key != "_history_index"}
+        selected_record.update(
+            {
+                "search_rank": len(selected) + 1,
+                "search_step": record.get("step"),
+                "search_val_acc": float(record["val_acc"]),
+                "search_gp_pred_mean": record.get("gp_pred_mean"),
+                "search_gp_pred_std": record.get("gp_pred_std"),
+                "search_gp_abs_error": record.get("gp_abs_error"),
+                "search_gp_stage": record.get("gp_stage"),
+                "source": "history",
+            }
+        )
+        selected.append(selected_record)
+        if len(selected) >= top_k:
+            break
+    return selected
+
+
+def _candidate_from_history(record: dict[str, Any]) -> dict[str, Any]:
+    candidate = dict(record)
+    candidate["candidate_rank"] = int(record["search_rank"])
+    candidate["name"] = (
+        f"history_rank_{candidate['candidate_rank']:03d}_step_{record.get('search_step')}"
+    )
+    candidate["source"] = "history"
+    return candidate
+
+
+def _baseline_candidate(
+    name: str,
+    operations: list[str],
+    lr: float,
+    dropout: float,
+    hidden_dim: int,
+    l2: float,
+) -> dict[str, Any]:
     return {
-        "operations": list(ops),
-        "edges": [tuple(edge) for edge in edges],
-        "effective_layers": sum(1 for op in ops if op != "Identity"),
-    }
-
-
-def default_hp(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
-    mask = condition_mask_dict_from_ops(list(config.get("operations", [])), args.hp_mode)
-    return {
-        "lr": DEFAULT_LR,
-        "dropout": DEFAULT_DROPOUT,
-        "hidden_dim": int(args.hidden_dim),
-        "weight_decay": float(args.weight_decay),
-        "l2": float(args.weight_decay),
+        "name": name,
+        "source": "baseline",
+        "search_rank": None,
+        "search_step": None,
+        "search_val_acc": None,
+        "operations": operations,
+        "edges": [[0, 1], [1, 2], [2, 3], [3, 4]],
+        "lr": float(lr),
+        "dropout": float(dropout),
+        "hidden_dim": int(hidden_dim),
+        "l2": float(l2),
         "gat_heads": DEFAULT_GAT_HEADS,
         "sage_aggr": DEFAULT_SAGE_AGGR,
         "gin_eps": DEFAULT_GIN_EPS,
         "gat_heads_by_layer": None,
         "sage_aggr_by_layer": None,
         "gin_eps_by_layer": None,
-        "condition_mask": mask,
-        "condition_mask_vector": mask["vector"],
-        "hp_norm": None,
-        "hp_mode": args.hp_mode,
-        "hp_dim": hp_dim_from_mode(args.hp_mode),
     }
 
 
-def official_2gcn_hp(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
-    hp = default_hp(config, args)
-    hp.update(
-        {
-            "lr": 0.01,
-            "dropout": 0.5,
-            "hidden_dim": 16,
-            "weight_decay": 5e-4,
-            "l2": 5e-4,
-        }
-    )
-    return hp
-
-
-def candidate_signature(cand: dict[str, Any]) -> tuple:
-    return (
-        tuple(cand["operations"]),
-        tuple(tuple(edge) for edge in cand["edges"]),
-        round(float(cand["lr"]), 12),
-        round(float(cand["dropout"]), 12),
-        int(cand["hidden_dim"]),
-        round(float(cand["l2"]), 12),
-        int(cand["gat_heads"]),
-        str(cand["sage_aggr"]),
-        round(float(cand["gin_eps"]), 12),
-        tuple(cand["gat_heads_by_layer"] or []),
-        tuple(cand["sage_aggr_by_layer"] or []),
-        tuple(cand["gin_eps_by_layer"] or []),
-    )
-
-
-def make_candidate(
-    name: str,
-    group: str,
-    description: str,
-    config: dict[str, Any],
-    hp: dict[str, Any],
-    args: argparse.Namespace,
-    source_best_z: str | None = None,
-    source_checkpoint: str | None = None,
-) -> dict[str, Any]:
-    return {
-        "name": name,
-        "group": group,
-        "description": description,
-        "hp_mode": args.hp_mode,
-        "operations": list(config.get("operations", [])),
-        "edges": [list(edge) for edge in config.get("edges", [])],
-        "lr": float(hp["lr"]),
-        "dropout": float(hp["dropout"]),
-        "hidden_dim": int(hp["hidden_dim"]),
-        "l2": float(hp.get("weight_decay", hp.get("l2", args.weight_decay))),
-        "gat_heads": int(hp.get("gat_heads", DEFAULT_GAT_HEADS)),
-        "sage_aggr": str(hp.get("sage_aggr", DEFAULT_SAGE_AGGR)),
-        "gin_eps": float(hp.get("gin_eps", DEFAULT_GIN_EPS)),
-        "gat_heads_by_layer": hp.get("gat_heads_by_layer"),
-        "sage_aggr_by_layer": hp.get("sage_aggr_by_layer"),
-        "gin_eps_by_layer": hp.get("gin_eps_by_layer"),
-        "gcnii_alpha": float(args.gcnii_alpha),
-        "gcnii_theta": float(args.gcnii_theta),
-        "condition_mask": hp.get("condition_mask", {}),
-        "condition_mask_vector": hp.get("condition_mask_vector"),
-        "source_best_z": source_best_z,
-        "source_checkpoint": source_checkpoint,
-    }
-
-
-def append_unique(candidates: list[dict[str, Any]], cand: dict[str, Any], logger) -> None:
-    sig = candidate_signature(cand)
-    if any(candidate_signature(existing) == sig for existing in candidates):
-        logger.info(f"skip duplicate final-eval candidate: {cand['name']}")
-        return
-    candidates.append(cand)
-
-
-def build_auto_candidates(
-    args: argparse.Namespace,
-    device: torch.device,
-    logger,
-) -> list[dict[str, Any]]:
-    if args.disable_auto_best:
-        logger.info("auto best_z disabled by --disable_auto_best")
-        return []
-    if not args.auto_best_z or not os.path.exists(args.auto_best_z):
-        logger.warning(f"auto_best_z not found; skip auto candidates: {args.auto_best_z}")
-        return []
-
-    vae = load_vae(args, device, logger)
-    if vae is None:
-        return []
-
-    hp_dim = hp_dim_from_mode(args.hp_mode)
-    search_dim = int(args.arch_nz) + hp_dim
-    z_search = torch.as_tensor(_torch_load(args.auto_best_z, map_location="cpu"), dtype=torch.float32).flatten()
-    if z_search.numel() != search_dim:
-        raise ValueError(
-            f"auto_best_z dimension mismatch for hp_mode={args.hp_mode}: "
-            f"expected {search_dim}, got {z_search.numel()}"
-        )
-
-    nas_config = decode_arch_from_z(vae, z_search[: args.arch_nz], device, args.auto_decode_trials)
-    if nas_config is None:
-        logger.warning(f"failed to decode auto_best_z architecture: {args.auto_best_z}")
-        return []
-
-    full_hp = decode_hp_by_mode(
-        z_search=z_search,
-        arch_nz=args.arch_nz,
-        config=nas_config,
-        hp_mode=args.hp_mode,
-        log_lr_min=args.log_lr_min,
-        log_lr_max=args.log_lr_max,
-        dropout_min=args.dropout_min,
-        dropout_max=args.dropout_max,
-        default_hidden_dim=args.hidden_dim,
-        default_weight_decay=args.weight_decay,
-    )
-    default_nas_hp = default_hp(nas_config, args)
-
-    manual_config = config_from_ops(
-        ["GCNConv", "GCNConv", "Identity"],
-        [(0, 1), (1, 2), (2, 3), (3, 4)],
-    )
-    manual_hp = decode_hp_by_mode(
-        z_search=z_search,
-        arch_nz=args.arch_nz,
-        config=manual_config,
-        hp_mode=args.hp_mode,
-        log_lr_min=args.log_lr_min,
-        log_lr_max=args.log_lr_max,
-        dropout_min=args.dropout_min,
-        dropout_max=args.dropout_max,
-        default_hidden_dim=args.hidden_dim,
-        default_weight_decay=args.weight_decay,
-    )
-
-    default_global_full_cond = dict(full_hp)
-    default_global_full_cond.update(
-        {
-            "lr": DEFAULT_LR,
-            "dropout": DEFAULT_DROPOUT,
-            "hidden_dim": int(args.hidden_dim),
-            "weight_decay": float(args.weight_decay),
-            "l2": float(args.weight_decay),
-        }
-    )
-
-    searched_global_default_cond = default_hp(nas_config, args)
-    searched_global_default_cond.update(
-        {
-            "lr": full_hp["lr"],
-            "dropout": full_hp["dropout"],
-            "hidden_dim": full_hp["hidden_dim"],
-            "weight_decay": full_hp["weight_decay"],
-            "l2": full_hp["l2"],
-        }
-    )
-
-    source_best_z = args.auto_best_z
-    source_checkpoint = args.checkpoint
-    candidates: list[dict[str, Any]] = []
-    for cand in [
-        make_candidate(
-            "Manual_2xGCN_searchedHP",
-            "hp_on_manual",
-            "Manual 2xGCN architecture with searched global HP decoded from best_z.",
-            manual_config,
-            manual_hp,
-            args,
-            source_best_z,
-            source_checkpoint,
-        ),
-        make_candidate(
-            "NAS_arch_defaultHP",
-            "arch_only",
-            "Decoded NAS architecture with default HP.",
-            nas_config,
-            default_nas_hp,
-            args,
-            source_best_z,
-            source_checkpoint,
-        ),
-        make_candidate(
-            "NAS_arch_globalHPOnly",
-            "arch_global_hp",
-            "Decoded NAS architecture with searched global HP and default conditional HP.",
-            nas_config,
-            searched_global_default_cond,
-            args,
-            source_best_z,
-            source_checkpoint,
-        ),
-        make_candidate(
-            "NAS_arch_condHPOnly",
-            "cond_only",
-            "Decoded NAS architecture with default global HP and searched conditional HP.",
-            nas_config,
-            default_global_full_cond,
-            args,
-            source_best_z,
-            source_checkpoint,
-        ),
-        make_candidate(
-            args.auto_name,
-            "full",
-            "Decoded NAS architecture with searched global and conditional HP.",
-            nas_config,
-            full_hp,
-            args,
-            source_best_z,
-            source_checkpoint,
-        ),
-    ]:
-        append_unique(candidates, cand, logger)
-
-    logger.info(
-        f"auto candidates built: {len(candidates)} "
-        f"ops={nas_config.get('operations', [])} hp_mode={args.hp_mode}"
-    )
-    return candidates
-
-
-def build_candidates(args: argparse.Namespace, device: torch.device, logger) -> list[dict[str, Any]]:
-    base_2gcn = config_from_ops(
-        ["GCNConv", "GCNConv", "Identity"],
-        [(0, 1), (1, 2), (2, 3), (3, 4)],
-    )
-    base_1gcn = config_from_ops(
-        ["GCNConv", "Identity", "Identity"],
-        [(0, 1), (1, 2), (2, 3), (3, 4)],
-    )
-    candidates: list[dict[str, Any]] = [
-        make_candidate(
+def build_baseline_candidates(start_rank: int = 1) -> list[dict[str, Any]]:
+    baselines = [
+        _baseline_candidate(
             "BASE_2xGCN_defaultHP",
-            "baseline",
-            "Manual 2xGCN baseline with default HP.",
-            base_2gcn,
-            default_hp(base_2gcn, args),
-            args,
+            ["GCNConv", "GCNConv", "Identity"],
+            DEFAULT_LR,
+            DEFAULT_DROPOUT,
+            DEFAULT_HIDDEN_DIM,
+            DEFAULT_L2,
         ),
-        make_candidate(
+        _baseline_candidate(
             "BASE_1xGCN_defaultHP",
-            "baseline",
-            "Manual 1xGCN reference with default HP.",
-            base_1gcn,
-            default_hp(base_1gcn, args),
-            args,
+            ["GCNConv", "Identity", "Identity"],
+            DEFAULT_LR,
+            DEFAULT_DROPOUT,
+            DEFAULT_HIDDEN_DIM,
+            DEFAULT_L2,
+        ),
+        _baseline_candidate(
+            "BASE_2xGCN_officialHP",
+            ["GCNConv", "GCNConv", "Identity"],
+            0.01,
+            0.5,
+            16,
+            5e-4,
         ),
     ]
-    if args.include_official_2gcn_baseline:
-        append_unique(
-            candidates,
-            make_candidate(
-                "BASE_2xGCN_officialHP",
-                "baseline_official_hp",
-                "Manual 2xGCN baseline with official GCN paper-style HP.",
-                base_2gcn,
-                official_2gcn_hp(base_2gcn, args),
-                args,
-            ),
-            logger,
-        )
-    for cand in build_auto_candidates(args, device, logger):
-        append_unique(candidates, cand, logger)
-    return candidates
+    for offset, baseline in enumerate(baselines):
+        baseline["candidate_rank"] = start_rank + offset
+    return baselines
 
 
-def run_eval(cand: dict[str, Any], data, in_ch: int, out_ch: int, args: argparse.Namespace, device: torch.device, logger):
-    config = {
-        "operations": list(cand["operations"]),
-        "edges": [tuple(edge) for edge in cand["edges"]],
-        "effective_layers": sum(1 for op in cand["operations"] if op != "Identity"),
-    }
-    val_accs: list[float] = []
-    test_accs: list[float] = []
-    valid_list: list[bool] = []
-
-    for seed in range(int(args.n_seeds)):
-        val_acc, is_valid, test_acc = train_and_eval_arch(
-            config=config,
-            data=data,
-            in_ch=in_ch,
-            out_ch=out_ch,
-            lr=float(cand["lr"]),
-            dropout=float(cand["dropout"]),
-            hidden_dim=int(cand["hidden_dim"]),
-            weight_decay=float(cand["l2"]),
-            gcnii_alpha=float(cand.get("gcnii_alpha", args.gcnii_alpha)),
-            gcnii_theta=float(cand.get("gcnii_theta", args.gcnii_theta)),
-            gat_heads=int(cand.get("gat_heads", DEFAULT_GAT_HEADS)),
-            sage_aggr=str(cand.get("sage_aggr", DEFAULT_SAGE_AGGR)),
-            gin_eps=float(cand.get("gin_eps", DEFAULT_GIN_EPS)),
-            gat_heads_by_layer=cand.get("gat_heads_by_layer"),
-            sage_aggr_by_layer=cand.get("sage_aggr_by_layer"),
-            gin_eps_by_layer=cand.get("gin_eps_by_layer"),
-            device=device,
-            max_epochs=int(args.eval_epochs),
-            patience=int(args.patience),
-            seed=seed,
-            track_test=True,
-        )
-        val_accs.append(float(val_acc))
-        test_accs.append(float(test_acc))
-        valid_list.append(bool(is_valid))
-        logger.info(
-            f"  seed {seed:>2d}: val={val_acc:.4f} test={test_acc:.4f} "
-            f"{'[valid]' if is_valid else '[invalid]'}"
-        )
-
-    valid_val_accs = [value for value, is_valid in zip(val_accs, valid_list) if is_valid]
-    valid_test_accs = [value for value, is_valid in zip(test_accs, valid_list) if is_valid]
-    n_valid = len(valid_val_accs)
-    n_invalid = len(valid_list) - n_valid
-    val_mean_all = float(np.mean(val_accs))
-    val_std_all = float(np.std(val_accs))
-    test_mean_all = float(np.mean(test_accs))
-    test_std_all = float(np.std(test_accs))
-    if n_valid:
-        val_mean_valid_only = float(np.mean(valid_val_accs))
-        val_std_valid_only = float(np.std(valid_val_accs))
-        test_mean_valid_only = float(np.mean(valid_test_accs))
-        test_std_valid_only = float(np.std(valid_test_accs))
-    else:
-        val_mean_valid_only = None
-        val_std_valid_only = None
-        test_mean_valid_only = None
-        test_std_valid_only = None
-        logger.warning(f"all seeds invalid for final-eval candidate: {cand['name']}")
-
+def _stats(values: Iterable[float]) -> dict[str, float | None]:
+    array = np.asarray(list(values), dtype=np.float64)
+    if array.size == 0:
+        return {"mean": None, "std": None, "min": None, "max": None}
     return {
-        "name": cand["name"],
-        "group": cand["group"],
-        "description": cand["description"],
-        "hp_mode": args.hp_mode,
-        "val_mean": val_mean_all,
-        "val_std": val_std_all,
-        "val_list": val_accs,
-        "test_mean": test_mean_all,
-        "test_std": test_std_all,
-        "test_list": test_accs,
-        "valid_list": valid_list,
-        "n_valid": n_valid,
-        "n_invalid": n_invalid,
-        "val_mean_all": val_mean_all,
-        "val_std_all": val_std_all,
-        "test_mean_all": test_mean_all,
-        "test_std_all": test_std_all,
-        "val_mean_valid_only": val_mean_valid_only,
-        "val_std_valid_only": val_std_valid_only,
-        "test_mean_valid_only": test_mean_valid_only,
-        "test_std_valid_only": test_std_valid_only,
-        "lr": float(cand["lr"]),
-        "dropout": float(cand["dropout"]),
-        "hidden_dim": int(cand["hidden_dim"]),
-        "l2": float(cand["l2"]),
-        "gat_heads": int(cand.get("gat_heads", DEFAULT_GAT_HEADS)),
-        "sage_aggr": str(cand.get("sage_aggr", DEFAULT_SAGE_AGGR)),
-        "gin_eps": float(cand.get("gin_eps", DEFAULT_GIN_EPS)),
-        "gat_heads_by_layer": cand.get("gat_heads_by_layer"),
-        "sage_aggr_by_layer": cand.get("sage_aggr_by_layer"),
-        "gin_eps_by_layer": cand.get("gin_eps_by_layer"),
-        "operations": list(cand["operations"]),
-        "edges": [list(edge) for edge in cand["edges"]],
-        "source_best_z": cand.get("source_best_z"),
-        "source_checkpoint": cand.get("source_checkpoint"),
-        "condition_mask": cand.get("condition_mask"),
-        "condition_mask_vector": cand.get("condition_mask_vector"),
+        "mean": float(np.mean(array)),
+        "std": float(np.std(array)),
+        "min": float(np.min(array)),
+        "max": float(np.max(array)),
     }
+
+
+def evaluate_candidate(
+    candidate: dict[str, Any],
+    data,
+    in_ch: int,
+    out_ch: int,
+    args: argparse.Namespace,
+    device: torch.device,
+    logger: logging.Logger,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    config = {
+        "operations": list(candidate["operations"]),
+        "edges": [tuple(edge) for edge in candidate["edges"]],
+        "effective_layers": sum(
+            1 for operation in candidate["operations"] if operation != "Identity"
+        ),
+    }
+    per_seed: list[dict[str, Any]] = []
+    for index in range(int(args.n_seeds)):
+        seed = int(args.seed_start) + index
+        started = time.monotonic()
+        try:
+            val_acc, is_valid, test_acc = train_and_eval_arch(
+                config=config,
+                data=data,
+                in_ch=in_ch,
+                out_ch=out_ch,
+                lr=float(candidate["lr"]),
+                dropout=float(candidate["dropout"]),
+                hidden_dim=int(candidate["hidden_dim"]),
+                weight_decay=float(candidate["l2"]),
+                gcnii_alpha=float(args.gcnii_alpha),
+                gcnii_theta=float(args.gcnii_theta),
+                gat_heads=int(candidate.get("gat_heads", DEFAULT_GAT_HEADS)),
+                sage_aggr=str(candidate.get("sage_aggr", DEFAULT_SAGE_AGGR)),
+                gin_eps=float(candidate.get("gin_eps", DEFAULT_GIN_EPS)),
+                gat_heads_by_layer=candidate.get("gat_heads_by_layer"),
+                sage_aggr_by_layer=candidate.get("sage_aggr_by_layer"),
+                gin_eps_by_layer=candidate.get("gin_eps_by_layer"),
+                device=device,
+                max_epochs=int(args.eval_epochs),
+                patience=int(args.patience),
+                seed=seed,
+                track_test=True,
+            )
+        except Exception:
+            logger.exception(
+                "candidate rank=%s seed=%s raised during final evaluation; recording invalid",
+                candidate["candidate_rank"],
+                seed,
+            )
+            val_acc, is_valid, test_acc = 0.0, False, 0.0
+        elapsed = time.monotonic() - started
+        row = {
+            "candidate_rank": int(candidate["candidate_rank"]),
+            "source": candidate["source"],
+            "name": candidate["name"],
+            "search_step": candidate.get("search_step"),
+            "search_val_acc": candidate.get("search_val_acc"),
+            "seed": seed,
+            "val_acc": float(val_acc),
+            "test_acc": float(test_acc),
+            "valid": bool(is_valid),
+            "train_time_seconds": float(elapsed),
+            "operations": list(candidate["operations"]),
+            "edges": [list(edge) for edge in candidate["edges"]],
+            "lr": float(candidate["lr"]),
+            "dropout": float(candidate["dropout"]),
+            "hidden_dim": int(candidate["hidden_dim"]),
+            "l2": float(candidate["l2"]),
+            "gat_heads": int(candidate.get("gat_heads", DEFAULT_GAT_HEADS)),
+            "sage_aggr": str(candidate.get("sage_aggr", DEFAULT_SAGE_AGGR)),
+            "gin_eps": float(candidate.get("gin_eps", DEFAULT_GIN_EPS)),
+            "gat_heads_by_layer": candidate.get("gat_heads_by_layer"),
+            "sage_aggr_by_layer": candidate.get("sage_aggr_by_layer"),
+            "gin_eps_by_layer": candidate.get("gin_eps_by_layer"),
+        }
+        per_seed.append(row)
+        logger.info(
+            "  seed=%d val=%.4f test=%.4f %s time=%.2fs",
+            seed,
+            row["val_acc"],
+            row["test_acc"],
+            "[valid]" if row["valid"] else "[invalid]",
+            elapsed,
+        )
+
+    valid_rows = [row for row in per_seed if row["valid"]]
+    val_stats = _stats(row["val_acc"] for row in valid_rows)
+    test_stats = _stats(row["test_acc"] for row in valid_rows)
+    aggregate = {
+        "candidate_rank": int(candidate["candidate_rank"]),
+        "source": candidate["source"],
+        "name": candidate["name"],
+        "search_step": candidate.get("search_step"),
+        "search_val_acc": candidate.get("search_val_acc"),
+        "val_mean": val_stats["mean"],
+        "val_std": val_stats["std"],
+        "val_min": val_stats["min"],
+        "val_max": val_stats["max"],
+        "test_mean": test_stats["mean"],
+        "test_std": test_stats["std"],
+        "test_min": test_stats["min"],
+        "test_max": test_stats["max"],
+        "n_valid": len(valid_rows),
+        "n_invalid": len(per_seed) - len(valid_rows),
+        "n_seeds": len(per_seed),
+        "operations": list(candidate["operations"]),
+        "edges": [list(edge) for edge in candidate["edges"]],
+        "lr": float(candidate["lr"]),
+        "dropout": float(candidate["dropout"]),
+        "hidden_dim": int(candidate["hidden_dim"]),
+        "l2": float(candidate["l2"]),
+        "gat_heads": int(candidate.get("gat_heads", DEFAULT_GAT_HEADS)),
+        "sage_aggr": str(candidate.get("sage_aggr", DEFAULT_SAGE_AGGR)),
+        "gin_eps": float(candidate.get("gin_eps", DEFAULT_GIN_EPS)),
+        "gat_heads_by_layer": candidate.get("gat_heads_by_layer"),
+        "sage_aggr_by_layer": candidate.get("sage_aggr_by_layer"),
+        "gin_eps_by_layer": candidate.get("gin_eps_by_layer"),
+        "per_seed": per_seed,
+    }
+    return aggregate, per_seed
+
+
+def _csv_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple, dict)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return value
+
+
+def write_csv(path: str, rows: Sequence[dict[str, Any]], fields: Sequence[str]) -> None:
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(fields), extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: _csv_value(row.get(field)) for field in fields})
+
+
+def _best_result(
+    results: Sequence[dict[str, Any]], field: str, source: str | None = None
+) -> dict[str, Any] | None:
+    eligible = [
+        row
+        for row in results
+        if row.get(field) is not None and (source is None or row.get("source") == source)
+    ]
+    return max(eligible, key=lambda row: float(row[field])) if eligible else None
+
+
+def _short_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    return {field: result.get(field) for field in AGGREGATE_FIELDS}
+
+
+def _format_metric(mean: float | None, std: float | None) -> str:
+    if mean is None or std is None:
+        return "n/a"
+    return f"{mean:.4f}+/-{std:.4f}"
 
 
 def main() -> None:
     args = parse_args()
+    if args.top_k <= 0:
+        raise ValueError("--top_k must be positive")
     if args.n_seeds <= 0:
         raise ValueError("--n_seeds must be positive")
+    if args.eval_epochs <= 0:
+        raise ValueError("--eval_epochs must be positive")
+    if args.patience <= 0:
+        raise ValueError("--patience must be positive")
     args.hp_mode = validate_hp_mode(args.hp_mode)
-    hp_dim = hp_dim_from_mode(args.hp_mode)
-    search_dim = int(args.arch_nz) + hp_dim
-    os.makedirs(args.output, exist_ok=True)
 
+    os.makedirs(args.output, exist_ok=True)
     logger, log_path = setup_logger(args.log_dir, "final_eval", args.version)
     save_args_json(args, log_path)
 
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    logger.info("history path: %s", args.history_path)
+    records = load_history_records(args.history_path)
+    selected = select_history_records(
+        records,
+        top_k=args.top_k,
+        history_steps=args.history_steps,
+        sort_by=args.sort_by,
+        deduplicate=args.deduplicate,
+    )
+    if not selected:
+        raise ValueError("no valid history records were selected for final evaluation")
+
+    logger.info("Selected top-k history records:")
+    for record in selected:
+        logger.info(
+            "rank=%d step=%s search_val=%.4f ops=%s edges=%s "
+            "hp={lr=%g, dropout=%g, hidden_dim=%d, l2=%g, gat_heads=%d, "
+            "sage_aggr=%s, gin_eps=%g}",
+            record["search_rank"],
+            record.get("search_step"),
+            record["search_val_acc"],
+            record["operations"],
+            record["edges"],
+            record["lr"],
+            record["dropout"],
+            record["hidden_dim"],
+            record["l2"],
+            record["gat_heads"],
+            record["sage_aggr"],
+            record["gin_eps"],
+        )
+    logger.info("selected steps: %s", [record.get("search_step") for record in selected])
+
+    selected_path = os.path.join(
+        args.output, f"selected_history_records_{args.hp_mode}.json"
+    )
+    with open(selected_path, "w", encoding="utf-8") as file:
+        json.dump(selected, file, indent=2, ensure_ascii=False)
+
+    candidates = [_candidate_from_history(record) for record in selected]
+    if args.include_baselines:
+        candidates.extend(build_baseline_candidates(start_rank=len(candidates) + 1))
+
+    torch.manual_seed(args.seed_start)
+    np.random.seed(args.seed_start)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    start_time = time.time()
-
-    logger.info("=" * 70)
-    logger.info(f"final_eval.py -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info("=" * 70)
-    logger.info(f"Device={device} hp_mode={args.hp_mode} hp_dim={hp_dim} search_dim={search_dim}")
-    logger.info(f"hp_names={hp_names_from_mode(args.hp_mode)}")
-
+    logger.info(
+        "device=%s hp_mode=%s n_seeds=%d seeds=%d..%d",
+        device,
+        args.hp_mode,
+        args.n_seeds,
+        args.seed_start,
+        args.seed_start + args.n_seeds - 1,
+    )
     data, in_ch, out_ch = load_cora(args.cora_root, device)
-    logger.info(f"Cora: {in_ch} features, {out_ch} classes")
+    logger.info("Cora: %d features, %d classes", in_ch, out_ch)
 
-    candidates = build_candidates(args, device, logger)
-    summary: list[dict[str, Any]] = []
-
-    for cand in candidates:
-        logger.info("\n" + "=" * 66)
-        logger.info(f"[{cand['group']}] {cand['name']}")
-        logger.info(f"  {cand['description']}")
+    started = time.monotonic()
+    results: list[dict[str, Any]] = []
+    per_seed_results: list[dict[str, Any]] = []
+    for candidate in candidates:
+        logger.info("=" * 66)
         logger.info(
-            f"  lr={cand['lr']:.5f} dropout={cand['dropout']:.3f} "
-            f"hidden={cand['hidden_dim']} l2={cand['l2']:.1e} "
-            f"gat_heads={cand['gat_heads']} sage_aggr={cand['sage_aggr']} "
-            f"gin_eps={cand['gin_eps']:.3f}"
+            "candidate rank=%d source=%s name=%s search_step=%s search_val=%s",
+            candidate["candidate_rank"],
+            candidate["source"],
+            candidate["name"],
+            candidate.get("search_step"),
+            candidate.get("search_val_acc"),
         )
-        result = run_eval(cand, data, in_ch, out_ch, args, device, logger)
-        summary.append(result)
         logger.info(
-            f"  >> val={result['val_mean']:.4f} +/- {result['val_std']:.4f} "
-            f"test={result['test_mean']:.4f} +/- {result['test_std']:.4f}"
+            "  operations=%s edges=%s hp={lr=%g, dropout=%g, hidden_dim=%d, l2=%g, "
+            "gat_heads=%d, sage_aggr=%s, gin_eps=%g}",
+            candidate["operations"],
+            candidate["edges"],
+            candidate["lr"],
+            candidate["dropout"],
+            candidate["hidden_dim"],
+            candidate["l2"],
+            candidate["gat_heads"],
+            candidate["sage_aggr"],
+            candidate["gin_eps"],
+        )
+        aggregate, seed_rows = evaluate_candidate(
+            candidate, data, in_ch, out_ch, args, device, logger
+        )
+        results.append(aggregate)
+        per_seed_results.extend(seed_rows)
+        logger.info(
+            "  final val=%s test=%s valid=%d invalid=%d",
+            _format_metric(aggregate["val_mean"], aggregate["val_std"]),
+            _format_metric(aggregate["test_mean"], aggregate["test_std"]),
+            aggregate["n_valid"],
+            aggregate["n_invalid"],
         )
 
-    out_path = os.path.join(args.output, f"final_results_{args.hp_mode}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
-    logger.info(f"Saved final results: {out_path}")
+    results_json_path = os.path.join(args.output, f"final_results_{args.hp_mode}.json")
+    results_csv_path = os.path.join(args.output, f"final_results_{args.hp_mode}.csv")
+    per_seed_csv_path = os.path.join(
+        args.output, f"final_results_per_seed_{args.hp_mode}.csv"
+    )
+    with open(results_json_path, "w", encoding="utf-8") as file:
+        json.dump(results, file, indent=2, ensure_ascii=False)
+    write_csv(results_csv_path, results, AGGREGATE_FIELDS)
+    write_csv(per_seed_csv_path, per_seed_results, PER_SEED_FIELDS)
 
-    if summary:
-        best = max(summary, key=lambda row: row["test_mean"])
-        logger.info(f"Best test: {best['name']} {best['test_mean']:.4f} +/- {best['test_std']:.4f}")
+    best_by_test = _best_result(results, "test_mean")
+    best_by_val = _best_result(results, "val_mean")
+    best_by_search = _best_result(results, "search_val_acc", source="history")
+    final_history_best = _best_result(results, "test_mean", source="history")
+    search_and_final_match = bool(
+        best_by_search is not None
+        and final_history_best is not None
+        and best_by_search["candidate_rank"] == final_history_best["candidate_rank"]
+    )
+    summary = {
+        "history_path": args.history_path,
+        "hp_mode": args.hp_mode,
+        "top_k": args.top_k,
+        "selected_count": len(selected),
+        "selected_steps": [record.get("search_step") for record in selected],
+        "deduplicate": args.deduplicate,
+        "sort_by": args.sort_by,
+        "n_seeds": args.n_seeds,
+        "seed_start": args.seed_start,
+        "eval_epochs": args.eval_epochs,
+        "patience": args.patience,
+        "include_baselines": args.include_baselines,
+        "best_by_test_mean": _short_result(best_by_test),
+        "best_by_val_mean": _short_result(best_by_val),
+        "best_by_search_val_acc": _short_result(best_by_search),
+        "search_best_matches_final_history_test_best": search_and_final_match,
+    }
+    summary_path = os.path.join(
+        args.output, f"final_eval_summary_{args.hp_mode}.json"
+    )
+    with open(summary_path, "w", encoding="utf-8") as file:
+        json.dump(summary, file, indent=2, ensure_ascii=False)
 
-    elapsed = time.time() - start_time
-    logger.info(f"Run complete. Total time: {elapsed / 60:.1f} min")
+    if best_by_test is not None:
+        logger.info(
+            "Final best by test_mean: rank=%d step=%s search_val=%s test=%s",
+            best_by_test["candidate_rank"],
+            best_by_test.get("search_step"),
+            best_by_test.get("search_val_acc"),
+            _format_metric(best_by_test["test_mean"], best_by_test["test_std"]),
+        )
+    if best_by_val is not None:
+        logger.info(
+            "Final best by val_mean: rank=%d step=%s search_val=%s val=%s",
+            best_by_val["candidate_rank"],
+            best_by_val.get("search_step"),
+            best_by_val.get("search_val_acc"),
+            _format_metric(best_by_val["val_mean"], best_by_val["val_std"]),
+        )
+    logger.info(
+        "Search-stage best and final history test best match: %s",
+        search_and_final_match,
+    )
+    logger.info(
+        "saved: %s, %s, %s, %s, %s",
+        results_json_path,
+        results_csv_path,
+        per_seed_csv_path,
+        selected_path,
+        summary_path,
+    )
+    logger.info("run complete in %.1f minutes", (time.monotonic() - started) / 60.0)
 
 
 if __name__ == "__main__":
