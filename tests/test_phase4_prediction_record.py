@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import ast
+import copy
+from types import SimpleNamespace
 
 from surrogate.metrics import prediction_record_fields
 
@@ -152,14 +154,142 @@ def test_phase4_predicts_before_evaluation_and_append():
     predict = _call_lines(function, "predictor.predict")
     evaluate = _call_lines(function, "eval_candidate")
     persist = _call_lines(function, "_save_prediction_csv")
+    metrics = _call_lines(function, "convergence_monitor.observe_bo_result")
     append = _call_lines(function, "predictor.append_observation")
-    assert predict and evaluate and persist and append
-    assert max(predict) < min(evaluate)
-    assert max(evaluate) < min(append)
+    assert predict and evaluate and persist and metrics and append
+    assert max(predict) < min(persist) < min(evaluate)
+    assert max(evaluate) < min(metrics) < min(append)
     assert any(min(evaluate) < line < min(append) for line in persist)
     assert _has_update_guard(function)
     returns = [node.value for node in ast.walk(function) if isinstance(node, ast.Return)]
     assert any(isinstance(value, ast.Tuple) and len(value.elts) == 4 for value in returns)
+
+
+def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update():
+    events = []
+
+    class FakePredictor:
+        train_size = 10
+        use_conditional_kernel = False
+
+        def predict(self, z_search, condition_mask=None):
+            events.append("predict")
+            return {"mean": 0.74, "std": 0.02, "lower_95": 0.70, "upper_95": 0.78}
+
+        def append_observation(self, z_search, actual, condition_mask=None):
+            events.append("append")
+            self.train_size += 1
+
+        def refit(self, optimize, steps):
+            events.append("refit")
+
+    class FakeMonitor:
+        def observe_bo_result(self, actual, prediction):
+            events.append("metrics")
+            assert prediction["gp_train_size_before"] == 10
+            assert prediction["gp_train_size_after"] == 10
+            return {"prequential_spearman": 1.0}
+
+    class FakeLogger:
+        def info(self, *args, **kwargs):
+            return None
+
+    def null_fields(before, after):
+        return {
+            "gp_pred_mean": None,
+            "gp_pred_std": None,
+            "gp_pred_95_low": None,
+            "gp_pred_95_high": None,
+            "gp_residual": None,
+            "gp_abs_error": None,
+            "gp_squared_error": None,
+            "gp_standardized_residual": None,
+            "gp_covered_by_95": None,
+            "gp_train_size_before": before,
+            "gp_train_size_after": after,
+        }
+
+    def save_prediction_csv(records, output):
+        events.append(("save", copy.deepcopy(records[-1])))
+
+    def evaluate(*args, **kwargs):
+        events.append("evaluate")
+        return "z", {
+            "val_acc": 0.75,
+            "valid": True,
+            "config": {"operations": ["GCNConv"], "edges": [[0, 1], [1, 2]]},
+            "hp": {},
+        }
+
+    def make_history(step, record_type, z_search, result, args, best_acc=None, gp_record=None):
+        return {"step": step, "val_acc": result["val_acc"], **dict(gp_record or {})}
+
+    namespace = {
+        "time": SimpleNamespace(monotonic=lambda: 1.0),
+        "_null_gp_record_fields": null_fields,
+        "_save_prediction_csv": save_prediction_csv,
+        "eval_candidate": evaluate,
+        "_holdout_leakage_reason": lambda *args: "",
+        "prediction_record_fields": prediction_record_fields,
+        "history_record": make_history,
+    }
+    exec("from __future__ import annotations\n" + _function_source("_append_eval"), namespace)
+    args = SimpleNamespace(
+        output="unused",
+        gp_update_mode="warm_refit",
+        gp_checkpoint=None,
+        gp_init_mode="scratch",
+        gp_refit_every=1,
+        gp_refit_steps=2,
+    )
+    predictor = FakePredictor()
+    prediction_records = []
+
+    namespace["_append_eval"](
+        object(),
+        "z",
+        object(),
+        8,
+        3,
+        args,
+        "cpu",
+        [],
+        [],
+        [],
+        4,
+        "bo",
+        FakeLogger(),
+        predictor,
+        prediction_records,
+        "online_bo",
+        0.1,
+        True,
+        0,
+        [1.0],
+        best_acc=0.70,
+        convergence_monitor=FakeMonitor(),
+    )
+
+    event_names = [event[0] if isinstance(event, tuple) else event for event in events]
+    assert event_names == [
+        "predict",
+        "save",
+        "evaluate",
+        "metrics",
+        "save",
+        "append",
+        "refit",
+        "save",
+    ]
+    snapshots = [event[1] for event in events if isinstance(event, tuple)]
+    assert snapshots[0]["val_acc"] is None
+    assert snapshots[0]["gp_pred_mean"] == 0.74
+    assert snapshots[0]["gp_train_size_after"] == 10
+    assert snapshots[1]["val_acc"] == 0.75
+    assert snapshots[1]["prequential_spearman"] == 1.0
+    assert snapshots[1]["gp_update_performed"] is False
+    assert snapshots[2]["gp_train_size_after"] == 11
+    assert snapshots[2]["gp_update_performed"] is True
 
 
 def test_scratch_init_records_null_gp_fields_without_checkpoint_source():
@@ -256,3 +386,43 @@ def test_phase4_candidate_ranking_is_pure_logei():
         )
         for node in ast.walk(function)
     )
+
+
+def test_seed_defaults_remain_unchanged():
+    bo_calls = _parser_argument_calls()
+    bo_seed_default = _keyword(bo_calls["--seed"], "default")
+    assert isinstance(bo_seed_default, ast.Constant)
+    assert bo_seed_default.value == 42
+
+    final_source = (ROOT / "final_eval.py").read_text(encoding="utf-8")
+    final_tree = ast.parse(final_source)
+    final_parse = next(
+        node
+        for node in final_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "parse_args"
+    )
+    final_calls = {
+        node.args[0].value: node
+        for node in ast.walk(final_parse)
+        if isinstance(node, ast.Call)
+        and _name(node.func) == "parser.add_argument"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+    seed_start_default = _keyword(final_calls["--seed_start"], "default")
+    n_seeds_default = _keyword(final_calls["--n_seeds"], "default")
+    assert isinstance(seed_start_default, ast.Constant)
+    assert seed_start_default.value == 0
+    assert isinstance(n_seeds_default, ast.Constant)
+    assert n_seeds_default.value == 10
+
+
+def test_prequential_metrics_are_persisted_in_step_csv_and_run_summary():
+    csv_source = _function_source("_save_prediction_csv")
+    run_source = _function_source("run_bo")
+
+    assert "*PREQUENTIAL_METRIC_FIELDS" in csv_source
+    assert "**monitor.current_prequential_metrics()" in run_source
+    assert '"valid_convergence_checks"' in run_source
+    assert '"stagnation_deferred_events"' in run_source

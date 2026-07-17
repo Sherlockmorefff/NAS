@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from surrogate.metrics import GPConvergenceMonitor
+from surrogate.metrics import PREQUENTIAL_METRIC_FIELDS, GPConvergenceMonitor
 
 
 def _monitor(**kwargs):
@@ -26,6 +26,26 @@ def _add(monitor, sample, mae=0.1, std=0.05, spearman=0.8):
     )
 
 
+def _add_scratch(monitor, sample, actual, predicted, std=0.05):
+    monitor.observe_bo_result(
+        actual,
+        {
+            "valid": True,
+            "gp_pred_mean": predicted,
+            "gp_pred_std": 0.02,
+        },
+    )
+    return monitor.add_check(
+        online_samples=sample,
+        gp_train_size=20 + sample,
+        holdout_metrics=None,
+        probe_stds=[std, std],
+        elapsed_seconds=float(sample),
+        eval_seconds=[1.0],
+        gp_update_seconds=[0.1],
+    )
+
+
 def test_requires_consecutive_stable_checks():
     monitor = _monitor()
     _add(monitor, 2)
@@ -42,18 +62,77 @@ def test_obvious_degradation_is_not_convergence():
     assert not row["converged"]
 
 
-def test_missing_holdout_metrics_do_not_soft_converge():
+def test_scratch_converges_from_stable_full_prequential_window():
     monitor = _monitor(best_acc_patience=99)
+    monitor.observe_bo_result(
+        0.69,
+        {"valid": True, "gp_pred_mean": 0.68, "gp_pred_std": 0.02},
+    )
+
+    first = _add_scratch(monitor, 2, 0.70, 0.69)
+    assert first["convergence_evidence_source"] == "prequential"
+    assert not first["converged"]
+    assert _add_scratch(monitor, 3, 0.71, 0.70)["stable_checks"] == 1
+    assert _add_scratch(monitor, 4, 0.72, 0.71)["stable_checks"] == 2
+    final = _add_scratch(monitor, 5, 0.73, 0.72)
+
+    assert final["stable_checks"] == 3
+    assert final["converged"]
+    assert final["prequential_spearman"] == 1.0
+    assert set(PREQUENTIAL_METRIC_FIELDS).issubset(final)
+
+
+def test_scratch_window_or_ranking_unavailable_is_not_converged():
+    incomplete = _monitor(prequential_window=3, best_acc_patience=99)
+    row = _add_scratch(incomplete, 2, 0.70, 0.69)
+    assert not row["convergence_evidence_ready"]
+    assert row["convergence_not_ready_reason"] == "prequential_window_incomplete:1/3"
+    assert not row["converged"]
+
+    constant = _monitor(best_acc_patience=99)
     for sample in range(2, 7):
-        monitor.observe_bo_result(0.7, {"gp_pred_mean": 0.7})
-        row = monitor.add_check(
-            online_samples=sample, gp_train_size=20 + sample,
-            holdout_metrics=None, probe_stds=[0.05, 0.05],
-            elapsed_seconds=float(sample), eval_seconds=[1.0], gp_update_seconds=[0.1],
-        )
+        row = _add_scratch(constant, sample, 0.70, 0.70)
+    assert row["convergence_not_ready_reason"] == "prequential_spearman_unavailable"
+    assert row["valid_convergence_checks"] == 0
     assert row["stable_checks"] == 0
     assert not row["converged"]
-    assert monitor.stop_decision(6, 0.0, 0.0).stop_reason is None
+
+
+def test_scratch_metric_degradation_resets_stable_streak():
+    monitor = _monitor(best_acc_patience=99)
+    monitor.observe_bo_result(
+        0.69,
+        {"valid": True, "gp_pred_mean": 0.68, "gp_pred_std": 0.02},
+    )
+    _add_scratch(monitor, 2, 0.70, 0.69)
+    stable = _add_scratch(monitor, 3, 0.71, 0.70)
+    assert stable["stable_checks"] == 1
+
+    degraded = _add_scratch(monitor, 4, 0.72, 0.50, std=0.10)
+
+    assert not degraded["stable_this_check"]
+    assert degraded["stable_checks"] == 0
+    assert not degraded["converged"]
+
+
+def test_scratch_can_converge_with_low_but_stable_ranking_quality():
+    monitor = _monitor(best_acc_patience=99)
+    monitor.observe_bo_result(
+        0.69,
+        {"valid": True, "gp_pred_mean": 0.71, "gp_pred_std": 0.02},
+    )
+    baseline = _add_scratch(monitor, 2, 0.70, 0.70)
+    assert baseline["prequential_spearman"] == -1.0
+
+    first = _add_scratch(monitor, 3, 0.69, 0.71)
+    second = _add_scratch(monitor, 4, 0.70, 0.70)
+    final = _add_scratch(monitor, 5, 0.69, 0.71)
+
+    assert first["stable_checks"] == 1
+    assert second["stable_checks"] == 2
+    assert final["prequential_spearman"] == -1.0
+    assert final["stable_checks"] == 3
+    assert final["converged"]
 
 
 def test_budget_time_and_stagnation_stop_reasons():
@@ -68,4 +147,38 @@ def test_budget_time_and_stagnation_stop_reasons():
     stagnant.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
     stagnant.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
     stagnant.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
-    assert stagnant.stop_decision(3, 0.0, 0.0).stop_reason == "bo_best_acc_stagnated"
+    deferred = stagnant.stop_decision(3, 0.0, 0.0)
+    assert deferred.stop_reason is None
+    assert deferred.deferred_reason is not None
+
+
+def test_stagnation_waits_for_three_valid_convergence_checks():
+    monitor = _monitor(best_acc_patience=2, convergence_patience=3)
+    for _ in range(3):
+        monitor.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
+
+    first = _add(monitor, 2)
+    assert first["valid_convergence_checks"] == 1
+    assert monitor.stop_decision(3, 0.0, 0.0).stop_reason is None
+    second = _add(monitor, 3)
+    assert second["valid_convergence_checks"] == 2
+    assert monitor.stop_decision(3, 0.0, 0.0).stop_reason is None
+    third = _add(monitor, 4)
+    assert third["valid_convergence_checks"] == 3
+    assert monitor.stop_decision(4, 0.0, 0.0).stop_reason == "bo_best_acc_stagnated"
+
+
+def test_stagnation_gate_does_not_block_budget_or_wall_time():
+    budget = _monitor(max_bo_samples=2, best_acc_patience=1)
+    budget.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
+    budget.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
+    decision = budget.stop_decision(2, 0.0, 0.0)
+    assert decision.stop_reason == "sample_budget_reached"
+    assert decision.deferred_reason is not None
+
+    timing = _monitor(max_wall_time_hours=0.001, best_acc_patience=1)
+    timing.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
+    timing.observe_bo_result(0.8, {"gp_pred_mean": 0.8})
+    decision = timing.stop_decision(2, 3.0, 1.0)
+    assert decision.stop_reason == "time_budget_reached"
+    assert decision.deferred_reason is not None

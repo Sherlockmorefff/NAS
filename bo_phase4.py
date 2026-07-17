@@ -58,7 +58,12 @@ from surrogate.accuracy_gp import (
 )
 from surrogate.checkpoint_io import atomic_json_dump
 from surrogate.history_dataset import architecture_key_from_record
-from surrogate.metrics import GPConvergenceMonitor, prediction_metrics, prediction_record_fields
+from surrogate.metrics import (
+    PREQUENTIAL_METRIC_FIELDS,
+    GPConvergenceMonitor,
+    prediction_metrics,
+    prediction_record_fields,
+)
 from weighted_diag_gmm_init import fit_and_sample_gmm_init, load_history_vectors
 
 
@@ -711,6 +716,7 @@ def _append_eval(
     online_valid_count: int,
     condition_mask: list[float],
     best_acc: float | None = None,
+    convergence_monitor: GPConvergenceMonitor | None = None,
 ) -> tuple[float, bool, list[float], bool]:
     """Predict, evaluate, record, and optionally update in that strict order."""
 
@@ -724,6 +730,37 @@ def _append_eval(
             z_search,
             condition_mask=condition_mask if predictor.use_conditional_kernel else None,
         )
+    pre_eval_fields = _null_gp_record_fields(train_size_before, train_size_before)
+    if prediction is not None:
+        pre_eval_fields.update(
+            {
+                "gp_pred_mean": float(prediction["mean"]),
+                "gp_pred_std": float(prediction["std"]),
+                "gp_pred_95_low": float(prediction["lower_95"]),
+                "gp_pred_95_high": float(prediction["upper_95"]),
+            }
+        )
+    prediction_row = {
+        "step": int(step),
+        "record_type": record_type,
+        "gp_stage": gp_stage,
+        "valid": None,
+        "val_acc": None,
+        **pre_eval_fields,
+        "logei": None if logei_value is None else float(logei_value),
+        "best_val_before": None if best_acc is None else float(best_acc),
+        "gp_update_mode": args.gp_update_mode,
+        "gp_checkpoint_source": args.gp_checkpoint if args.gp_init_mode == "checkpoint" else None,
+        "gp_update_performed": False,
+        "gp_update_skipped_reason": "",
+        "gp_update_seconds": 0.0,
+        "eval_seconds": None,
+        "total_step_seconds": float(time.monotonic() - step_started),
+    }
+    prediction_records.append(prediction_row)
+    # Persist the untouched pre-update prediction before the real GNN evaluation.
+    _save_prediction_csv(prediction_records, args.output)
+
     eval_started = time.monotonic()
     z_search, result = eval_candidate(vae, z_search, data, in_ch, out_ch, args, device)
     eval_seconds = time.monotonic() - eval_started
@@ -761,16 +798,12 @@ def _append_eval(
         best_acc=best_acc, gp_record=gp_fields,
     )
     history.append(history_row)
-    prediction_row = {
-        "step": int(step),
-        "record_type": record_type,
-        "gp_stage": gp_stage,
-        "valid": valid,
-        "val_acc": acc,
-        **gp_fields,
-    }
-    prediction_records.append(prediction_row)
-    # Persist the pre-update prediction and real result before touching the GP.
+    prediction_row.update({"valid": valid, "val_acc": acc, **gp_fields})
+    if convergence_monitor is not None:
+        rolling_metrics = convergence_monitor.observe_bo_result(acc, prediction_row)
+        prediction_row.update(rolling_metrics)
+        history_row.update(rolling_metrics)
+    # Persist the prediction, real result, and metrics before touching the GP.
     _save_prediction_csv(prediction_records, args.output)
 
     if update_online and safe_for_gp_training:
@@ -834,6 +867,7 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         "logei", "best_val_before", "gp_update_mode", "gp_checkpoint_source",
         "gp_update_performed", "gp_update_skipped_reason", "eval_seconds",
         "gp_update_seconds", "total_step_seconds",
+        *PREQUENTIAL_METRIC_FIELDS,
     ]
     with open(tmp_path, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
@@ -1296,6 +1330,8 @@ def run_bo(
             if eval_times or update_times:
                 last_estimate = float(np.median(eval_times[-5:])) + float(np.median(update_times[-5:]))
             decision = monitor.stop_decision(it, time.monotonic() - run_started, last_estimate)
+            if decision.deferred_reason is not None:
+                logger.info("Adaptive stop deferred: %s", decision.deferred_reason)
             if decision.stop_reason is not None:
                 stop_reason = decision.stop_reason
                 break
@@ -1327,6 +1363,7 @@ def run_bo(
             online_valid_count,
             condition_mask,
             best_acc=best_acc,
+            convergence_monitor=monitor,
         )
         current_record = prediction_records[-1]
         if current_record["gp_update_performed"]:
@@ -1335,8 +1372,6 @@ def run_bo(
                 predictor.save(os.path.join(args.output, "accuracy_gp_online_latest.pt"))
         eval_times.append(float(current_record["eval_seconds"]))
         update_times.append(float(current_record["gp_update_seconds"]))
-        monitor.observe_bo_result(acc, current_record)
-
         if acc > best_acc:
             best_acc = acc
             logger.info(f"  iter {it:>3d}: <-- NEW BEST {best_acc:.4f}")
@@ -1407,6 +1442,10 @@ def run_bo(
         "gp_train_size_final": predictor.train_size,
         "best_actual_val_acc": float(max(Y_obs)),
         "elapsed_seconds": float(time.monotonic() - run_started),
+        "convergence_checks": int(len(monitor.history)),
+        "valid_convergence_checks": int(monitor.valid_convergence_checks),
+        "stagnation_deferred_events": list(monitor.stagnation_deferred_events),
+        **monitor.current_prequential_metrics(),
     }
     atomic_json_dump(summary, os.path.join(args.output, "gp_metrics.json"))
     _write_convergence_files(monitor.history, args.output)
