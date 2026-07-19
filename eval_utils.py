@@ -13,6 +13,9 @@ The supported main modes are defined in hp_modes.py:
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import contextmanager, nullcontext
+import hashlib
+import random
 from typing import Any
 import warnings
 
@@ -55,6 +58,8 @@ HP_DIM_LAYERWISE_LEGACY = 2 + 3 * MAX_OP_NODES
 DEFAULT_GAT_HEADS = 1
 DEFAULT_SAGE_AGGR = "mean"
 DEFAULT_GIN_EPS = 0.0
+SEED_DERIVATION = "sha256_v1"
+_MAX_RNG_SEED = 2**32 - 1
 
 OP_REG = {
     "GCNConv": GCNConv,
@@ -84,8 +89,91 @@ def _match_feature_dim(x: torch.Tensor, target_dim: int) -> torch.Tensor:
     return torch.cat([x, pad], dim=1)
 
 
-def _invalid_eval_result(track_test: bool) -> tuple:
-    return (0.0, False, 0.0) if track_test else (0.0, False)
+def _seed_component_bytes(component: Any) -> tuple[bytes, bytes]:
+    if isinstance(component, bytes):
+        return b"bytes", component
+    if isinstance(component, str):
+        return b"str", component.encode("utf-8")
+    if isinstance(component, (int, np.integer)):
+        return b"int", str(int(component)).encode("ascii")
+    if isinstance(component, torch.Tensor):
+        value = component.detach().cpu().to(dtype=torch.float32).contiguous().numpy()
+        return b"bytes", value.tobytes(order="C")
+    if isinstance(component, np.ndarray):
+        value = np.ascontiguousarray(component, dtype=np.float32)
+        return b"bytes", value.tobytes(order="C")
+    raise TypeError(
+        "stable_seed components must be bytes, str, int, NumPy arrays, or Torch tensors; "
+        f"got {type(component).__name__}"
+    )
+
+
+def stable_seed(base_seed: int, namespace: str, *components: Any) -> int:
+    """Derive a process-stable NumPy/Torch-compatible seed using SHA-256."""
+
+    if not isinstance(namespace, str) or not namespace:
+        raise ValueError("stable_seed namespace must be a non-empty string")
+    digest = hashlib.sha256()
+    for tag, payload in (
+        (b"version", SEED_DERIVATION.encode("ascii")),
+        (b"base_seed", str(int(base_seed)).encode("ascii")),
+        (b"namespace", namespace.encode("utf-8")),
+    ):
+        digest.update(len(tag).to_bytes(4, "big"))
+        digest.update(tag)
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    for component in components:
+        tag, payload = _seed_component_bytes(component)
+        digest.update(len(tag).to_bytes(4, "big"))
+        digest.update(tag)
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    return int.from_bytes(digest.digest()[:8], "big") % (_MAX_RNG_SEED + 1)
+
+
+@contextmanager
+def isolated_rng(seed: int, device=None):
+    """Temporarily seed Python, NumPy, Torch CPU, and available CUDA RNGs."""
+
+    seed = int(seed)
+    if not 0 <= seed <= _MAX_RNG_SEED:
+        raise ValueError(f"seed must be in [0, {_MAX_RNG_SEED}], got {seed}")
+
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    cuda_devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
+    try:
+        with torch.random.fork_rng(devices=cuda_devices, enabled=True):
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            if cuda_devices:
+                torch.cuda.manual_seed_all(seed)
+            yield
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+
+
+def _training_metadata(
+    best_epoch: int | None = None,
+    epochs_ran: int = 0,
+) -> dict[str, int | None]:
+    return {
+        "best_epoch": best_epoch,
+        "stopped_epoch": int(epochs_ran),
+        "epochs_ran": int(epochs_ran),
+    }
+
+
+def _invalid_eval_result(
+    track_test: bool,
+    return_metadata: bool = False,
+    metadata: dict[str, int | None] | None = None,
+) -> tuple:
+    result = (0.0, False, 0.0) if track_test else (0.0, False)
+    return result + (metadata or _training_metadata(),) if return_metadata else result
 
 
 def _empty_cuda_cache_if_oom(exc: BaseException) -> None:
@@ -579,102 +667,106 @@ def train_and_eval_arch(
     patience: int = PATIENCE,
     seed: int = None,
     track_test: bool = False,
+    return_metadata: bool = False,
 ) -> tuple:
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if config is None or config.get("effective_layers", 0) == 0:
-        return (0.0, False, 0.0) if track_test else (0.0, False)
+        return _invalid_eval_result(track_test, return_metadata)
 
-    if seed is not None:
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+    rng_context = isolated_rng(seed, device) if seed is not None else nullcontext()
+    with rng_context:
+        try:
+            gnn = DynamicGNN(
+                config,
+                in_ch,
+                out_ch,
+                dropout=dropout,
+                hidden_dim=hidden_dim,
+                gcnii_alpha=gcnii_alpha,
+                gcnii_theta=gcnii_theta,
+                gat_heads=gat_heads,
+                sage_aggr=sage_aggr,
+                gin_eps=gin_eps,
+                gat_heads_by_layer=gat_heads_by_layer,
+                sage_aggr_by_layer=sage_aggr_by_layer,
+                gin_eps_by_layer=gin_eps_by_layer,
+            ).to(device)
+        except (RuntimeError, ValueError, TypeError, KeyError) as exc:
+            _empty_cuda_cache_if_oom(exc)
+            _warn_dynamic_gnn_failure("build", exc)
+            return _invalid_eval_result(track_test, return_metadata)
 
-    try:
-        gnn = DynamicGNN(
-            config,
-            in_ch,
-            out_ch,
-            dropout=dropout,
-            hidden_dim=hidden_dim,
-            gcnii_alpha=gcnii_alpha,
-            gcnii_theta=gcnii_theta,
-            gat_heads=gat_heads,
-            sage_aggr=sage_aggr,
-            gin_eps=gin_eps,
-            gat_heads_by_layer=gat_heads_by_layer,
-            sage_aggr_by_layer=sage_aggr_by_layer,
-            gin_eps_by_layer=gin_eps_by_layer,
-        ).to(device)
-    except (RuntimeError, ValueError, TypeError, KeyError) as exc:
-        _empty_cuda_cache_if_oom(exc)
-        _warn_dynamic_gnn_failure("build", exc)
-        return _invalid_eval_result(track_test)
+        optimizer = torch.optim.Adam(gnn.parameters(), lr=lr, weight_decay=weight_decay)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max_epochs,
+            eta_min=lr * 0.01,
+        )
 
-    optimizer = torch.optim.Adam(gnn.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=max_epochs,
-        eta_min=lr * 0.01,
-    )
+        best_val = 0.0
+        best_test = 0.0
+        best_epoch = None
+        epochs_ran = 0
+        no_improve = 0
 
-    best_val = 0.0
-    best_test = 0.0
-    no_improve = 0
+        try:
+            for epoch in range(max_epochs):
+                gnn.train()
+                optimizer.zero_grad()
+                out = gnn(data.x, data.edge_index)
+                if not bool(torch.isfinite(out).all().detach().cpu().item()):
+                    raise FloatingPointError("non-finite DynamicGNN training output")
+                loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+                if not bool(torch.isfinite(loss).detach().cpu().item()):
+                    raise FloatingPointError("non-finite DynamicGNN training loss")
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
 
-    try:
-        for _epoch in range(max_epochs):
-            gnn.train()
-            optimizer.zero_grad()
-            out = gnn(data.x, data.edge_index)
-            if not bool(torch.isfinite(out).all().detach().cpu().item()):
-                raise FloatingPointError("non-finite DynamicGNN training output")
-            loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
-            if not bool(torch.isfinite(loss).detach().cpu().item()):
-                raise FloatingPointError("non-finite DynamicGNN training loss")
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-            gnn.eval()
-            with torch.no_grad():
-                eval_out = gnn(data.x, data.edge_index)
-                if not bool(torch.isfinite(eval_out).all().detach().cpu().item()):
-                    raise FloatingPointError("non-finite DynamicGNN validation output")
-                pred = eval_out.argmax(dim=1)
-                val_count = int(data.val_mask.sum().item())
-                if val_count <= 0:
-                    raise ValueError("validation mask is empty")
-                val_acc = (
-                    pred[data.val_mask].eq(data.y[data.val_mask]).sum().item()
-                    / val_count
-                )
-                if track_test:
-                    test_count = int(data.test_mask.sum().item())
-                    if test_count <= 0:
-                        raise ValueError("test mask is empty")
-                    test_acc = (
-                        pred[data.test_mask].eq(data.y[data.test_mask]).sum().item()
-                        / test_count
+                gnn.eval()
+                with torch.no_grad():
+                    eval_out = gnn(data.x, data.edge_index)
+                    if not bool(torch.isfinite(eval_out).all().detach().cpu().item()):
+                        raise FloatingPointError("non-finite DynamicGNN validation output")
+                    pred = eval_out.argmax(dim=1)
+                    val_count = int(data.val_mask.sum().item())
+                    if val_count <= 0:
+                        raise ValueError("validation mask is empty")
+                    val_acc = (
+                        pred[data.val_mask].eq(data.y[data.val_mask]).sum().item()
+                        / val_count
                     )
+                    if track_test:
+                        test_count = int(data.test_mask.sum().item())
+                        if test_count <= 0:
+                            raise ValueError("test mask is empty")
+                        test_acc = (
+                            pred[data.test_mask].eq(data.y[data.test_mask]).sum().item()
+                            / test_count
+                        )
 
-            if val_acc > best_val:
-                best_val = val_acc
-                no_improve = 0
-                if track_test:
-                    best_test = test_acc
-            else:
-                no_improve += 1
-                if no_improve >= patience:
-                    break
-    except (RuntimeError, ValueError, FloatingPointError) as exc:
-        _empty_cuda_cache_if_oom(exc)
-        _warn_dynamic_gnn_failure("eval", exc)
-        return _invalid_eval_result(track_test)
+                epochs_ran = epoch + 1
+                if val_acc > best_val:
+                    best_val = val_acc
+                    best_epoch = epochs_ran
+                    no_improve = 0
+                    if track_test:
+                        best_test = test_acc
+                else:
+                    no_improve += 1
+                    if no_improve >= patience:
+                        break
+        except (RuntimeError, ValueError, FloatingPointError) as exc:
+            _empty_cuda_cache_if_oom(exc)
+            _warn_dynamic_gnn_failure("eval", exc)
+            metadata = _training_metadata(best_epoch, epochs_ran)
+            return _invalid_eval_result(track_test, return_metadata, metadata)
 
-    if track_test:
-        return best_val, True, best_test
-    return best_val, True
+        metadata = _training_metadata(best_epoch, epochs_ran)
+        result = (best_val, True, best_test) if track_test else (best_val, True)
+        return result + (metadata,) if return_metadata else result
 
 
 def eval_z_search(
@@ -702,6 +794,8 @@ def eval_z_search(
     return_layerwise: bool = False,
     hp_mode: str = "global4",
     return_hp: bool = False,
+    decoder_seed: int | None = None,
+    candidate_eval_seed: int | None = None,
 ) -> tuple | dict[str, Any]:
     """Decode z_search, train the architecture, and return validation score.
 
@@ -713,7 +807,7 @@ def eval_z_search(
     hp_mode = validate_hp_mode(hp_mode)
     z_flat = _tensor_to_1d_cpu(z_search)
     z_arch = z_search[:arch_nz]
-    config = _decode_arch(vae, z_arch, device, n_trials)
+    config = _decode_arch(vae, z_arch, device, n_trials, decoder_seed=decoder_seed)
 
     try:
         hp = decode_hp_by_mode(
@@ -758,6 +852,9 @@ def eval_z_search(
                 "z_search": z_flat.tolist(),
                 "hp": hp,
                 "condition_mask_vector": hp["condition_mask_vector"],
+                "decoder_seed": decoder_seed,
+                "candidate_eval_seed": candidate_eval_seed,
+                **_training_metadata(),
             }
         if return_layerwise:
             return (
@@ -787,7 +884,7 @@ def eval_z_search(
             is_valid,
         )
 
-    val_acc, is_valid = train_and_eval_arch(
+    train_result = train_and_eval_arch(
         config,
         data,
         in_ch,
@@ -807,8 +904,14 @@ def eval_z_search(
         device=device,
         max_epochs=max_epochs,
         patience=patience,
+        seed=candidate_eval_seed,
         track_test=False,
+        return_metadata=return_hp,
     )
+    if return_hp:
+        val_acc, is_valid, training_metadata = train_result
+    else:
+        val_acc, is_valid = train_result
 
     if return_hp:
         return {
@@ -834,6 +937,9 @@ def eval_z_search(
             "condition_mask_vector": hp["condition_mask_vector"],
             "hp_mode": hp_mode,
             "search_dim": int(arch_nz + hp_dim_from_mode(hp_mode)),
+            "decoder_seed": decoder_seed,
+            "candidate_eval_seed": candidate_eval_seed,
+            **training_metadata,
         }
 
     if return_layerwise:
@@ -867,13 +973,20 @@ def eval_z_search(
     )
 
 
-def _decode_arch(vae, z_arch: torch.Tensor, device, n_trials: int = 3):
+def _decode_arch(
+    vae,
+    z_arch: torch.Tensor,
+    device,
+    n_trials: int = 3,
+    decoder_seed: int | None = None,
+):
     from collections import Counter
 
     results = []
-    with torch.no_grad():
+    rng_context = isolated_rng(decoder_seed, device) if decoder_seed is not None else nullcontext()
+    with rng_context, torch.no_grad():
         for _ in range(n_trials):
-            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(device))
+            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(device), stochastic=True)
             g = graphs[0]
             ops = [
                 vae.op_mapping.get(g.vs[i]["type"], "Identity")

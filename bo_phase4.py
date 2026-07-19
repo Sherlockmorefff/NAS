@@ -22,7 +22,6 @@ import sys
 import time
 import urllib.request
 import warnings
-from collections import Counter
 from datetime import datetime
 from typing import Any
 
@@ -44,7 +43,13 @@ from botorch.optim import optimize_acqf
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 
-from eval_utils import eval_z_search
+from eval_utils import (
+    SEED_DERIVATION,
+    _decode_arch,
+    eval_z_search,
+    isolated_rng,
+    stable_seed,
+)
 from hp_modes import (
     condition_mask_vector_from_ops,
     hp_dim_from_mode,
@@ -297,34 +302,20 @@ def load_vae(args: argparse.Namespace, device: torch.device, logger) -> JointSpa
     return model
 
 
-def decode_arch(vae: JointSpaceVAE, z_arch: torch.Tensor, device: torch.device, n_trials: int = 5):
-    results = []
-    with torch.no_grad():
-        for _ in range(n_trials):
-            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(device))
-            graph = graphs[0]
-            ops = [
-                vae.op_mapping.get(graph.vs[i]["type"], "Identity")
-                for i in range(1, graph.vcount() - 1)
-            ]
-            edges = graph.get_edgelist()
-            n_eff = sum(1 for op in ops if op != "Identity")
-            if n_eff > 0:
-                key = (tuple(ops), tuple(edges))
-                results.append(
-                    (
-                        key,
-                        {
-                            "effective_layers": n_eff,
-                            "operations": ops,
-                            "edges": edges,
-                        },
-                    )
-                )
-    if not results:
-        return None
-    best_key = Counter(r[0] for r in results).most_common(1)[0][0]
-    return next(config for key, config in results if key == best_key)
+def decode_arch(
+    vae: JointSpaceVAE,
+    z_arch: torch.Tensor,
+    device: torch.device,
+    n_trials: int = 5,
+    decoder_seed: int | None = None,
+):
+    return _decode_arch(
+        vae,
+        z_arch,
+        device,
+        n_trials=n_trials,
+        decoder_seed=decoder_seed,
+    )
 
 
 def eval_candidate(
@@ -335,9 +326,12 @@ def eval_candidate(
     out_ch: int,
     args: argparse.Namespace,
     device: torch.device,
+    step: int = 0,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     z_np = clip_z_search_by_mode(z_search, args.hp_mode, ARCH_NZ, args.z_bound)
     z_tensor = torch.tensor(z_np, dtype=torch.float32)
+    decoder_seed = stable_seed(int(args.seed), "decoder", z_tensor[:ARCH_NZ])
+    candidate_eval_seed = stable_seed(int(args.seed), "candidate_eval", int(step))
     result = eval_z_search(
         vae,
         z_tensor.to(device),
@@ -357,6 +351,16 @@ def eval_candidate(
         patience=args.patience,
         hp_mode=args.hp_mode,
         return_hp=True,
+        decoder_seed=decoder_seed,
+        candidate_eval_seed=candidate_eval_seed,
+    )
+    result.update(
+        {
+            "search_seed": int(args.seed),
+            "decoder_seed": decoder_seed,
+            "candidate_eval_seed": candidate_eval_seed,
+            "seed_derivation": SEED_DERIVATION,
+        }
     )
     return z_tensor, result
 
@@ -422,6 +426,17 @@ def history_record(
 ) -> dict[str, Any]:
     hp = result.get("hp", {})
     config = result.get("config")
+    search_seed = int(result.get("search_seed", args.seed))
+    decoder_seed_value = result.get("decoder_seed")
+    if decoder_seed_value is None:
+        decoder_seed_value = stable_seed(search_seed, "decoder", z_search[:ARCH_NZ])
+    decoder_seed = int(decoder_seed_value)
+    candidate_eval_seed_value = result.get("candidate_eval_seed")
+    if candidate_eval_seed_value is None:
+        candidate_eval_seed_value = stable_seed(search_seed, "candidate_eval", int(step))
+    candidate_eval_seed = int(candidate_eval_seed_value)
+    epochs_ran = int(result.get("epochs_ran") or 0)
+    stopped_epoch = int(result.get("stopped_epoch") or epochs_ran)
     params = {
         "hp_norm": hp.get("hp_norm"),
         "gcnii_alpha": float(args.gcnii_alpha),
@@ -459,6 +474,13 @@ def history_record(
             "condition_mask_vector",
             result.get("condition_mask_vector"),
         ),
+        "search_seed": search_seed,
+        "decoder_seed": decoder_seed,
+        "candidate_eval_seed": candidate_eval_seed,
+        "seed_derivation": SEED_DERIVATION,
+        "best_epoch": result.get("best_epoch"),
+        "stopped_epoch": stopped_epoch,
+        "epochs_ran": epochs_ran,
         "params": params,
     }
     if gp_record:
@@ -616,8 +638,15 @@ def _mask_for_candidate(
     device: torch.device,
     logger,
 ) -> list[float]:
+    decoder_seed = stable_seed(int(args.seed), "decoder", z_search[:ARCH_NZ])
     try:
-        config = decode_arch(vae, z_search[:ARCH_NZ], device, n_trials=3)
+        config = decode_arch(
+            vae,
+            z_search[:ARCH_NZ],
+            device,
+            n_trials=3,
+            decoder_seed=decoder_seed,
+        )
     except Exception as exc:
         raise RuntimeError(f"failed to decode candidate condition mask: {exc}") from exc
     ops = [] if config is None else [str(op) for op in config.get("operations", [])]
@@ -721,6 +750,19 @@ def _append_eval(
     """Predict, evaluate, record, and optionally update in that strict order."""
 
     step_started = time.monotonic()
+    pre_search_seed = getattr(args, "seed", None)
+    pre_decoder_seed = None
+    pre_candidate_eval_seed = None
+    pre_seed_derivation = None
+    if pre_search_seed is not None:
+        pre_search_seed = int(pre_search_seed)
+        pre_decoder_seed = stable_seed(
+            pre_search_seed, "decoder", z_search[:ARCH_NZ],
+        )
+        pre_candidate_eval_seed = stable_seed(
+            pre_search_seed, "candidate_eval", int(step),
+        )
+        pre_seed_derivation = SEED_DERIVATION
     if update_online and predictor is None:
         raise RuntimeError("online GP update requested before a GP predictor exists")
     train_size_before = 0 if predictor is None else predictor.train_size
@@ -746,6 +788,13 @@ def _append_eval(
         "gp_stage": gp_stage,
         "valid": None,
         "val_acc": None,
+        "search_seed": pre_search_seed,
+        "decoder_seed": pre_decoder_seed,
+        "candidate_eval_seed": pre_candidate_eval_seed,
+        "seed_derivation": pre_seed_derivation,
+        "best_epoch": None,
+        "stopped_epoch": None,
+        "epochs_ran": None,
         **pre_eval_fields,
         "logei": None if logei_value is None else float(logei_value),
         "best_val_before": None if best_acc is None else float(best_acc),
@@ -762,7 +811,9 @@ def _append_eval(
     _save_prediction_csv(prediction_records, args.output)
 
     eval_started = time.monotonic()
-    z_search, result = eval_candidate(vae, z_search, data, in_ch, out_ch, args, device)
+    z_search, result = eval_candidate(
+        vae, z_search, data, in_ch, out_ch, args, device, step=step,
+    )
     eval_seconds = time.monotonic() - eval_started
     acc = float(result.get("val_acc", 0.0))
     valid = bool(result.get("valid", False))
@@ -798,7 +849,20 @@ def _append_eval(
         best_acc=best_acc, gp_record=gp_fields,
     )
     history.append(history_row)
-    prediction_row.update({"valid": valid, "val_acc": acc, **gp_fields})
+    prediction_row.update(
+        {
+            "valid": valid,
+            "val_acc": acc,
+            "search_seed": result.get("search_seed"),
+            "decoder_seed": result.get("decoder_seed"),
+            "candidate_eval_seed": result.get("candidate_eval_seed"),
+            "seed_derivation": result.get("seed_derivation"),
+            "best_epoch": result.get("best_epoch"),
+            "stopped_epoch": result.get("stopped_epoch"),
+            "epochs_ran": result.get("epochs_ran"),
+            **gp_fields,
+        }
+    )
     if convergence_monitor is not None:
         rolling_metrics = convergence_monitor.observe_bo_result(acc, prediction_row)
         prediction_row.update(rolling_metrics)
@@ -860,7 +924,9 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
     path = os.path.join(output, "gp_predictions.csv")
     tmp_path = path + ".tmp"
     fields = [
-        "step", "record_type", "gp_stage", "valid", "gp_train_size_before",
+        "step", "record_type", "gp_stage", "valid", "search_seed",
+        "decoder_seed", "candidate_eval_seed", "seed_derivation", "best_epoch",
+        "stopped_epoch", "epochs_ran", "gp_train_size_before",
         "gp_train_size_after", "gp_pred_mean", "gp_pred_std", "gp_pred_95_low",
         "gp_pred_95_high", "val_acc", "gp_residual", "gp_abs_error",
         "gp_squared_error", "gp_standardized_residual", "gp_covered_by_95",
@@ -1264,6 +1330,9 @@ def run_bo(
             "gp_train_size_final": predictor.train_size,
             "best_actual_val_acc": float(max(Y_obs)) if Y_obs else 0.0,
             "elapsed_seconds": float(time.monotonic() - run_started),
+            "search_seed": int(args.seed),
+            "seed_derivation": SEED_DERIVATION,
+            "rng_isolation_enabled": True,
         }
         atomic_json_dump(summary, os.path.join(args.output, "gp_metrics.json"))
         _save(history, X_obs, Y_obs, args, logger, "final", predictor=predictor, summary=summary)
@@ -1335,9 +1404,11 @@ def run_bo(
             if decision.stop_reason is not None:
                 stop_reason = decision.stop_reason
                 break
-        z_next, logei_value, condition_mask = optimize_acq(
-            predictor, best_acc, args, logger, vae, device, generator,
-        )
+        acquisition_seed = stable_seed(int(args.seed), "acquisition", int(step))
+        with isolated_rng(acquisition_seed, device):
+            z_next, logei_value, condition_mask = optimize_acq(
+                predictor, best_acc, args, logger, vae, device, generator,
+            )
 
         z_np = clip_z_search_by_mode(z_next, args.hp_mode, ARCH_NZ, args.z_bound)
         z_next = torch.tensor(z_np, dtype=torch.float32)
@@ -1414,7 +1485,14 @@ def run_bo(
 
     best_idx = int(np.argmax(np.asarray(Y_obs, dtype=np.float64)))
     best_z = X_obs[best_idx]
-    best_cfg = decode_arch(vae, best_z[:ARCH_NZ], device, n_trials=10)
+    best_decoder_seed = stable_seed(int(args.seed), "decoder", best_z[:ARCH_NZ])
+    best_cfg = decode_arch(
+        vae,
+        best_z[:ARCH_NZ],
+        device,
+        n_trials=10,
+        decoder_seed=best_decoder_seed,
+    )
 
     logger.info("\n" + "=" * 66)
     logger.info(f"          Phase 4 BO hp_mode={args.hp_mode} Final")
@@ -1442,6 +1520,9 @@ def run_bo(
         "gp_train_size_final": predictor.train_size,
         "best_actual_val_acc": float(max(Y_obs)),
         "elapsed_seconds": float(time.monotonic() - run_started),
+        "search_seed": int(args.seed),
+        "seed_derivation": SEED_DERIVATION,
+        "rng_isolation_enabled": True,
         "convergence_checks": int(len(monitor.history)),
         "valid_convergence_checks": int(monitor.valid_convergence_checks),
         "stagnation_deferred_events": list(monitor.stagnation_deferred_events),
