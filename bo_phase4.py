@@ -14,6 +14,7 @@ domain. This script performs an additional defensive clip before evaluation.
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import logging
@@ -154,6 +155,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--raw_samples", type=int, default=256)
     parser.add_argument("--n_extra", type=int, default=128)
     parser.add_argument("--use_conditional_kernel", action="store_true")
+    parser.add_argument(
+        "--online_candidate_strategy",
+        choices=("qlogei", "random"),
+        default="qlogei",
+    )
+    parser.add_argument("--frozen_init_history", type=str, default=None)
 
     parser.add_argument("--gp_init_mode", choices=("checkpoint", "scratch"), default="checkpoint")
     parser.add_argument("--gp_checkpoint", default=None)
@@ -481,6 +488,10 @@ def history_record(
         "best_epoch": result.get("best_epoch"),
         "stopped_epoch": stopped_epoch,
         "epochs_ran": epochs_ran,
+        "online_candidate_strategy": result.get("online_candidate_strategy"),
+        "candidate_selection_seed": result.get("candidate_selection_seed"),
+        "initial_record_replayed": bool(result.get("initial_record_replayed", False)),
+        "initial_history_source": result.get("initial_history_source"),
         "params": params,
     }
     if gp_record:
@@ -723,6 +734,35 @@ def optimize_acq(
     return clipped_raw[best_idx].float(), float(logei_scores[best_idx].item()), best_mask
 
 
+def sample_random_online_candidate(
+    vae: JointSpaceVAE,
+    args: argparse.Namespace,
+    device: torch.device,
+    logger,
+    step: int,
+) -> tuple[torch.Tensor, list[float], int]:
+    """Uniformly sample one online candidate without consuming global RNG state."""
+
+    selection_seed = stable_seed(
+        int(args.seed), "random_acquisition", int(step),
+    )
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(selection_seed)
+    normalized = torch.rand(_search_dim(args), generator=generator, dtype=torch.float32)
+    raw = denormalize_search_vector(
+        normalized,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+    ).reshape(-1)
+    clipped = clip_z_search_by_mode(
+        raw, args.hp_mode, ARCH_NZ, args.z_bound,
+    )
+    z_search = torch.tensor(clipped, dtype=torch.float32)
+    condition_mask = _mask_for_candidate(vae, z_search, args, device, logger)
+    return z_search, condition_mask, selection_seed
+
+
 def _append_eval(
     vae: JointSpaceVAE,
     z_search: torch.Tensor,
@@ -746,10 +786,16 @@ def _append_eval(
     condition_mask: list[float],
     best_acc: float | None = None,
     convergence_monitor: GPConvergenceMonitor | None = None,
+    candidate_selection_seed: int | None = None,
 ) -> tuple[float, bool, list[float], bool]:
     """Predict, evaluate, record, and optionally update in that strict order."""
 
     step_started = time.monotonic()
+    online_candidate_strategy = (
+        getattr(args, "online_candidate_strategy", "qlogei")
+        if update_online
+        else None
+    )
     pre_search_seed = getattr(args, "seed", None)
     pre_decoder_seed = None
     pre_candidate_eval_seed = None
@@ -795,6 +841,10 @@ def _append_eval(
         "best_epoch": None,
         "stopped_epoch": None,
         "epochs_ran": None,
+        "online_candidate_strategy": online_candidate_strategy,
+        "candidate_selection_seed": candidate_selection_seed,
+        "initial_record_replayed": False,
+        "initial_history_source": None,
         **pre_eval_fields,
         "logei": None if logei_value is None else float(logei_value),
         "best_val_before": None if best_acc is None else float(best_acc),
@@ -840,6 +890,8 @@ def _append_eval(
             "gp_update_seconds": 0.0,
             "eval_seconds": float(eval_seconds),
             "total_step_seconds": float(time.monotonic() - step_started),
+            "online_candidate_strategy": online_candidate_strategy,
+            "candidate_selection_seed": candidate_selection_seed,
         }
     )
     X_obs.append(z_search)
@@ -860,6 +912,8 @@ def _append_eval(
             "best_epoch": result.get("best_epoch"),
             "stopped_epoch": result.get("stopped_epoch"),
             "epochs_ran": result.get("epochs_ran"),
+            "online_candidate_strategy": online_candidate_strategy,
+            "candidate_selection_seed": candidate_selection_seed,
             **gp_fields,
         }
     )
@@ -926,7 +980,9 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
     fields = [
         "step", "record_type", "gp_stage", "valid", "search_seed",
         "decoder_seed", "candidate_eval_seed", "seed_derivation", "best_epoch",
-        "stopped_epoch", "epochs_ran", "gp_train_size_before",
+        "stopped_epoch", "epochs_ran", "online_candidate_strategy",
+        "candidate_selection_seed", "initial_record_replayed",
+        "initial_history_source", "gp_train_size_before",
         "gp_train_size_after", "gp_pred_mean", "gp_pred_std", "gp_pred_95_low",
         "gp_pred_95_high", "val_acc", "gp_residual", "gp_abs_error",
         "gp_squared_error", "gp_standardized_residual", "gp_covered_by_95",
@@ -940,6 +996,305 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         writer.writeheader()
         writer.writerows(records)
     os.replace(tmp_path, path)
+
+
+def validate_frozen_init_configuration(args: argparse.Namespace) -> None:
+    """Reject configurations that could mix frozen LHS data with other initialization."""
+
+    if args.frozen_init_history is None:
+        return
+    if args.gp_init_mode != "scratch":
+        raise ValueError("--frozen_init_history requires --gp_init_mode scratch")
+    if args.warm_start != "":
+        raise ValueError("--frozen_init_history requires --warm_start to be an empty string")
+    if args.gmm_init_history:
+        raise ValueError("--frozen_init_history cannot be combined with --gmm_init_history")
+    if int(args.gmm_init_trials) != 0:
+        raise ValueError("--frozen_init_history requires --gmm_init_trials 0")
+
+
+def _frozen_record_error(source: str, step: Any, field: str, detail: str) -> ValueError:
+    return ValueError(
+        f"frozen init source={source!r} record step={step!r} field={field!r}: {detail}"
+    )
+
+
+def _finite_record_number(record: dict[str, Any], field: str, source: str, step: Any) -> float:
+    if field not in record:
+        raise _frozen_record_error(source, step, field, "missing required field")
+    value = record[field]
+    if isinstance(value, bool):
+        raise _frozen_record_error(source, step, field, f"expected finite number, got {value!r}")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise _frozen_record_error(
+            source, step, field, f"expected finite number, got {value!r}",
+        ) from exc
+    if not np.isfinite(number):
+        raise _frozen_record_error(source, step, field, f"must be finite, got {value!r}")
+    return number
+
+
+def load_frozen_init_records(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Load and strictly validate only the LHS prefix from a prior final history."""
+
+    validate_frozen_init_configuration(args)
+    source = str(args.frozen_init_history)
+    try:
+        with open(source, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise _frozen_record_error(source, "?", "source", str(exc)) from exc
+    if not isinstance(payload, list):
+        raise _frozen_record_error(source, "?", "source", "history root must be a JSON list")
+
+    lhs_records: list[dict[str, Any]] = []
+    for index, raw_record in enumerate(payload):
+        if not isinstance(raw_record, dict):
+            raise _frozen_record_error(
+                source, f"index:{index}", "record", "history entry must be a dict",
+            )
+        if raw_record.get("type") == "lhs_init":
+            lhs_records.append(copy.deepcopy(raw_record))
+
+    if len(lhs_records) != int(args.n_init):
+        raise _frozen_record_error(
+            source,
+            "?",
+            "type",
+            f"expected exactly {int(args.n_init)} lhs_init records, found {len(lhs_records)}",
+        )
+
+    by_step: dict[int, dict[str, Any]] = {}
+    search_dim = _search_dim(args)
+    expected_mask_dim = hp_dim_from_mode(args.hp_mode)
+    for record in lhs_records:
+        raw_step = record.get("step")
+        if isinstance(raw_step, bool) or not isinstance(raw_step, int):
+            raise _frozen_record_error(source, raw_step, "step", "must be an integer")
+        step = int(raw_step)
+        if step in by_step:
+            raise _frozen_record_error(source, step, "step", "duplicate lhs_init step")
+        by_step[step] = record
+
+        if record.get("type") != "lhs_init":
+            raise _frozen_record_error(source, step, "type", "must equal 'lhs_init'")
+        if record.get("hp_mode") != args.hp_mode:
+            raise _frozen_record_error(
+                source, step, "hp_mode", f"expected {args.hp_mode!r}, got {record.get('hp_mode')!r}",
+            )
+        record_search_dim = record.get("search_dim")
+        if (
+            isinstance(record_search_dim, bool)
+            or not isinstance(record_search_dim, int)
+            or record_search_dim != search_dim
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "search_dim",
+                f"expected {search_dim}, got {record.get('search_dim')!r}",
+            )
+        record_search_seed = record.get("search_seed")
+        if (
+            isinstance(record_search_seed, bool)
+            or not isinstance(record_search_seed, int)
+            or record_search_seed != int(args.seed)
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "search_seed",
+                f"expected {int(args.seed)}, got {record.get('search_seed')!r}",
+            )
+
+        z_search = record.get("z_search")
+        if not isinstance(z_search, list):
+            raise _frozen_record_error(source, step, "z_search", "must be a JSON list")
+        try:
+            z_array = np.asarray(z_search, dtype=np.float32).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise _frozen_record_error(source, step, "z_search", str(exc)) from exc
+        if z_array.size != search_dim:
+            raise _frozen_record_error(
+                source, step, "z_search", f"expected length {search_dim}, got {z_array.size}",
+            )
+        if not np.isfinite(z_array).all():
+            raise _frozen_record_error(source, step, "z_search", "contains non-finite values")
+
+        val_acc = _finite_record_number(record, "val_acc", source, step)
+        if not 0.0 <= val_acc <= 1.0:
+            raise _frozen_record_error(source, step, "val_acc", "must be in [0, 1]")
+        if "valid" not in record or not isinstance(record["valid"], bool):
+            raise _frozen_record_error(source, step, "valid", "must be present and boolean")
+        operations = record.get("operations")
+        if not isinstance(operations, list) or not all(
+            isinstance(operation, str) for operation in operations
+        ):
+            raise _frozen_record_error(source, step, "operations", "must be present and a list")
+        edges = record.get("edges")
+        if not isinstance(edges, list) or not all(
+            isinstance(edge, list)
+            and len(edge) == 2
+            and all(isinstance(vertex, int) and not isinstance(vertex, bool) for vertex in edge)
+            for edge in edges
+        ):
+            raise _frozen_record_error(source, step, "edges", "must be present and a list")
+        lr = _finite_record_number(record, "lr", source, step)
+        if lr <= 0.0:
+            raise _frozen_record_error(source, step, "lr", "must be positive")
+        dropout = _finite_record_number(record, "dropout", source, step)
+        if not 0.0 <= dropout <= 1.0:
+            raise _frozen_record_error(source, step, "dropout", "must be in [0, 1]")
+        hidden_dim = record.get("hidden_dim")
+        if (
+            isinstance(hidden_dim, bool)
+            or not isinstance(hidden_dim, int)
+            or hidden_dim <= 0
+        ):
+            raise _frozen_record_error(source, step, "hidden_dim", "must be a positive integer")
+        l2_field = "l2" if "l2" in record else "weight_decay"
+        l2_value = _finite_record_number(record, l2_field, source, step)
+        if l2_value < 0.0:
+            raise _frozen_record_error(source, step, l2_field, "must be non-negative")
+
+        mask = record.get("condition_mask_vector")
+        if not isinstance(mask, list):
+            raise _frozen_record_error(
+                source, step, "condition_mask_vector", "must be present and a list",
+            )
+        try:
+            mask_array = np.asarray(mask, dtype=np.float32).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise _frozen_record_error(source, step, "condition_mask_vector", str(exc)) from exc
+        if (
+            mask_array.size != expected_mask_dim
+            or not np.isfinite(mask_array).all()
+            or not ((mask_array >= 0.0) & (mask_array <= 1.0)).all()
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "condition_mask_vector",
+                f"expected length {expected_mask_dim} with finite values in [0, 1], "
+                f"got length {mask_array.size}",
+            )
+
+        derivation = record.get("seed_derivation")
+        if derivation is not None and derivation != SEED_DERIVATION:
+            raise _frozen_record_error(
+                source,
+                step,
+                "seed_derivation",
+                f"expected {SEED_DERIVATION!r}, got {derivation!r}",
+            )
+        expected_eval_seed = stable_seed(int(args.seed), "candidate_eval", step)
+        candidate_eval_seed = record.get("candidate_eval_seed")
+        if (
+            candidate_eval_seed is not None
+            and (
+                isinstance(candidate_eval_seed, bool)
+                or not isinstance(candidate_eval_seed, int)
+                or candidate_eval_seed != expected_eval_seed
+            )
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "candidate_eval_seed",
+                f"expected {expected_eval_seed}, got {record.get('candidate_eval_seed')!r}",
+            )
+        expected_decoder_seed = stable_seed(
+            int(args.seed), "decoder", z_array[:ARCH_NZ],
+        )
+        decoder_seed = record.get("decoder_seed")
+        if (
+            decoder_seed is not None
+            and (
+                isinstance(decoder_seed, bool)
+                or not isinstance(decoder_seed, int)
+                or decoder_seed != expected_decoder_seed
+            )
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "decoder_seed",
+                f"expected {expected_decoder_seed}, got {record.get('decoder_seed')!r}",
+            )
+
+    expected_steps = list(range(int(args.n_init)))
+    actual_steps = sorted(by_step)
+    if actual_steps != expected_steps:
+        raise _frozen_record_error(
+            source,
+            "?",
+            "step",
+            f"expected consecutive steps {expected_steps}, got {actual_steps}",
+        )
+
+    records = [by_step[step] for step in expected_steps]
+    for record in records:
+        record["initial_record_replayed"] = True
+        record["initial_history_source"] = source
+        record["online_candidate_strategy"] = None
+        record["candidate_selection_seed"] = None
+    return records
+
+
+def replay_frozen_initialization(
+    args: argparse.Namespace,
+) -> tuple[
+    list[dict[str, Any]],
+    list[torch.Tensor],
+    list[float],
+    list[tuple[torch.Tensor, float, list[float]]],
+    list[dict[str, Any]],
+]:
+    records = load_frozen_init_records(args)
+    X_obs: list[torch.Tensor] = []
+    Y_obs: list[float] = []
+    init_valid: list[tuple[torch.Tensor, float, list[float]]] = []
+    prediction_records: list[dict[str, Any]] = []
+    for record in records:
+        z_search = torch.tensor(record["z_search"], dtype=torch.float32)
+        val_acc = float(record["val_acc"])
+        hp_condition_mask = [
+            float(value) for value in record["condition_mask_vector"]
+        ]
+        condition_mask = [1.0] * ARCH_NZ + hp_condition_mask
+        X_obs.append(z_search)
+        Y_obs.append(val_acc)
+        if record["valid"]:
+            init_valid.append((z_search, val_acc, condition_mask))
+        prediction_records.append(
+            {
+                "step": int(record["step"]),
+                "record_type": "lhs_init",
+                "gp_stage": "scratch_init_no_gp",
+                "valid": bool(record["valid"]),
+                "val_acc": val_acc,
+                "search_seed": int(args.seed),
+                "decoder_seed": record.get("decoder_seed"),
+                "candidate_eval_seed": record.get("candidate_eval_seed"),
+                "seed_derivation": record.get("seed_derivation", SEED_DERIVATION),
+                "best_epoch": record.get("best_epoch"),
+                "stopped_epoch": record.get("stopped_epoch"),
+                "epochs_ran": record.get("epochs_ran"),
+                "online_candidate_strategy": None,
+                "candidate_selection_seed": None,
+                "initial_record_replayed": True,
+                "initial_history_source": str(args.frozen_init_history),
+                "gp_update_performed": False,
+                "gp_update_skipped_reason": "replayed_initial_record",
+                "eval_seconds": 0.0,
+                "gp_update_seconds": 0.0,
+                "total_step_seconds": 0.0,
+                **_null_gp_record_fields(),
+            }
+        )
+    return records, X_obs, Y_obs, init_valid, prediction_records
 
 
 def _training_best(predictor: AccuracyGPPredictor) -> float:
@@ -1216,9 +1571,20 @@ def run_bo(
     generator = torch.Generator(device="cpu")
     generator.manual_seed(int(args.seed) + 7919)
     run_started = time.monotonic()
+    initialization_source = (
+        "frozen_history" if args.frozen_init_history is not None else "evaluated"
+    )
+    replayed_initial_samples = 0
 
     logger.info(f"\n[Step 1] LHS init: n_init={args.n_init}")
     logger.info(f"  gp_init_mode={args.gp_init_mode}")
+    logger.info(f"  online candidate strategy={args.online_candidate_strategy}")
+    logger.info(f"  initialization source={initialization_source}")
+    logger.info(f"  frozen history path={args.frozen_init_history}")
+    logger.info(
+        "  online budget mode=%s",
+        "adaptive" if args.adaptive_sampling else "fixed",
+    )
     logger.info("  adaptive sampling budgets count online BO samples after initial GP fit")
     logger.info(f"  hp_mode={args.hp_mode}")
     logger.info(f"  hp_dim={hp_dim_from_mode(args.hp_mode)}")
@@ -1227,68 +1593,65 @@ def run_bo(
     logger.info(f"  z_bound={args.z_bound}")
     logger.info(f"  LR: 10^[{args.log_lr_min},{args.log_lr_max}] Dropout: [{args.dropout_min},{args.dropout_max}]")
 
-    step = 0
-    for z in tqdm(initial_points(args, logger), desc="LHS init"):
-        condition_mask = _mask_for_candidate(vae, z, args, device, logger)
-        best_before = max(Y_obs) if Y_obs else None
-        if predictor is None:
-            logei_value = None
-            gp_stage = "scratch_init_no_gp"
-        else:
-            logei_value = _score_logei(
-                predictor, z, condition_mask,
-                best_before if best_before is not None else _training_best(predictor),
-            )
-            gp_stage = "offline_init"
-        acc, valid, used_mask, safe_for_gp_training = _append_eval(
-            vae,
-            z,
-            data,
-            in_ch,
-            out_ch,
-            args,
-            device,
+    if args.frozen_init_history is not None:
+        (
             history,
             X_obs,
             Y_obs,
-            step,
-            "lhs_init",
-            logger,
-            predictor,
+            init_valid,
             prediction_records,
-            gp_stage,
-            logei_value,
-            False,
-            0,
-            condition_mask,
-            best_acc=best_before,
-        )
-        if safe_for_gp_training:
-            init_valid.append((z, acc, used_mask))
-        step += 1
+        ) = replay_frozen_initialization(args)
+        replayed_initial_samples = len(history)
+        step = int(args.n_init)
+        _save_prediction_csv(prediction_records, args.output)
+        logger.info("  replayed initial sample count=%d", replayed_initial_samples)
+    else:
+        step = 0
+        for z in tqdm(initial_points(args, logger), desc="LHS init"):
+            condition_mask = _mask_for_candidate(vae, z, args, device, logger)
+            best_before = max(Y_obs) if Y_obs else None
+            if predictor is None:
+                logei_value = None
+                gp_stage = "scratch_init_no_gp"
+            else:
+                logei_value = _score_logei(
+                    predictor, z, condition_mask,
+                    best_before if best_before is not None else _training_best(predictor),
+                )
+                gp_stage = "offline_init"
+            acc, valid, used_mask, safe_for_gp_training = _append_eval(
+                vae,
+                z,
+                data,
+                in_ch,
+                out_ch,
+                args,
+                device,
+                history,
+                X_obs,
+                Y_obs,
+                step,
+                "lhs_init",
+                logger,
+                predictor,
+                prediction_records,
+                gp_stage,
+                logei_value,
+                False,
+                0,
+                condition_mask,
+                best_acc=best_before,
+            )
+            if safe_for_gp_training:
+                init_valid.append((z, acc, used_mask))
+            step += 1
+        logger.info("  replayed initial sample count=0")
 
     lhs_best = max(Y_obs) if Y_obs else 0.0
     logger.info(f"\nLHS done. Best={lhs_best:.4f}")
 
-    step = run_gmm_init(
-        vae,
-        data,
-        in_ch,
-        out_ch,
-        args,
-        device,
-        logger,
-        history,
-        X_obs,
-        Y_obs,
-        predictor,
-        prediction_records,
-        init_valid,
-        step,
-    )
-
-    if args.gp_init_mode == "scratch":
-        step = _ensure_scratch_min_points(
+    if args.frozen_init_history is None:
+        step = run_gmm_init(
             vae,
             data,
             in_ch,
@@ -1299,10 +1662,37 @@ def run_bo(
             history,
             X_obs,
             Y_obs,
+            predictor,
             prediction_records,
             init_valid,
             step,
         )
+
+    if args.gp_init_mode == "scratch":
+        if args.frozen_init_history is None:
+            step = _ensure_scratch_min_points(
+                vae,
+                data,
+                in_ch,
+                out_ch,
+                args,
+                device,
+                logger,
+                history,
+                X_obs,
+                Y_obs,
+                prediction_records,
+                init_valid,
+                step,
+            )
+        elif len(init_valid) < int(args.scratch_gp_min_points):
+            raise _frozen_record_error(
+                str(args.frozen_init_history),
+                "?",
+                "valid",
+                f"requires at least {int(args.scratch_gp_min_points)} valid lhs_init records, "
+                f"found {len(init_valid)}",
+            )
         predictor = _fit_scratch_predictor(init_valid, args, device, logger)
         logger.info(
             "Scratch init summary: scratch_init_samples=%d scratch_init_valid_samples=%d "
@@ -1333,6 +1723,11 @@ def run_bo(
             "search_seed": int(args.seed),
             "seed_derivation": SEED_DERIVATION,
             "rng_isolation_enabled": True,
+            "online_candidate_strategy": args.online_candidate_strategy,
+            "initialization_source": initialization_source,
+            "frozen_init_history": args.frozen_init_history,
+            "replayed_initial_samples": int(replayed_initial_samples),
+            "newly_evaluated_online_samples": 0,
         }
         atomic_json_dump(summary, os.path.join(args.output, "gp_metrics.json"))
         _save(history, X_obs, Y_obs, args, logger, "final", predictor=predictor, summary=summary)
@@ -1404,10 +1799,25 @@ def run_bo(
             if decision.stop_reason is not None:
                 stop_reason = decision.stop_reason
                 break
-        acquisition_seed = stable_seed(int(args.seed), "acquisition", int(step))
-        with isolated_rng(acquisition_seed, device):
-            z_next, logei_value, condition_mask = optimize_acq(
-                predictor, best_acc, args, logger, vae, device, generator,
+        if args.online_candidate_strategy == "qlogei":
+            acquisition_seed = stable_seed(
+                int(args.seed), "acquisition", int(step),
+            )
+            candidate_selection_seed = acquisition_seed
+            with isolated_rng(acquisition_seed, device):
+                z_next, logei_value, condition_mask = optimize_acq(
+                    predictor, best_acc, args, logger, vae, device, generator,
+                )
+        elif args.online_candidate_strategy == "random":
+            (
+                z_next,
+                condition_mask,
+                candidate_selection_seed,
+            ) = sample_random_online_candidate(vae, args, device, logger, step)
+            logei_value = None
+        else:
+            raise ValueError(
+                f"unsupported online candidate strategy: {args.online_candidate_strategy!r}"
             )
 
         z_np = clip_z_search_by_mode(z_next, args.hp_mode, ARCH_NZ, args.z_bound)
@@ -1435,6 +1845,7 @@ def run_bo(
             condition_mask,
             best_acc=best_acc,
             convergence_monitor=monitor,
+            candidate_selection_seed=candidate_selection_seed,
         )
         current_record = prediction_records[-1]
         if current_record["gp_update_performed"]:
@@ -1523,6 +1934,11 @@ def run_bo(
         "search_seed": int(args.seed),
         "seed_derivation": SEED_DERIVATION,
         "rng_isolation_enabled": True,
+        "online_candidate_strategy": args.online_candidate_strategy,
+        "initialization_source": initialization_source,
+        "frozen_init_history": args.frozen_init_history,
+        "replayed_initial_samples": int(replayed_initial_samples),
+        "newly_evaluated_online_samples": int(online_bo_samples),
         "convergence_checks": int(len(monitor.history)),
         "valid_convergence_checks": int(monitor.valid_convergence_checks),
         "stagnation_deferred_events": list(monitor.stagnation_deferred_events),
@@ -1669,9 +2085,10 @@ def main() -> None:
         raise ValueError("--min_bo_samples cannot exceed --max_bo_samples")
     if float(args.max_wall_time_hours) <= 0.0:
         raise ValueError("--max_wall_time_hours must be positive")
+    validate_frozen_init_configuration(args)
     if float(args.novelty_w) != 0.0:
         warnings.warn(
-            "--novelty_w is deprecated and ignored; Phase4 candidate selection is pure qLogExpectedImprovement",
+            "--novelty_w is deprecated and ignored by all online candidate strategies",
             RuntimeWarning,
             stacklevel=2,
         )
@@ -1699,6 +2116,16 @@ def main() -> None:
     logger.info(f"hp_mode={args.hp_mode} hp_dim={hp_dim} hp_names={hp_names_from_mode(args.hp_mode)}")
     logger.info(f"z_bound={args.z_bound}")
     logger.info(f"gp_init_mode={args.gp_init_mode}")
+    logger.info(f"online_candidate_strategy={args.online_candidate_strategy}")
+    logger.info(
+        "initialization_source=%s frozen_init_history=%s",
+        "frozen_history" if args.frozen_init_history is not None else "evaluated",
+        args.frozen_init_history,
+    )
+    logger.info(
+        "online_budget=%s",
+        "adaptive" if args.adaptive_sampling else "fixed",
+    )
 
     vae = load_vae(args, device, logger)
     data, in_ch, out_ch = load_cora(args.cora_root, device, logger)
