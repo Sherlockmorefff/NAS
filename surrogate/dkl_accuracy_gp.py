@@ -301,6 +301,25 @@ class DKLAccuracyGPPredictor(AccuracyGPPredictor):
             {"params": other_parameters, "lr": self.dkl_lr, "weight_decay": 0.0},
         ]
 
+    @staticmethod
+    def _training_hyperparameters(model: SingleTaskGP) -> dict[str, Any]:
+        latent_kernel = model.covar_module.latent_kernel
+        return {
+            "likelihood_noise": float(model.likelihood.noise.detach().reshape(-1)[0].cpu()),
+            "lengthscale": latent_kernel.base_kernel.lengthscale.detach().reshape(-1).cpu().tolist(),
+            "outputscale": float(latent_kernel.outputscale.detach().reshape(-1)[0].cpu()),
+        }
+
+    @staticmethod
+    def _gradient_norm(parameters: list[torch.nn.Parameter]) -> float:
+        if not parameters:
+            return 0.0
+        squared = torch.zeros((), dtype=torch.double, device=parameters[0].device)
+        for parameter in parameters:
+            if parameter.grad is not None:
+                squared = squared + parameter.grad.detach().double().square().sum()
+        return float(squared.sqrt().cpu())
+
     def _optimize_model(
         self,
         model: SingleTaskGP,
@@ -319,9 +338,14 @@ class DKLAccuracyGPPredictor(AccuracyGPPredictor):
         stale_steps = 0
         steps_ran = 0
         early_stopped = False
+        initial_loss: float | None = None
+        final_loss: float | None = None
+        final_gradient_norm: float | None = None
+        final_feature_gradient_norm: float | None = None
         model.train()
         model.likelihood.train()
         self._ensure_likelihood_noise_floor(model, noise_floor)
+        initial_hyperparameters = self._training_hyperparameters(model)
         with _safe_gpytorch_context(max(GP_NOISE_FLOOR, float(noise_floor))):
             for step in range(steps):
                 optimizer.zero_grad(set_to_none=True)
@@ -331,6 +355,13 @@ class DKLAccuracyGPPredictor(AccuracyGPPredictor):
                     raise RuntimeError("non-finite marginal likelihood during DKL refit")
                 loss.backward()
                 parameters = [parameter for parameter in model.parameters() if parameter.grad is not None]
+                feature_parameters = [
+                    parameter
+                    for parameter in model.covar_module.feature_extractor.parameters()
+                    if parameter.grad is not None
+                ]
+                final_gradient_norm = self._gradient_norm(parameters)
+                final_feature_gradient_norm = self._gradient_norm(feature_parameters)
                 torch.nn.utils.clip_grad_norm_(parameters, self.dkl_grad_clip)
                 if any(not torch.isfinite(parameter.grad).all() for parameter in parameters):
                     raise RuntimeError("non-finite gradient during DKL refit")
@@ -338,6 +369,9 @@ class DKLAccuracyGPPredictor(AccuracyGPPredictor):
                 self._ensure_likelihood_noise_floor(model, noise_floor)
                 steps_ran = step + 1
                 loss_value = float(loss.detach().cpu())
+                if initial_loss is None:
+                    initial_loss = loss_value
+                final_loss = loss_value
                 if best_state is None or best_loss - loss_value > self.dkl_min_delta:
                     best_loss = loss_value
                     best_step = step
@@ -352,11 +386,23 @@ class DKLAccuracyGPPredictor(AccuracyGPPredictor):
             raise RuntimeError("DKL optimization produced no finite training state")
         model.load_state_dict(best_state, strict=True)
         self._ensure_likelihood_noise_floor(model, noise_floor)
+        final_hyperparameters = self._training_hyperparameters(model)
         self.training_summary = {
+            "requested_steps": int(steps),
             "best_step": int(best_step),
             "best_loss": float(best_loss),
+            "initial_loss": initial_loss,
+            "final_loss": final_loss,
             "steps_ran": int(steps_ran),
             "early_stopped": bool(early_stopped),
+            "gradient_norm": final_gradient_norm,
+            "feature_gradient_norm": final_feature_gradient_norm,
+            "likelihood_noise_initial": initial_hyperparameters["likelihood_noise"],
+            "likelihood_noise_final": final_hyperparameters["likelihood_noise"],
+            "lengthscale_initial": initial_hyperparameters["lengthscale"],
+            "lengthscale_final": final_hyperparameters["lengthscale"],
+            "outputscale_initial": initial_hyperparameters["outputscale"],
+            "outputscale_final": final_hyperparameters["outputscale"],
         }
         self.metadata["dkl_training_summary"] = dict(self.training_summary)
 
