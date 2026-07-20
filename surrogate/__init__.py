@@ -7,6 +7,9 @@ from typing import Any
 
 __all__ = [
     "AccuracyGPPredictor",
+    "DKLAccuracyGPPredictor",
+    "DeepFeatureKernel",
+    "SmallFeatureExtractor",
     "GPConvergenceMonitor",
     "denormalize_search_vector",
     "normalize_search_vector",
@@ -19,6 +22,10 @@ def __getattr__(name: str) -> Any:
         from . import accuracy_gp
 
         return getattr(accuracy_gp, name)
+    if name in {"DKLAccuracyGPPredictor", "DeepFeatureKernel", "SmallFeatureExtractor"}:
+        from . import dkl_accuracy_gp
+
+        return getattr(dkl_accuracy_gp, name)
     if name in {"GPConvergenceMonitor", "prediction_metrics"}:
         from . import metrics
 

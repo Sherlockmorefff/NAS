@@ -899,6 +899,7 @@ class AccuracyGPPredictor:
         self._check_holdout_data()
         payload = {
             "format_version": CHECKPOINT_FORMAT_VERSION,
+            "surrogate_type": "exact_gp",
             "model_type": "SingleTaskGP",
             "kernel_type": self.kernel_type,
             "use_conditional_kernel": self.use_conditional_kernel,
@@ -950,6 +951,11 @@ class AccuracyGPPredictor:
         expected: dict[str, Any] | None = None,
     ) -> "AccuracyGPPredictor":
         payload = torch_load_compat(path, map_location=device)
+        actual_type = payload.get("surrogate_type", "exact_gp") if isinstance(payload, dict) else None
+        if actual_type != "exact_gp":
+            raise ValueError(
+                f"surrogate checkpoint type mismatch: expected 'exact_gp', actual {actual_type!r}"
+            )
         if not isinstance(payload, dict) or payload.get("format_version") != CHECKPOINT_FORMAT_VERSION:
             raise ValueError(f"unsupported or legacy GP checkpoint: {path}")
         required = {

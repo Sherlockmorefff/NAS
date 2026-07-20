@@ -62,6 +62,7 @@ from surrogate.accuracy_gp import (
     AccuracyGPPredictor,
     denormalize_search_vector,
 )
+from surrogate.dkl_accuracy_gp import DKLAccuracyGPPredictor, validate_dkl_config
 from surrogate.checkpoint_io import atomic_json_dump
 from surrogate.history_dataset import architecture_key_from_record
 from surrogate.metrics import (
@@ -169,6 +170,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gp_refit_every", type=int, default=5)
     parser.add_argument("--gp_refit_steps", type=int, default=20)
     parser.add_argument("--gp_save_every", type=int, default=5)
+    parser.add_argument("--surrogate_type", choices=("exact_gp", "dkl_gp"), default="exact_gp")
+    parser.add_argument("--dkl_hidden_dim", type=int, default=32)
+    parser.add_argument("--dkl_feature_dim", type=int, choices=(4, 8), default=8)
+    parser.add_argument("--dkl_activation", choices=("silu", "relu"), default="silu")
+    parser.add_argument("--dkl_lr", type=float, default=0.01)
+    parser.add_argument("--dkl_weight_decay", type=float, default=1e-4)
+    parser.add_argument("--dkl_grad_clip", type=float, default=5.0)
+    parser.add_argument("--dkl_init_steps", type=int, default=200)
+    parser.add_argument("--dkl_refit_steps", type=int, default=50)
+    parser.add_argument("--dkl_early_stopping_patience", type=int, default=25)
+    parser.add_argument("--dkl_min_delta", type=float, default=1e-5)
     parser.add_argument("--adaptive_sampling", action="store_true")
     parser.add_argument("--min_bo_samples", type=int, default=20)
     parser.add_argument("--max_bo_samples", type=int, default=60)
@@ -812,6 +824,25 @@ def _append_eval(
     if update_online and predictor is None:
         raise RuntimeError("online GP update requested before a GP predictor exists")
     train_size_before = 0 if predictor is None else predictor.train_size
+    surrogate_type = getattr(args, "surrogate_type", "exact_gp")
+    predictor_metadata = getattr(predictor, "metadata", {}) if predictor is not None else {}
+    surrogate_provenance = {
+        "surrogate_type": surrogate_type,
+        "dkl_hidden_dim": getattr(args, "dkl_hidden_dim", None) if surrogate_type == "dkl_gp" else None,
+        "dkl_feature_dim": getattr(args, "dkl_feature_dim", None) if surrogate_type == "dkl_gp" else None,
+        "dkl_activation": getattr(args, "dkl_activation", None) if surrogate_type == "dkl_gp" else None,
+        "dkl_kernel_type": "small_feature_rbf" if surrogate_type == "dkl_gp" else None,
+        "dkl_mask_mode": (
+            "masked_features_and_mask"
+            if surrogate_type == "dkl_gp" and bool(getattr(args, "use_conditional_kernel", False))
+            else "none" if surrogate_type == "dkl_gp" else None
+        ),
+        "dkl_training_seed": predictor_metadata.get("dkl_training_seed"),
+        "dkl_seed_derivation": (
+            "stable_seed(search_seed, 'dkl_initial_fit'|'dkl_refit', train_size, online_valid_count)"
+            if surrogate_type == "dkl_gp" else None
+        ),
+    }
     prediction: dict[str, float] | None = None
     if predictor is not None:
         prediction = predictor.predict(
@@ -850,6 +881,7 @@ def _append_eval(
         "best_val_before": None if best_acc is None else float(best_acc),
         "gp_update_mode": args.gp_update_mode,
         "gp_checkpoint_source": args.gp_checkpoint if args.gp_init_mode == "checkpoint" else None,
+        **surrogate_provenance,
         "gp_update_performed": False,
         "gp_update_skipped_reason": "",
         "gp_update_seconds": 0.0,
@@ -884,6 +916,7 @@ def _append_eval(
             "best_val_before": None if best_acc is None else float(best_acc),
             "gp_update_mode": args.gp_update_mode,
             "gp_checkpoint_source": args.gp_checkpoint if args.gp_init_mode == "checkpoint" else None,
+            **surrogate_provenance,
             "gp_stage": gp_stage,
             "gp_update_performed": False,
             "gp_update_skipped_reason": gp_update_skipped_reason,
@@ -937,10 +970,25 @@ def _append_eval(
                 args.gp_update_mode == "warm_refit"
                 and (int(online_valid_count) + 1) % int(args.gp_refit_every) == 0
             )
-            predictor.refit(
-                optimize=should_optimize,
-                steps=int(args.gp_refit_steps) if should_optimize else None,
-            )
+            if getattr(args, "surrogate_type", "exact_gp") == "dkl_gp":
+                dkl_refit_seed = stable_seed(
+                    int(args.seed),
+                    "dkl_refit",
+                    int(predictor.train_size),
+                    int(online_valid_count) + 1,
+                )
+                predictor.refit(
+                    optimize=should_optimize,
+                    steps=int(args.dkl_refit_steps) if should_optimize else None,
+                    training_seed=dkl_refit_seed,
+                )
+                prediction_row["dkl_training_seed"] = int(dkl_refit_seed)
+                history_row["dkl_training_seed"] = int(dkl_refit_seed)
+            else:
+                predictor.refit(
+                    optimize=should_optimize,
+                    steps=int(args.gp_refit_steps) if should_optimize else None,
+                )
         except Exception as exc:
             prediction_row["gp_update_skipped_reason"] = f"update_failed: {exc}"
             history_row["gp_update_skipped_reason"] = prediction_row["gp_update_skipped_reason"]
@@ -989,6 +1037,9 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         "logei", "best_val_before", "gp_update_mode", "gp_checkpoint_source",
         "gp_update_performed", "gp_update_skipped_reason", "eval_seconds",
         "gp_update_seconds", "total_step_seconds",
+        "surrogate_type", "dkl_hidden_dim", "dkl_feature_dim",
+        "dkl_activation", "dkl_kernel_type", "dkl_mask_mode",
+        "dkl_training_seed", "dkl_seed_derivation",
         *PREQUENTIAL_METRIC_FIELDS,
     ]
     with open(tmp_path, "w", encoding="utf-8", newline="") as handle:
@@ -996,6 +1047,39 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         writer.writeheader()
         writer.writerows(records)
     os.replace(tmp_path, path)
+
+
+def _surrogate_provenance(
+    args: argparse.Namespace,
+    predictor: AccuracyGPPredictor | None = None,
+) -> dict[str, Any]:
+    surrogate_type = getattr(args, "surrogate_type", "exact_gp")
+    if surrogate_type == "exact_gp":
+        return {
+            "surrogate_type": "exact_gp",
+            "dkl_hidden_dim": None,
+            "dkl_feature_dim": None,
+            "dkl_activation": None,
+            "dkl_kernel_type": None,
+            "dkl_mask_mode": None,
+            "dkl_training_seed": None,
+            "dkl_seed_derivation": None,
+        }
+    metadata = {} if predictor is None else predictor.metadata
+    return {
+        "surrogate_type": "dkl_gp",
+        "dkl_hidden_dim": int(args.dkl_hidden_dim),
+        "dkl_feature_dim": int(args.dkl_feature_dim),
+        "dkl_activation": str(args.dkl_activation),
+        "dkl_kernel_type": "small_feature_rbf",
+        "dkl_mask_mode": (
+            "masked_features_and_mask" if bool(args.use_conditional_kernel) else "none"
+        ),
+        "dkl_training_seed": metadata.get("dkl_training_seed"),
+        "dkl_seed_derivation": (
+            "stable_seed(search_seed, 'dkl_initial_fit'|'dkl_refit', train_size, online_valid_count)"
+        ),
+    }
 
 
 def validate_frozen_init_configuration(args: argparse.Namespace) -> None:
@@ -1528,27 +1612,57 @@ def _fit_scratch_predictor(
         "vae_checkpoint": args.checkpoint,
         "vae_version": args.version,
         "seed": int(args.seed),
+        "surrogate_type": getattr(args, "surrogate_type", "exact_gp"),
+        "seed_derivation": SEED_DERIVATION,
     }
     started = time.monotonic()
-    predictor = AccuracyGPPredictor.fit_offline(
-        init_X,
-        init_y,
-        arch_nz=ARCH_NZ,
-        hp_mode=args.hp_mode,
-        z_bound=args.z_bound,
-        use_conditional_kernel=bool(args.use_conditional_kernel),
-        condition_masks=init_masks if args.use_conditional_kernel else None,
-        metadata=metadata,
-        device=device,
-        fit_steps=int(args.gp_refit_steps),
-    )
+    if getattr(args, "surrogate_type", "exact_gp") == "dkl_gp":
+        initial_fit_seed = stable_seed(int(args.seed), "dkl_initial_fit")
+        metadata["dkl_training_seed"] = int(initial_fit_seed)
+        predictor = DKLAccuracyGPPredictor.fit_offline(
+            init_X,
+            init_y,
+            arch_nz=ARCH_NZ,
+            hp_mode=args.hp_mode,
+            z_bound=args.z_bound,
+            use_conditional_kernel=bool(args.use_conditional_kernel),
+            condition_masks=init_masks if args.use_conditional_kernel else None,
+            metadata=metadata,
+            device=device,
+            fit_steps=int(args.dkl_init_steps),
+            training_seed=initial_fit_seed,
+            hidden_dim=int(args.dkl_hidden_dim),
+            feature_dim=int(args.dkl_feature_dim),
+            activation=args.dkl_activation,
+            lr=float(args.dkl_lr),
+            weight_decay=float(args.dkl_weight_decay),
+            grad_clip=float(args.dkl_grad_clip),
+            init_steps=int(args.dkl_init_steps),
+            refit_steps=int(args.dkl_refit_steps),
+            early_stopping_patience=int(args.dkl_early_stopping_patience),
+            min_delta=float(args.dkl_min_delta),
+        )
+    else:
+        predictor = AccuracyGPPredictor.fit_offline(
+            init_X,
+            init_y,
+            arch_nz=ARCH_NZ,
+            hp_mode=args.hp_mode,
+            z_bound=args.z_bound,
+            use_conditional_kernel=bool(args.use_conditional_kernel),
+            condition_masks=init_masks if args.use_conditional_kernel else None,
+            metadata=metadata,
+            device=device,
+            fit_steps=int(args.gp_refit_steps),
+        )
     predictor.offline_train_size = 0
     predictor.metadata.update(metadata)
     path = os.path.join(args.output, "accuracy_gp_scratch_initial.pt")
     predictor.save(path)
     logger.info(
-        "Scratch GP initial fit: train_size=%d seconds=%.3f saved=%s",
-        predictor.train_size, time.monotonic() - started, path,
+        "Scratch GP initial fit: surrogate_type=%s train_size=%d seconds=%.3f saved=%s",
+        getattr(args, "surrogate_type", "exact_gp"), predictor.train_size,
+        time.monotonic() - started, path,
     )
     return predictor
 
@@ -1603,6 +1717,11 @@ def run_bo(
         ) = replay_frozen_initialization(args)
         replayed_initial_samples = len(history)
         step = int(args.n_init)
+        replay_provenance = _surrogate_provenance(args, predictor)
+        for row in history:
+            row.update(replay_provenance)
+        for row in prediction_records:
+            row.update(replay_provenance)
         _save_prediction_csv(prediction_records, args.output)
         logger.info("  replayed initial sample count=%d", replayed_initial_samples)
     else:
@@ -1707,6 +1826,7 @@ def run_bo(
         predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
         summary = {
             "gp_init_mode": args.gp_init_mode,
+            **_surrogate_provenance(args, predictor),
             "used_previous_history": True,
             "used_offline_checkpoint": True,
             "converged": False,
@@ -1742,7 +1862,17 @@ def run_bo(
             init_X, init_y,
             condition_masks=init_masks if predictor.use_conditional_kernel else None,
         )
-        predictor.refit(optimize=True, steps=int(args.gp_refit_steps))
+        if getattr(args, "surrogate_type", "exact_gp") == "dkl_gp":
+            init_update_seed = stable_seed(
+                int(args.seed), "dkl_refit", int(predictor.train_size), 0,
+            )
+            predictor.refit(
+                optimize=True,
+                steps=int(args.dkl_refit_steps),
+                training_seed=init_update_seed,
+            )
+        else:
+            predictor.refit(optimize=True, steps=int(args.gp_refit_steps))
         logger.info(
             "Offline init batch update: added=%d train_size=%d seconds=%.3f",
             len(init_valid), predictor.train_size, time.monotonic() - update_started,
@@ -1916,6 +2046,7 @@ def run_bo(
     predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
     summary = {
         "gp_init_mode": args.gp_init_mode,
+        **_surrogate_provenance(args, predictor),
         "used_previous_history": bool(args.gp_init_mode == "checkpoint"),
         "used_offline_checkpoint": bool(args.gp_init_mode == "checkpoint"),
         "converged": bool(final_decision.converged),
@@ -2079,6 +2210,19 @@ def main() -> None:
             raise ValueError(f"--{name} must be positive")
     if int(args.scratch_gp_min_points) < 2:
         raise ValueError("--scratch_gp_min_points must be at least 2 for Exact GP training")
+    if args.surrogate_type == "dkl_gp":
+        validate_dkl_config(
+            hidden_dim=args.dkl_hidden_dim,
+            feature_dim=args.dkl_feature_dim,
+            activation=args.dkl_activation,
+            lr=args.dkl_lr,
+            weight_decay=args.dkl_weight_decay,
+            grad_clip=args.dkl_grad_clip,
+            init_steps=args.dkl_init_steps,
+            refit_steps=args.dkl_refit_steps,
+            early_stopping_patience=args.dkl_early_stopping_patience,
+            min_delta=args.dkl_min_delta,
+        )
     if int(args.n_extra) < 0:
         raise ValueError("--n_extra must be non-negative")
     if int(args.min_bo_samples) > int(args.max_bo_samples):
@@ -2116,6 +2260,11 @@ def main() -> None:
     logger.info(f"hp_mode={args.hp_mode} hp_dim={hp_dim} hp_names={hp_names_from_mode(args.hp_mode)}")
     logger.info(f"z_bound={args.z_bound}")
     logger.info(f"gp_init_mode={args.gp_init_mode}")
+    logger.info(
+        "surrogate_type=%s dkl=%s",
+        args.surrogate_type,
+        json.dumps(_surrogate_provenance(args), ensure_ascii=False),
+    )
     logger.info(f"online_candidate_strategy={args.online_candidate_strategy}")
     logger.info(
         "initialization_source=%s frozen_init_history=%s",
@@ -2133,26 +2282,43 @@ def main() -> None:
 
     predictor: AccuracyGPPredictor | None = None
     if args.gp_init_mode == "checkpoint":
-        predictor = AccuracyGPPredictor.load(
-            args.gp_checkpoint,
-            device=device,
-            expected={
-                "arch_nz": ARCH_NZ,
-                "hp_mode": args.hp_mode,
-                "search_dim": search_dim,
-                "z_bound": float(args.z_bound),
-                "dataset": "Cora",
-                "eval_epochs": int(args.eval_epochs),
-                "patience": int(args.patience),
-                "vae_checkpoint": args.checkpoint,
-                "vae_version": os.path.basename(args.checkpoint),
-                "use_conditional_kernel": bool(args.use_conditional_kernel),
-            },
-        )
+        checkpoint_expected = {
+            "arch_nz": ARCH_NZ,
+            "hp_mode": args.hp_mode,
+            "search_dim": search_dim,
+            "z_bound": float(args.z_bound),
+            "dataset": "Cora",
+            "eval_epochs": int(args.eval_epochs),
+            "patience": int(args.patience),
+            "vae_checkpoint": args.checkpoint,
+            "vae_version": os.path.basename(args.checkpoint),
+            "use_conditional_kernel": bool(args.use_conditional_kernel),
+        }
+        if args.surrogate_type == "dkl_gp":
+            checkpoint_expected.update(
+                {
+                    "feature_hidden_dims": [int(args.dkl_hidden_dim)],
+                    "feature_dim": int(args.dkl_feature_dim),
+                    "activation": args.dkl_activation,
+                }
+            )
+            predictor = DKLAccuracyGPPredictor.load(
+                args.gp_checkpoint,
+                device=device,
+                expected=checkpoint_expected,
+            )
+        else:
+            predictor = AccuracyGPPredictor.load(
+                args.gp_checkpoint,
+                device=device,
+                expected=checkpoint_expected,
+            )
         holdout_size = 0 if predictor.holdout_Y is None else int(predictor.holdout_Y.numel())
         logger.info(
-            "Accuracy GP loaded: source=%s model=SingleTaskGP kernel=%s offline_train=%d holdout=%d",
-            args.gp_checkpoint, predictor.kernel_type, predictor.offline_train_size, holdout_size,
+            "Accuracy GP loaded: source=%s surrogate_type=%s model=SingleTaskGP "
+            "kernel=%s offline_train=%d holdout=%d",
+            args.gp_checkpoint, args.surrogate_type, predictor.kernel_type,
+            predictor.offline_train_size, holdout_size,
         )
     else:
         logger.info(

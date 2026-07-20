@@ -59,12 +59,14 @@ def test_fit_save_load_append_and_warm_refit(tmp_path):
     assert after == pytest.approx(before, rel=1e-7, abs=1e-7)
     assert float(loaded.likelihood.noise.detach().min()) >= 1e-4 * 0.999
 
+    initial_y_stats = (loaded.y_mean, loaded.y_std)
     loaded.append_observation(X[0] * 0.95, float(y[0]))
     loaded.refit(optimize=False)
     assert loaded.train_size == 13
     loaded.append_observation(X[1] * 0.95, float(y[1]))
     loaded.refit(optimize=True, steps=2)
     assert loaded.train_size == 14
+    assert (loaded.y_mean, loaded.y_std) == initial_y_stats
     assert math.isfinite(loaded.predict(X[2])["mean"])
 
 
