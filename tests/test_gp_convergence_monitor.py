@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from surrogate.metrics import PREQUENTIAL_METRIC_FIELDS, GPConvergenceMonitor
 
 
@@ -182,3 +186,35 @@ def test_stagnation_gate_does_not_block_budget_or_wall_time():
     decision = timing.stop_decision(2, 3.0, 1.0)
     assert decision.stop_reason == "time_budget_reached"
     assert decision.deferred_reason is not None
+
+
+def test_monitor_state_roundtrip_matches_continuous_adaptive_decisions():
+    continuous = _monitor(best_acc_patience=99)
+    resumed_before = _monitor(best_acc_patience=99)
+    events = [
+        (2, 0.70, 0.69, 0.050),
+        (3, 0.71, 0.70, 0.049),
+        (4, 0.72, 0.71, 0.048),
+        (5, 0.73, 0.72, 0.047),
+    ]
+    for sample, actual, predicted, std in events[:2]:
+        _add_scratch(continuous, sample, actual, predicted, std=std)
+        _add_scratch(resumed_before, sample, actual, predicted, std=std)
+
+    serialized = json.loads(json.dumps(resumed_before.state_dict()))
+    resumed = _monitor(best_acc_patience=99)
+    resumed.load_state_dict(serialized)
+    assert resumed.state_dict() == serialized
+
+    for sample, actual, predicted, std in events[2:]:
+        continuous_row = _add_scratch(continuous, sample, actual, predicted, std=std)
+        resumed_row = _add_scratch(resumed, sample, actual, predicted, std=std)
+        assert resumed_row == continuous_row
+        assert resumed.stop_decision(sample, sample, 0.1) == continuous.stop_decision(
+            sample, sample, 0.1,
+        )
+    assert resumed.state_dict() == continuous.state_dict()
+
+    mismatched = _monitor(best_acc_patience=98)
+    with pytest.raises(ValueError, match="settings differ"):
+        mismatched.load_state_dict(serialized)

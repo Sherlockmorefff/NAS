@@ -252,6 +252,22 @@ class WeightedDiagonalGMM:
         samples = mean + self.rng.normal(size=mean.shape) * std
         return np.nan_to_num(samples, nan=0.0, posinf=0.0, neginf=0.0)
 
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Return deterministic posterior component responsibilities."""
+
+        X = _as_2d_float(X)
+        log_joint = self._estimate_log_prob(X) + self._estimate_log_weights()[None, :]
+        log_norm = _logsumexp(log_joint, axis=1, keepdims=True)
+        responsibilities = np.exp(log_joint - log_norm)
+        responsibilities = np.where(np.isfinite(responsibilities), responsibilities, 0.0)
+        row_sum = responsibilities.sum(axis=1, keepdims=True)
+        if np.any(row_sum <= 0.0):
+            raise RuntimeError("GMM produced an empty responsibility row")
+        responsibilities = responsibilities / row_sum
+        if not np.isfinite(responsibilities).all():
+            raise RuntimeError("GMM produced non-finite responsibilities")
+        return responsibilities
+
 
 def softmax_weights(y: np.ndarray, temperature: float = 8.0) -> np.ndarray:
     y = np.asarray(y, dtype=np.float64).reshape(-1)

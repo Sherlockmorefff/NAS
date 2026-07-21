@@ -1,6 +1,10 @@
 D-VAE -- A Variational Autoencoder for Directed Acyclic Graphs
 ===============================================================================
 
+The optional Exact-GP WGMM-clustered TED two-stage initializer is documented
+in [docs/wgmm_clustered_ted.md](docs/wgmm_clustered_ted.md). The default Phase4
+initializer remains the legacy Schur strategy.
+
 About
 -----
 

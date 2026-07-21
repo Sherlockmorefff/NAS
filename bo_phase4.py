@@ -4,11 +4,10 @@ Search vector:
 
     z_search = [z_arch, hp]
 
-HP semantics and dimensions are driven only by hp_mode. GMM initialization is
-inserted after LHS initialization and before the BO loop. The GMM helper itself
-does top-fraction selection, standardization, weighted diagonal GMM fitting,
-sampling, inverse standardization, and only then clips to the valid search
-domain. This script performs an additional defensive clip before evaluation.
+HP semantics and dimensions are driven only by hp_mode. The default Schur and
+legacy weighted-GMM path is preserved. Optional WGMM-clustered TED strategies
+use one unlabeled LHS pool, an Exact-GP-normalized RBF kernel, and a separate
+two-stage full/low-fidelity initialization before the same online BO policy.
 """
 
 from __future__ import annotations
@@ -18,13 +17,14 @@ import copy
 import csv
 import json
 import logging
+import math
 import os
 import sys
 import time
 import urllib.request
 import warnings
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -63,7 +63,7 @@ from surrogate.accuracy_gp import (
     denormalize_search_vector,
 )
 from surrogate.dkl_accuracy_gp import DKLAccuracyGPPredictor, validate_dkl_config
-from surrogate.checkpoint_io import atomic_json_dump
+from surrogate.checkpoint_io import atomic_json_dump, atomic_torch_save
 from surrogate.history_dataset import architecture_key_from_record
 from surrogate.metrics import (
     PREQUENTIAL_METRIC_FIELDS,
@@ -72,6 +72,24 @@ from surrogate.metrics import (
     prediction_record_fields,
 )
 from weighted_diag_gmm_init import fit_and_sample_gmm_init, load_history_vectors
+from initialization_wgmm_ted import (
+    QUOTA_MODES,
+    WGMM_ASSIGNMENT_SOURCES,
+    allocate_cluster_quotas,
+    assign_clusters,
+    atomic_json_dump as atomic_initialization_json_dump,
+    candidate_fingerprint as make_candidate_fingerprint,
+    canonical_json_fingerprint,
+    combined_expansion_scores,
+    fit_pool_gmm,
+    fingerprint_array,
+    greedy_ted_select,
+    load_checkpoint_wgmm,
+    rbf_kernel,
+    select_by_cluster_scores,
+    sha256_file,
+    ted_features,
+)
 
 
 ARCH_NZ = 12
@@ -135,6 +153,65 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n_init", type=int, default=20)
     parser.add_argument("--n_lhs_candidates", type=int, default=160)
     parser.add_argument("--n_iter", type=int, default=60)
+    parser.add_argument(
+        "--initial_selection_strategy",
+        choices=("schur", "wgmm_ted", "wgmm_ted_lowfid"),
+        default="schur",
+        help="initial point selector; schur preserves the legacy path",
+    )
+    parser.add_argument(
+        "--initial_seed_evals", type=int, default=None,
+        help="full-fidelity seed evaluations (default: n_init)",
+    )
+    parser.add_argument(
+        "--initial_expand_evals", type=int, default=0,
+        help="second-stage full-fidelity evaluations; excluded from n_iter",
+    )
+    parser.add_argument(
+        "--max_total_full_evals", type=int, default=None,
+        help="optional strict check: seed + expansion + online",
+    )
+    parser.add_argument(
+        "--wgmm_source", choices=WGMM_ASSIGNMENT_SOURCES, default="checkpoint",
+        help=(
+            "recover a serialized checkpoint diagonal mixture, or fit an ordinary "
+            "diagonal GMM with uniform weights on the unlabeled LHS pool"
+        ),
+    )
+    parser.add_argument(
+        "--wgmm_checkpoint", type=str, default=None,
+        help="mixture checkpoint/sidecar (default: VAE checkpoint)",
+    )
+    parser.add_argument(
+        "--wgmm_n_components", type=int, default=None,
+        help="required for gmm_fit_pool; otherwise verified against checkpoint",
+    )
+    parser.add_argument("--wgmm_covariance_regularization", type=float, default=1e-6)
+    parser.add_argument("--wgmm_assignment", choices=("hard",), default="hard")
+    parser.add_argument("--wgmm_quota_mode", choices=QUOTA_MODES, default="hybrid")
+    parser.add_argument("--wgmm_equal_weight", type=float, default=0.5)
+    parser.add_argument("--ted_kernel_lengthscale", type=float, default=None)
+    parser.add_argument("--ted_regularization", type=float, default=0.1)
+    parser.add_argument("--ted_jitter", type=float, default=1e-8)
+    parser.add_argument(
+        "--ted_shortlist_per_cluster", type=int, default=100,
+        help="maximum conditioned-TED shortlist size in each nonempty cluster",
+    )
+    parser.add_argument(
+        "--low_fidelity_epochs", type=int, default=20,
+        help="fixed low-fidelity epoch budget",
+    )
+    parser.add_argument(
+        "--low_fidelity_patience", type=int, default=0,
+        help="0 disables low-fidelity early stopping",
+    )
+    parser.add_argument("--low_fidelity_score_weight", type=float, default=0.50)
+    parser.add_argument("--gp_mean_score_weight", type=float, default=0.25)
+    parser.add_argument("--gp_std_score_weight", type=float, default=0.25)
+    parser.add_argument(
+        "--resume_initialization", action="store_true",
+        help="strictly resume matching atomic WGMM-TED artifacts",
+    )
     parser.add_argument("--output", type=str, default="results/bo_phase4")
     parser.add_argument("--sigma_arch", type=float, default=0.8)
     parser.add_argument("--eval_epochs", type=int, default=100)
@@ -346,11 +423,33 @@ def eval_candidate(
     args: argparse.Namespace,
     device: torch.device,
     step: int = 0,
+    evaluation_stage: str | None = None,
+    evaluation_fidelity: str = "full",
+    candidate_fingerprint: str | None = None,
+    evaluation_seed: int | None = None,
+    max_epochs_override: int | None = None,
+    patience_override: int | None = None,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     z_np = clip_z_search_by_mode(z_search, args.hp_mode, ARCH_NZ, args.z_bound)
     z_tensor = torch.tensor(z_np, dtype=torch.float32)
     decoder_seed = stable_seed(int(args.seed), "decoder", z_tensor[:ARCH_NZ])
-    candidate_eval_seed = stable_seed(int(args.seed), "candidate_eval", int(step))
+    if evaluation_seed is None:
+        if evaluation_stage is None and candidate_fingerprint is None and evaluation_fidelity == "full":
+            candidate_eval_seed = stable_seed(int(args.seed), "candidate_eval", int(step))
+        else:
+            if candidate_fingerprint is None or evaluation_stage is None:
+                raise ValueError(
+                    "candidate_fingerprint and evaluation_stage are required for fidelity-isolated evaluation"
+                )
+            candidate_eval_seed = stable_seed(
+                int(args.seed),
+                "candidate_evaluation",
+                candidate_fingerprint,
+                evaluation_fidelity,
+                evaluation_stage,
+            )
+    else:
+        candidate_eval_seed = int(evaluation_seed)
     result = eval_z_search(
         vae,
         z_tensor.to(device),
@@ -366,8 +465,8 @@ def eval_candidate(
         use_conditional_params=True,
         gcnii_alpha=args.gcnii_alpha,
         gcnii_theta=args.gcnii_theta,
-        max_epochs=args.eval_epochs,
-        patience=args.patience,
+        max_epochs=(int(args.eval_epochs) if max_epochs_override is None else int(max_epochs_override)),
+        patience=(int(args.patience) if patience_override is None else int(patience_override)),
         hp_mode=args.hp_mode,
         return_hp=True,
         decoder_seed=decoder_seed,
@@ -378,6 +477,14 @@ def eval_candidate(
             "search_seed": int(args.seed),
             "decoder_seed": decoder_seed,
             "candidate_eval_seed": candidate_eval_seed,
+            "evaluation_seed": candidate_eval_seed,
+            "evaluation_stage": evaluation_stage,
+            "evaluation_fidelity": evaluation_fidelity,
+            "candidate_fingerprint": candidate_fingerprint,
+            "architecture_fingerprint": _decoded_architecture_fingerprint(
+                result.get("config")
+            ),
+            "hp_fingerprint": _hp_configuration_fingerprint(result),
             "seed_derivation": SEED_DERIVATION,
         }
     )
@@ -388,6 +495,28 @@ def _edges_json(config: dict | None) -> list[list[int]]:
     if config is None:
         return []
     return [list(edge) for edge in config.get("edges", [])]
+
+
+def _decoded_architecture_fingerprint(config: dict | None) -> str | None:
+    if config is None:
+        return None
+    operations = [str(value) for value in config.get("operations", [])]
+    edges = sorted([list(map(int, edge)) for edge in config.get("edges", [])])
+    return canonical_json_fingerprint({"operations": operations, "edges": edges})
+
+
+def _hp_configuration_fingerprint(result: dict[str, Any]) -> str:
+    hp = result.get("hp") if isinstance(result.get("hp"), dict) else {}
+    fields = (
+        "lr", "dropout", "hidden_dim", "weight_decay", "gat_heads",
+        "sage_aggr", "gin_eps", "gat_heads_by_layer", "sage_aggr_by_layer",
+        "gin_eps_by_layer", "condition_mask_vector",
+    )
+    payload = {
+        key: hp.get(key, result.get(key))
+        for key in fields
+    }
+    return canonical_json_fingerprint(payload)
 
 
 def _architecture_key_from_result(result: dict[str, Any], z_search: torch.Tensor) -> str:
@@ -496,6 +625,8 @@ def history_record(
         "search_seed": search_seed,
         "decoder_seed": decoder_seed,
         "candidate_eval_seed": candidate_eval_seed,
+        "architecture_fingerprint": result.get("architecture_fingerprint"),
+        "hp_fingerprint": result.get("hp_fingerprint"),
         "seed_derivation": SEED_DERIVATION,
         "best_epoch": result.get("best_epoch"),
         "stopped_epoch": stopped_epoch,
@@ -799,6 +930,8 @@ def _append_eval(
     best_acc: float | None = None,
     convergence_monitor: GPConvergenceMonitor | None = None,
     candidate_selection_seed: int | None = None,
+    record_metadata: dict[str, Any] | None = None,
+    pre_update_persist: Callable[[], None] | None = None,
 ) -> tuple[float, bool, list[float], bool]:
     """Predict, evaluate, record, and optionally update in that strict order."""
 
@@ -812,15 +945,29 @@ def _append_eval(
     pre_decoder_seed = None
     pre_candidate_eval_seed = None
     pre_seed_derivation = None
+    metadata = {} if record_metadata is None else dict(record_metadata)
+    evaluation_stage = metadata.get("evaluation_stage")
+    evaluation_fidelity = str(metadata.get("evaluation_fidelity", "full"))
+    fingerprint = metadata.get("candidate_fingerprint")
     if pre_search_seed is not None:
         pre_search_seed = int(pre_search_seed)
         pre_decoder_seed = stable_seed(
             pre_search_seed, "decoder", z_search[:ARCH_NZ],
         )
-        pre_candidate_eval_seed = stable_seed(
-            pre_search_seed, "candidate_eval", int(step),
+        pre_candidate_eval_seed = (
+            stable_seed(pre_search_seed, "candidate_eval", int(step))
+            if evaluation_stage is None and fingerprint is None and evaluation_fidelity == "full"
+            else stable_seed(
+                pre_search_seed,
+                "candidate_evaluation",
+                str(fingerprint),
+                evaluation_fidelity,
+                str(evaluation_stage),
+            )
         )
         pre_seed_derivation = SEED_DERIVATION
+        if record_metadata is not None:
+            metadata.setdefault("evaluation_seed", pre_candidate_eval_seed)
     if update_online and predictor is None:
         raise RuntimeError("online GP update requested before a GP predictor exists")
     train_size_before = 0 if predictor is None else predictor.train_size
@@ -887,6 +1034,7 @@ def _append_eval(
         "gp_update_seconds": 0.0,
         "eval_seconds": None,
         "total_step_seconds": float(time.monotonic() - step_started),
+        **metadata,
     }
     prediction_records.append(prediction_row)
     # Persist the untouched pre-update prediction before the real GNN evaluation.
@@ -894,8 +1042,20 @@ def _append_eval(
 
     eval_started = time.monotonic()
     z_search, result = eval_candidate(
-        vae, z_search, data, in_ch, out_ch, args, device, step=step,
+        vae,
+        z_search,
+        data,
+        in_ch,
+        out_ch,
+        args,
+        device,
+        step=step,
+        evaluation_stage=evaluation_stage,
+        evaluation_fidelity=evaluation_fidelity,
+        candidate_fingerprint=fingerprint,
+        evaluation_seed=pre_candidate_eval_seed,
     )
+    result.update(metadata)
     eval_seconds = time.monotonic() - eval_started
     acc = float(result.get("val_acc", 0.0))
     valid = bool(result.get("valid", False))
@@ -925,6 +1085,7 @@ def _append_eval(
             "total_step_seconds": float(time.monotonic() - step_started),
             "online_candidate_strategy": online_candidate_strategy,
             "candidate_selection_seed": candidate_selection_seed,
+            **metadata,
         }
     )
     X_obs.append(z_search)
@@ -941,6 +1102,8 @@ def _append_eval(
             "search_seed": result.get("search_seed"),
             "decoder_seed": result.get("decoder_seed"),
             "candidate_eval_seed": result.get("candidate_eval_seed"),
+            "architecture_fingerprint": result.get("architecture_fingerprint"),
+            "hp_fingerprint": result.get("hp_fingerprint"),
             "seed_derivation": result.get("seed_derivation"),
             "best_epoch": result.get("best_epoch"),
             "stopped_epoch": result.get("stopped_epoch"),
@@ -948,6 +1111,7 @@ def _append_eval(
             "online_candidate_strategy": online_candidate_strategy,
             "candidate_selection_seed": candidate_selection_seed,
             **gp_fields,
+            **metadata,
         }
     )
     if convergence_monitor is not None:
@@ -956,6 +1120,8 @@ def _append_eval(
         history_row.update(rolling_metrics)
     # Persist the prediction, real result, and metrics before touching the GP.
     _save_prediction_csv(prediction_records, args.output)
+    if pre_update_persist is not None:
+        pre_update_persist()
 
     if update_online and safe_for_gp_training:
         update_started = time.monotonic()
@@ -1028,6 +1194,7 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
     fields = [
         "step", "record_type", "gp_stage", "valid", "search_seed",
         "decoder_seed", "candidate_eval_seed", "seed_derivation", "best_epoch",
+        "architecture_fingerprint", "hp_fingerprint",
         "stopped_epoch", "epochs_ran", "online_candidate_strategy",
         "candidate_selection_seed", "initial_record_replayed",
         "initial_history_source", "gp_train_size_before",
@@ -1042,6 +1209,15 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         "dkl_training_seed", "dkl_seed_derivation",
         *PREQUENTIAL_METRIC_FIELDS,
     ]
+    initialization_fields = [
+        "initialization_strategy", "evaluation_stage", "evaluation_fidelity",
+        "cluster_id", "cluster_responsibility", "candidate_pool_index",
+        "candidate_fingerprint", "selection_rank", "ted_score", "quota_mode",
+        "low_fidelity_used", "low_fidelity_record_id", "evaluation_seed",
+        "full_evaluation_index", "online_iteration",
+    ]
+    if any(any(field in row for field in initialization_fields) for row in records):
+        fields.extend(initialization_fields)
     with open(tmp_path, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -1615,6 +1791,13 @@ def _fit_scratch_predictor(
         "surrogate_type": getattr(args, "surrogate_type", "exact_gp"),
         "seed_derivation": SEED_DERIVATION,
     }
+    if getattr(args, "initial_selection_strategy", "schur") != "schur":
+        metadata.update(
+            {
+                "initialization_strategy": args.initial_selection_strategy,
+                "initialization_config_fingerprint": args.initialization_config_fingerprint,
+            }
+        )
     started = time.monotonic()
     if getattr(args, "surrogate_type", "exact_gp") == "dkl_gp":
         initial_fit_seed = stable_seed(int(args.seed), "dkl_initial_fit")
@@ -1667,6 +1850,1448 @@ def _fit_scratch_predictor(
     return predictor
 
 
+def _resolved_initial_seed_evals(args: argparse.Namespace) -> int:
+    return int(args.n_init) if args.initial_seed_evals is None else int(args.initial_seed_evals)
+
+
+def validate_two_stage_initialization_config(args: argparse.Namespace) -> None:
+    """Validate new budgets without changing any legacy Schur semantics."""
+
+    seed_evals = _resolved_initial_seed_evals(args)
+    expand_evals = int(args.initial_expand_evals)
+    if seed_evals <= 0:
+        raise ValueError("--initial_seed_evals must be positive")
+    if expand_evals < 0:
+        raise ValueError("--initial_expand_evals must be non-negative")
+    if args.max_total_full_evals is not None:
+        expected = seed_evals + expand_evals + int(args.n_iter)
+        if expected != int(args.max_total_full_evals):
+            raise ValueError(
+                "full-evaluation budget mismatch: initial_seed_evals "
+                f"{seed_evals} + initial_expand_evals {expand_evals} + n_iter "
+                f"{int(args.n_iter)} = {expected}, not --max_total_full_evals "
+                f"{int(args.max_total_full_evals)}"
+            )
+    if args.initial_selection_strategy == "schur":
+        if args.initial_seed_evals is not None and seed_evals != int(args.n_init):
+            raise ValueError("legacy Schur requires --initial_seed_evals to equal --n_init")
+        if expand_evals != 0:
+            raise ValueError("legacy Schur does not support --initial_expand_evals")
+        return
+    if args.surrogate_type != "exact_gp":
+        raise ValueError("WGMM-clustered TED requires --surrogate_type exact_gp")
+    if args.gp_init_mode != "scratch":
+        raise ValueError("WGMM-clustered TED requires --gp_init_mode scratch")
+    if args.gp_checkpoint:
+        raise ValueError("WGMM-clustered TED does not accept --gp_checkpoint")
+    if args.warm_start != "":
+        raise ValueError("WGMM-clustered TED requires --warm_start to be an empty string")
+    if args.frozen_init_history is not None:
+        raise ValueError("WGMM-clustered TED uses strict initialization resume, not --frozen_init_history")
+    if args.gmm_init_history or int(args.gmm_init_trials) != 0:
+        raise ValueError("WGMM-clustered TED cannot be combined with legacy GMM initialization")
+    if seed_evals != int(args.n_init):
+        raise ValueError("--initial_seed_evals must equal --n_init for replay compatibility")
+    total_initial = seed_evals + expand_evals
+    if int(args.n_lhs_candidates) < total_initial:
+        raise ValueError(
+            f"--n_lhs_candidates {args.n_lhs_candidates} is smaller than the "
+            f"{total_initial} unique full-fidelity initialization points"
+        )
+    if args.wgmm_source == "gmm_fit_pool" and args.wgmm_n_components is None:
+        raise ValueError("--wgmm_n_components is required with --wgmm_source gmm_fit_pool")
+    if args.wgmm_n_components is not None and int(args.wgmm_n_components) <= 0:
+        raise ValueError("--wgmm_n_components must be positive")
+    if float(args.wgmm_covariance_regularization) < 0.0:
+        raise ValueError("--wgmm_covariance_regularization must be non-negative")
+    if not 0.0 <= float(args.wgmm_equal_weight) <= 1.0:
+        raise ValueError("--wgmm_equal_weight must be in [0, 1]")
+    if float(args.ted_regularization) <= 0.0:
+        raise ValueError("--ted_regularization must be positive")
+    if float(args.ted_jitter) < 0.0:
+        raise ValueError("--ted_jitter must be non-negative")
+    if int(args.ted_shortlist_per_cluster) <= 0:
+        raise ValueError("--ted_shortlist_per_cluster must be positive")
+    if int(args.low_fidelity_epochs) <= 0:
+        raise ValueError("--low_fidelity_epochs must be positive")
+    if int(args.low_fidelity_patience) < 0:
+        raise ValueError("--low_fidelity_patience must be non-negative")
+    score_weights = np.asarray(
+        [
+            args.low_fidelity_score_weight,
+            args.gp_mean_score_weight,
+            args.gp_std_score_weight,
+        ],
+        dtype=np.float64,
+    )
+    if np.any(score_weights < 0.0) or not np.isfinite(score_weights).all():
+        raise ValueError("low-fidelity/GP score weights must be finite and non-negative")
+    if not np.isclose(float(score_weights.sum()), 1.0, rtol=0.0, atol=1e-12):
+        raise ValueError("low-fidelity/GP score weights must sum to 1")
+
+
+def _atomic_csv_dump(rows: list[dict[str, Any]], path: str, fields: list[str] | None = None) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    temporary = path + ".tmp"
+    if fields is None:
+        fields = []
+        seen: set[str] = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    fields.append(key)
+                    seen.add(key)
+    with open(temporary, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _initialization_paths(output: str) -> dict[str, str]:
+    names = (
+        "initialization_config.json",
+        "candidate_pool.pt",
+        "candidate_pool_metadata.json",
+        "wgmm_assignments.csv",
+        "cluster_quota.json",
+        "ted_seed_trace.csv",
+        "ted_shortlist_trace.csv",
+        "expansion_scores.csv",
+        "selected_seed_indices.json",
+        "selected_expand_indices.json",
+        "low_fidelity_history.json",
+        "initialization_full_history.json",
+        "rng_provenance.json",
+        "budget_summary.json",
+    )
+    return {name: os.path.join(output, name) for name in names}
+
+
+def _read_json(path: str) -> Any:
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _write_initialization_artifacts(
+    *,
+    args: argparse.Namespace,
+    pool: torch.Tensor,
+    masks: torch.Tensor,
+    assignments: dict[str, np.ndarray],
+    wgmm_parameters,
+    config: dict[str, Any],
+    paths: dict[str, str],
+) -> list[dict[str, Any]]:
+    pool_fingerprint = str(config["candidate_pool_fingerprint"])
+    atomic_torch_save(
+        {
+            "format_version": 1,
+            "z_search": pool.detach().cpu().float(),
+            "condition_masks": masks.detach().cpu().float(),
+            "fingerprint": pool_fingerprint,
+        },
+        paths["candidate_pool.pt"],
+    )
+    assignment_rows: list[dict[str, Any]] = []
+    responsibilities = assignments["responsibilities"]
+    cluster_ids = assignments["cluster_ids"]
+    entropies = assignments["entropy"]
+    for index in range(pool.shape[0]):
+        row = pool[index].detach().cpu().float().tolist()
+        cluster_id = int(cluster_ids[index])
+        assignment_rows.append(
+            {
+                "candidate_index": index,
+                "candidate_fingerprint": make_candidate_fingerprint(row),
+                "z_arch_json": json.dumps(row[:ARCH_NZ], separators=(",", ":")),
+                "hp_json": json.dumps(row[ARCH_NZ:], separators=(",", ":")),
+                "z_search_json": json.dumps(row, separators=(",", ":")),
+                "cluster_id": cluster_id,
+                "responsibilities_json": json.dumps(
+                    responsibilities[index].tolist(), separators=(",", ":")
+                ),
+                "cluster_responsibility": float(responsibilities[index, cluster_id]),
+                "responsibility_entropy": float(entropies[index]),
+                "component_weight": float(wgmm_parameters.weights[cluster_id]),
+                "assignment_source": wgmm_parameters.source,
+            }
+        )
+    _atomic_csv_dump(assignment_rows, paths["wgmm_assignments.csv"])
+    atomic_initialization_json_dump(
+        {
+            "format_version": 1,
+            "candidate_count": int(pool.shape[0]),
+            "search_dim": int(pool.shape[1]),
+            "arch_dim": ARCH_NZ,
+            "hp_mode": args.hp_mode,
+            "candidate_pool_fingerprint": pool_fingerprint,
+            "candidate_pool_seed": int(args.seed),
+            "vae_checkpoint": os.path.abspath(args.checkpoint),
+            "vae_checkpoint_sha256": sha256_file(args.checkpoint),
+            "wgmm": wgmm_parameters.to_json(),
+            "ted_feature_transform": "exact_gp_normalize_then_inactive_mask",
+        },
+        paths["candidate_pool_metadata.json"],
+    )
+    atomic_initialization_json_dump(config, paths["initialization_config.json"])
+    return assignment_rows
+
+
+def _load_resume_full_history(
+    path: str,
+    *,
+    config_fingerprint: str,
+) -> tuple[
+    list[dict[str, Any]],
+    list[torch.Tensor],
+    list[float],
+    list[tuple[torch.Tensor, float, list[float]]],
+    list[dict[str, Any]],
+]:
+    if not os.path.exists(path):
+        return [], [], [], [], []
+    records = _read_json(path)
+    if not isinstance(records, list):
+        raise ValueError("initialization_full_history.json must contain a JSON list")
+    history: list[dict[str, Any]] = []
+    X_obs: list[torch.Tensor] = []
+    Y_obs: list[float] = []
+    valid_rows: list[tuple[torch.Tensor, float, list[float]]] = []
+    predictions: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for raw in records:
+        if not isinstance(raw, dict):
+            raise ValueError("initialization history contains a non-object record")
+        if raw.get("initialization_config_fingerprint") != config_fingerprint:
+            raise ValueError("resume initialization config fingerprint mismatch")
+        stage = str(raw.get("evaluation_stage"))
+        if stage not in ("initial_seed", "initial_expand"):
+            raise ValueError(f"resume initialization has unsupported stage {stage!r}")
+        if raw.get("evaluation_fidelity") != "full":
+            raise ValueError("resume initialization history must contain full-fidelity records only")
+        pool_index = int(raw.get("candidate_pool_index"))
+        key = (stage, pool_index)
+        if key in seen:
+            raise ValueError(f"resume history contains duplicate candidate {key}")
+        seen.add(key)
+        z = torch.tensor(raw["z_search"], dtype=torch.float32)
+        if raw.get("candidate_fingerprint") != make_candidate_fingerprint(z.numpy()):
+            raise ValueError("resume initialization candidate fingerprint mismatch")
+        if int(raw.get("full_evaluation_index", -1)) != len(history):
+            raise ValueError("resume initialization full-evaluation indices are not contiguous")
+        acc = float(raw["val_acc"])
+        mask_hp = [float(value) for value in raw["condition_mask_vector"]]
+        full_mask = [1.0] * ARCH_NZ + mask_hp
+        history.append(copy.deepcopy(raw))
+        X_obs.append(z)
+        Y_obs.append(acc)
+        if bool(raw.get("valid")):
+            valid_rows.append((z, acc, full_mask))
+        prediction = copy.deepcopy(raw)
+        prediction["record_type"] = raw.get("type")
+        predictions.append(prediction)
+    return history, X_obs, Y_obs, valid_rows, predictions
+
+
+def _cluster_component_mass(assignments: dict[str, np.ndarray]) -> dict[int, float]:
+    responsibilities = np.asarray(assignments["responsibilities"], dtype=np.float64)
+    mass = responsibilities.sum(axis=0)
+    if float(mass.sum()) <= 0.0:
+        raise RuntimeError("WGMM responsibilities have zero total mass")
+    mass /= mass.sum()
+    return {index: float(value) for index, value in enumerate(mass)}
+
+
+def _select_clustered_ted(
+    *,
+    kernel: np.ndarray,
+    cluster_ids: np.ndarray,
+    quotas: dict[int, int],
+    conditioned: Sequence[int] = (),
+    shortlist_limit: int | None = None,
+    regularization: float,
+    jitter: float,
+) -> tuple[list[int], list[dict[str, Any]]]:
+    conditioned_set = set(int(value) for value in conditioned)
+    selected: list[int] = []
+    traces: list[dict[str, Any]] = []
+    for cluster_id in sorted(quotas):
+        cluster_indices = np.flatnonzero(cluster_ids == int(cluster_id)).astype(int).tolist()
+        cluster_conditioned = [index for index in cluster_indices if index in conditioned_set]
+        available = len(cluster_indices) - len(cluster_conditioned)
+        requested = int(quotas[cluster_id])
+        if shortlist_limit is not None:
+            requested = min(requested, int(shortlist_limit))
+        requested = min(requested, available)
+        if requested <= 0:
+            continue
+        cluster_kernel = kernel[np.ix_(cluster_indices, cluster_indices)]
+        chosen, cluster_trace = greedy_ted_select(
+            cluster_kernel,
+            cluster_indices,
+            requested,
+            conditioned_indices=cluster_conditioned,
+            regularization=float(regularization),
+            jitter=float(jitter),
+            cluster_id=int(cluster_id),
+        )
+        selected.extend(chosen)
+        traces.extend(cluster_trace)
+    return selected, traces
+
+
+def _low_fidelity_eval(
+    *,
+    vae: JointSpaceVAE,
+    z: torch.Tensor,
+    data,
+    in_ch: int,
+    out_ch: int,
+    args: argparse.Namespace,
+    device: torch.device,
+    candidate_index: int,
+    cluster_id: int,
+    fingerprint: str,
+) -> dict[str, Any]:
+    evaluation_seed = stable_seed(
+        int(args.seed),
+        "candidate_evaluation",
+        fingerprint,
+        "low",
+        "initial_shortlist",
+    )
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    started = time.monotonic()
+    z_result, result = eval_candidate(
+        vae,
+        z,
+        data,
+        in_ch,
+        out_ch,
+        args,
+        device,
+        step=int(candidate_index),
+        evaluation_stage="initial_shortlist",
+        evaluation_fidelity="low",
+        candidate_fingerprint=fingerprint,
+        evaluation_seed=evaluation_seed,
+        max_epochs_override=int(args.low_fidelity_epochs),
+        patience_override=(
+            int(args.low_fidelity_epochs) + 1
+            if int(args.low_fidelity_patience) == 0
+            else int(args.low_fidelity_patience)
+        ),
+    )
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    runtime = time.monotonic() - started
+    hp = result.get("hp", {})
+    return {
+        "record_id": f"lowfid-{candidate_index}-{fingerprint[:12]}",
+        "candidate_pool_index": int(candidate_index),
+        "candidate_fingerprint": fingerprint,
+        "z_search": z_result.detach().cpu().float().tolist(),
+        "cluster_id": int(cluster_id),
+        "evaluation_stage": "initial_shortlist",
+        "evaluation_fidelity": "low",
+        "search_seed": int(args.seed),
+        "evaluation_seed": int(evaluation_seed),
+        "decoder_seed": result.get("decoder_seed"),
+        "architecture_fingerprint": result.get("architecture_fingerprint"),
+        "hp_fingerprint": result.get("hp_fingerprint"),
+        "seed_derivation": SEED_DERIVATION,
+        "requested_epochs": int(args.low_fidelity_epochs),
+        "requested_patience": int(args.low_fidelity_patience),
+        "actual_epochs": int(result.get("epochs_ran") or 0),
+        "val_acc": float(result.get("val_acc", 0.0)),
+        "valid": bool(result.get("valid", False)),
+        "runtime_seconds": float(runtime),
+        "gpu_seconds": float(runtime) if device.type == "cuda" else None,
+        "equivalent_full_evaluations": float(result.get("epochs_ran") or 0)
+        / max(1, int(args.eval_epochs)),
+        "failure_reason": "" if bool(result.get("valid", False)) else "invalid_evaluation",
+        "operations": [] if result.get("config") is None else list(result["config"].get("operations", [])),
+        "edges": [] if result.get("config") is None else [list(edge) for edge in result["config"].get("edges", [])],
+        "hp": hp,
+        "gp_mean": None,
+        "gp_std": None,
+        "low_fidelity_rank": None,
+        "gp_mean_rank": None,
+        "gp_std_rank": None,
+        "combined_score": None,
+        "selected_for_full_expansion": False,
+    }
+
+
+def _validate_low_full_candidate_consistency(
+    low_row: dict[str, Any],
+    full_row: dict[str, Any],
+) -> None:
+    """Reject fidelity comparisons that changed candidate, decode, or HP semantics."""
+
+    for field in (
+        "candidate_fingerprint",
+        "decoder_seed",
+        "architecture_fingerprint",
+        "hp_fingerprint",
+    ):
+        if low_row.get(field) != full_row.get(field):
+            raise RuntimeError(f"low/full {field} mismatch for the same expansion candidate")
+    if low_row.get("operations") != full_row.get("operations"):
+        raise RuntimeError("low/full decoded operations mismatch for the same expansion candidate")
+    if low_row.get("edges") != full_row.get("edges"):
+        raise RuntimeError("low/full decoded edges mismatch for the same expansion candidate")
+    low_z = np.asarray(low_row.get("z_search"), dtype=np.float32)
+    full_z = np.asarray(full_row.get("z_search"), dtype=np.float32)
+    if low_z.shape != full_z.shape or not np.array_equal(low_z, full_z):
+        raise RuntimeError("low/full z_search mismatch for the same expansion candidate")
+    if int(low_row.get("evaluation_seed", -1)) == int(full_row.get("evaluation_seed", -1)):
+        raise RuntimeError("low/full training seeds must be fidelity-isolated")
+
+
+def _validate_online_resume_boundary(
+    *,
+    raw_history_count: int,
+    completed_count: int,
+    adaptive_sampling: bool,
+    n_iter: int,
+    max_bo_samples: int,
+) -> None:
+    """Validate the transaction boundary represented by online resume artifacts."""
+
+    if raw_history_count not in (completed_count, completed_count + 1):
+        raise ValueError("WGMM online resume state/history count mismatch")
+    resume_limit = int(max_bo_samples) if adaptive_sampling else int(n_iter)
+    if raw_history_count > resume_limit:
+        raise ValueError("WGMM online resume contains more evaluations than the online budget")
+    if adaptive_sampling and raw_history_count != completed_count:
+        raise ValueError(
+            "adaptive WGMM online resume requires a clean committed iteration boundary; "
+            "a pending pre-GP-update record cannot preserve exact timing/check state"
+        )
+
+
+def _initialization_method_id(strategy: str, wgmm_source: str) -> str:
+    """Return the unambiguous method label persisted with initialization artifacts."""
+
+    return f"{strategy}__{wgmm_source}"
+
+
+def run_wgmm_two_stage_initialization(
+    vae: JointSpaceVAE,
+    data,
+    in_ch: int,
+    out_ch: int,
+    args: argparse.Namespace,
+    device: torch.device,
+    logger,
+) -> tuple[
+    list[dict[str, Any]],
+    list[torch.Tensor],
+    list[float],
+    list[dict[str, Any]],
+    list[tuple[torch.Tensor, float, list[float]]],
+    AccuracyGPPredictor,
+    int,
+    dict[str, Any],
+]:
+    """Run label-free design, seed fit, optional LF ranking, and expansion fit."""
+
+    validate_two_stage_initialization_config(args)
+    paths = _initialization_paths(args.output)
+    config_path = paths["initialization_config.json"]
+    if os.path.exists(config_path) and not args.resume_initialization:
+        raise FileExistsError(
+            f"initialization artifacts already exist in {args.output!r}; use a new output "
+            "directory or --resume_initialization"
+        )
+    pool_list = make_lhs_pool(args)
+    pool = torch.stack(pool_list).cpu().float()
+    pool_fingerprint = fingerprint_array(pool.numpy())
+    if args.hp_mode == "global4":
+        masks = torch.ones_like(pool)
+    else:
+        masks = _candidate_masks(vae, pool, args, device, logger).cpu().float()
+    features = ted_features(
+        pool.numpy(),
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        condition_masks=masks.numpy(),
+    )
+    lengthscale = (
+        math.sqrt(features.shape[1])
+        if args.ted_kernel_lengthscale is None
+        else float(args.ted_kernel_lengthscale)
+    )
+    kernel = rbf_kernel(features, lengthscale=lengthscale)
+    if args.wgmm_source == "checkpoint":
+        wgmm_path = args.checkpoint if args.wgmm_checkpoint is None else args.wgmm_checkpoint
+        wgmm_parameters = load_checkpoint_wgmm(
+            wgmm_path,
+            arch_dim=ARCH_NZ,
+            covariance_regularization=float(args.wgmm_covariance_regularization),
+        )
+        if args.wgmm_n_components is not None and int(args.wgmm_n_components) != wgmm_parameters.n_components:
+            raise ValueError(
+                "--wgmm_n_components does not match the component count stored in the checkpoint"
+            )
+    else:
+        fit_seed = stable_seed(int(args.seed), "wgmm_fit_pool", pool_fingerprint)
+        wgmm_parameters = fit_pool_gmm(
+            pool[:, :ARCH_NZ].numpy(),
+            n_components=int(args.wgmm_n_components),
+            random_state=fit_seed,
+            covariance_regularization=float(args.wgmm_covariance_regularization),
+            var_floor=float(args.gmm_var_floor),
+            max_iter=int(args.gmm_max_iter),
+            tol=float(args.gmm_tol),
+        )
+    assignments = assign_clusters(pool[:, :ARCH_NZ].numpy(), wgmm_parameters)
+    cluster_ids = assignments["cluster_ids"]
+    capacities = {
+        component: int(np.sum(cluster_ids == component))
+        for component in range(wgmm_parameters.n_components)
+    }
+    component_mass = _cluster_component_mass(assignments)
+    seed_evals = _resolved_initial_seed_evals(args)
+    seed_quotas, seed_quota_diagnostics = allocate_cluster_quotas(
+        capacities,
+        seed_evals,
+        mode=args.wgmm_quota_mode,
+        component_weights=component_mass,
+        equal_weight=float(args.wgmm_equal_weight),
+    )
+    seed_indices, seed_trace = _select_clustered_ted(
+        kernel=kernel,
+        cluster_ids=cluster_ids,
+        quotas=seed_quotas,
+        regularization=float(args.ted_regularization),
+        jitter=float(args.ted_jitter),
+    )
+    if len(seed_indices) != seed_evals:
+        raise RuntimeError("TED seed selection did not fill initial_seed_evals")
+    config_without_fingerprint = {
+        "format_version": 1,
+        "initialization_strategy": args.initial_selection_strategy,
+        "initialization_method_id": _initialization_method_id(
+            args.initial_selection_strategy, wgmm_parameters.source,
+        ),
+        "search_seed": int(args.seed),
+        "hp_mode": args.hp_mode,
+        "search_dim": int(pool.shape[1]),
+        "initial_seed_evals": seed_evals,
+        "initial_expand_evals": int(args.initial_expand_evals),
+        "n_iter": int(args.n_iter),
+        "max_total_full_evals": args.max_total_full_evals,
+        "candidate_pool_fingerprint": pool_fingerprint,
+        "condition_masks_fingerprint": fingerprint_array(masks.numpy()),
+        "candidate_pool_size": int(pool.shape[0]),
+        "lhs_sigma_arch": float(args.sigma_arch),
+        "z_bound": float(args.z_bound),
+        "vae_checkpoint_sha256": sha256_file(args.checkpoint),
+        "wgmm_source": wgmm_parameters.source,
+        "wgmm_estimator_semantics": wgmm_parameters.estimator_semantics,
+        "wgmm_source_fingerprint": wgmm_parameters.source_fingerprint,
+        "wgmm_parameter_fingerprint": wgmm_parameters.parameter_fingerprint,
+        "wgmm_n_components": wgmm_parameters.n_components,
+        "wgmm_assignment": args.wgmm_assignment,
+        "wgmm_covariance_regularization": float(args.wgmm_covariance_regularization),
+        "wgmm_quota_mode": args.wgmm_quota_mode,
+        "wgmm_equal_weight": float(args.wgmm_equal_weight),
+        "ted_kernel": "rbf",
+        "ted_transform": "exact_gp_normalize_then_inactive_mask",
+        "ted_kernel_lengthscale": float(lengthscale),
+        "ted_regularization": float(args.ted_regularization),
+        "ted_jitter": float(args.ted_jitter),
+        "ted_shortlist_per_cluster": int(args.ted_shortlist_per_cluster),
+        "low_fidelity_epochs": int(args.low_fidelity_epochs),
+        "low_fidelity_patience": int(args.low_fidelity_patience),
+        "full_fidelity_epochs": int(args.eval_epochs),
+        "full_fidelity_patience": int(args.patience),
+        "use_conditional_kernel": bool(args.use_conditional_kernel),
+        "gp_refit_steps": int(args.gp_refit_steps),
+        "gp_update_mode": args.gp_update_mode,
+        "gp_refit_every": int(args.gp_refit_every),
+        "online_candidate_strategy": args.online_candidate_strategy,
+        "adaptive_sampling": bool(args.adaptive_sampling),
+        "min_bo_samples": int(args.min_bo_samples),
+        "max_bo_samples": int(args.max_bo_samples),
+        "convergence_check_every": int(args.convergence_check_every),
+        "convergence_patience": int(args.convergence_patience),
+        "prequential_window": int(args.prequential_window),
+        "mae_relative_tol": float(args.mae_relative_tol),
+        "mae_absolute_tol": float(args.mae_absolute_tol),
+        "std_relative_tol": float(args.std_relative_tol),
+        "spearman_tol": float(args.spearman_tol),
+        "degradation_tolerance": float(args.degradation_tolerance),
+        "best_acc_patience": int(args.best_acc_patience),
+        "best_acc_min_delta": float(args.best_acc_min_delta),
+        "max_wall_time_hours": float(args.max_wall_time_hours),
+        "probe_pool_size": int(args.probe_pool_size),
+        "probe_pool_seed": args.probe_pool_seed,
+        "num_restarts": int(args.num_restarts),
+        "raw_samples": int(args.raw_samples),
+        "n_extra": int(args.n_extra),
+        "score_weights": [
+            float(args.low_fidelity_score_weight),
+            float(args.gp_mean_score_weight),
+            float(args.gp_std_score_weight),
+        ],
+    }
+    config_fingerprint = canonical_json_fingerprint(config_without_fingerprint)
+    initialization_config = {
+        **config_without_fingerprint,
+        "initialization_config_fingerprint": config_fingerprint,
+    }
+    args.initialization_config_fingerprint = config_fingerprint
+    if args.resume_initialization:
+        if not os.path.exists(config_path):
+            raise FileNotFoundError("--resume_initialization requires initialization_config.json")
+        prior_config = _read_json(config_path)
+        if prior_config.get("initialization_config_fingerprint") != config_fingerprint:
+            raise ValueError("resume initialization metadata/fingerprint mismatch")
+        if prior_config != initialization_config:
+            raise ValueError("resume initialization configuration differs from the saved configuration")
+        saved_seed_indices = _read_json(paths["selected_seed_indices.json"])
+        if saved_seed_indices != seed_indices:
+            raise ValueError("resume seed selection differs from saved indices")
+    else:
+        _write_initialization_artifacts(
+            args=args,
+            pool=pool,
+            masks=masks,
+            assignments=assignments,
+            wgmm_parameters=wgmm_parameters,
+            config=initialization_config,
+            paths=paths,
+        )
+        atomic_initialization_json_dump(seed_indices, paths["selected_seed_indices.json"])
+        _atomic_csv_dump(seed_trace, paths["ted_seed_trace.csv"])
+        atomic_initialization_json_dump(
+            {"seed": seed_quota_diagnostics}, paths["cluster_quota.json"]
+        )
+    history, X_obs, Y_obs, init_valid, prediction_records = _load_resume_full_history(
+        paths["initialization_full_history.json"],
+        config_fingerprint=config_fingerprint,
+    )
+    for row in history:
+        index = int(row["candidate_pool_index"])
+        if index < 0 or index >= pool.shape[0]:
+            raise ValueError("resume initialization candidate index is outside the saved pool")
+        if not np.array_equal(
+            np.asarray(row["z_search"], dtype=np.float32), pool[index].numpy(),
+        ):
+            raise ValueError("resume initialization candidate does not match its pool index")
+    completed = {
+        (str(row.get("evaluation_stage")), int(row.get("candidate_pool_index")))
+        for row in history
+    }
+    trace_by_index = {int(row["candidate_index"]): row for row in seed_trace}
+    for selection_rank, index in enumerate(seed_indices):
+        if ("initial_seed", int(index)) in completed:
+            continue
+        z = pool[int(index)].clone()
+        mask = masks[int(index)].tolist()
+        fingerprint = make_candidate_fingerprint(z.numpy())
+        trace_row = trace_by_index[int(index)]
+        metadata = {
+            "initialization_strategy": args.initial_selection_strategy,
+            "evaluation_stage": "initial_seed",
+            "evaluation_fidelity": "full",
+            "cluster_id": int(cluster_ids[index]),
+            "cluster_responsibility": float(
+                assignments["responsibilities"][index, cluster_ids[index]]
+            ),
+            "candidate_pool_index": int(index),
+            "candidate_fingerprint": fingerprint,
+            "selection_rank": int(selection_rank),
+            "ted_score": float(trace_row["ted_score"]),
+            "quota_mode": args.wgmm_quota_mode,
+            "low_fidelity_used": False,
+            "low_fidelity_record_id": None,
+            "full_evaluation_index": len(history),
+            "online_iteration": None,
+            "initialization_config_fingerprint": config_fingerprint,
+        }
+        best_before = max(Y_obs) if Y_obs else None
+        acc, valid, used_mask, safe = _append_eval(
+            vae,
+            z,
+            data,
+            in_ch,
+            out_ch,
+            args,
+            device,
+            history,
+            X_obs,
+            Y_obs,
+            len(history),
+            "wgmm_ted_seed",
+            logger,
+            None,
+            prediction_records,
+            "scratch_init_no_gp",
+            None,
+            False,
+            0,
+            mask,
+            best_acc=best_before,
+            record_metadata=metadata,
+        )
+        if safe:
+            init_valid.append((z, acc, used_mask))
+        atomic_initialization_json_dump(history, paths["initialization_full_history.json"])
+    seed_valid = []
+    for row in history:
+        if row.get("evaluation_stage") == "initial_seed" and bool(row.get("valid")):
+            z = torch.tensor(row["z_search"], dtype=torch.float32)
+            mask = [1.0] * ARCH_NZ + [float(value) for value in row["condition_mask_vector"]]
+            seed_valid.append((z, float(row["val_acc"]), mask))
+    if len(seed_valid) < int(args.scratch_gp_min_points):
+        raise RuntimeError(
+            "WGMM-TED seed phase produced too few valid full-fidelity points; "
+            "the strict full budget does not permit scratch_extra_init"
+        )
+    predictor = _fit_scratch_predictor(seed_valid, args, device, logger)
+    expand_evals = int(args.initial_expand_evals)
+    shortlist_indices: list[int] = []
+    shortlist_trace: list[dict[str, Any]] = []
+    expand_indices: list[int] = []
+    low_history: list[dict[str, Any]] = []
+    expansion_score_rows: list[dict[str, Any]] = []
+    expand_quota_diagnostics: dict[str, Any] | None = None
+    if expand_evals:
+        shortlist_capacities = {
+            component: min(
+                int(args.ted_shortlist_per_cluster),
+                max(0, capacities.get(component, 0) - seed_quotas.get(component, 0)),
+            )
+            for component in range(wgmm_parameters.n_components)
+        }
+        shortlist_quotas = dict(shortlist_capacities)
+        shortlist_indices, shortlist_trace = _select_clustered_ted(
+            kernel=kernel,
+            cluster_ids=cluster_ids,
+            quotas=shortlist_quotas,
+            conditioned=seed_indices,
+            shortlist_limit=int(args.ted_shortlist_per_cluster),
+            regularization=float(args.ted_regularization),
+            jitter=float(args.ted_jitter),
+        )
+        if len(shortlist_indices) < expand_evals:
+            raise ValueError(
+                f"TED shortlist contains {len(shortlist_indices)} candidates, fewer than "
+                f"--initial_expand_evals {expand_evals}; increase --n_lhs_candidates or "
+                "--ted_shortlist_per_cluster"
+            )
+        if not args.resume_initialization:
+            _atomic_csv_dump(shortlist_trace, paths["ted_shortlist_trace.csv"])
+        shortlist_cluster_ids = np.asarray([cluster_ids[index] for index in shortlist_indices])
+        shortlist_capacity = {
+            component: int(np.sum(shortlist_cluster_ids == component))
+            for component in range(wgmm_parameters.n_components)
+        }
+        expand_quotas, expand_quota_diagnostics = allocate_cluster_quotas(
+            shortlist_capacity,
+            expand_evals,
+            mode=args.wgmm_quota_mode,
+            component_weights=component_mass,
+            equal_weight=float(args.wgmm_equal_weight),
+        )
+        trace_rank = {int(row["candidate_index"]): int(row["selection_rank"]) for row in shortlist_trace}
+        if args.initial_selection_strategy == "wgmm_ted_lowfid":
+            if os.path.exists(paths["low_fidelity_history.json"]):
+                if not args.resume_initialization:
+                    raise FileExistsError("low_fidelity_history.json already exists")
+                low_history = _read_json(paths["low_fidelity_history.json"])
+                if not isinstance(low_history, list):
+                    raise ValueError("low_fidelity_history.json must contain a list")
+                seen_low: set[int] = set()
+                shortlist_set = set(int(value) for value in shortlist_indices)
+                for row in low_history:
+                    if not isinstance(row, dict):
+                        raise ValueError("low-fidelity resume history contains a non-object")
+                    index = int(row.get("candidate_pool_index", -1))
+                    if index not in shortlist_set or index in seen_low:
+                        raise ValueError("low-fidelity resume candidate set is invalid or duplicated")
+                    seen_low.add(index)
+                    fingerprint = make_candidate_fingerprint(pool[index].numpy())
+                    if row.get("candidate_fingerprint") != fingerprint:
+                        raise ValueError("low-fidelity resume candidate fingerprint mismatch")
+                    if row.get("initialization_config_fingerprint") != config_fingerprint:
+                        raise ValueError("low-fidelity resume configuration fingerprint mismatch")
+                    expected_seed = stable_seed(
+                        int(args.seed), "candidate_evaluation", fingerprint,
+                        "low", "initial_shortlist",
+                    )
+                    if int(row.get("evaluation_seed", -1)) != expected_seed:
+                        raise ValueError("low-fidelity resume evaluation seed mismatch")
+            low_by_index = {int(row["candidate_pool_index"]): row for row in low_history}
+            for index in shortlist_indices:
+                if int(index) in low_by_index:
+                    continue
+                fingerprint = make_candidate_fingerprint(pool[index].numpy())
+                row = _low_fidelity_eval(
+                    vae=vae,
+                    z=pool[index].clone(),
+                    data=data,
+                    in_ch=in_ch,
+                    out_ch=out_ch,
+                    args=args,
+                    device=device,
+                    candidate_index=int(index),
+                    cluster_id=int(cluster_ids[index]),
+                    fingerprint=fingerprint,
+                )
+                row["initialization_config_fingerprint"] = config_fingerprint
+                low_history.append(row)
+                low_by_index[int(index)] = row
+                atomic_initialization_json_dump(low_history, paths["low_fidelity_history.json"])
+            shortlist_tensor = pool[shortlist_indices]
+            shortlist_masks = masks[shortlist_indices]
+            gp_predictions = predictor.predict_batch(
+                shortlist_tensor,
+                condition_masks=shortlist_masks if predictor.use_conditional_kernel else None,
+            )
+            combined_values = np.full(len(shortlist_indices), -1.0, dtype=np.float64)
+            for component in sorted(expand_quotas):
+                positions = [
+                    pos for pos, index in enumerate(shortlist_indices)
+                    if int(cluster_ids[index]) == int(component)
+                ]
+                indices = [shortlist_indices[pos] for pos in positions]
+                lf = [float(low_by_index[index]["val_acc"]) for index in indices]
+                valid = [bool(low_by_index[index]["valid"]) for index in indices]
+                means = [float(gp_predictions[pos]["mean"]) for pos in positions]
+                stds = [float(gp_predictions[pos]["std"]) for pos in positions]
+                score_parts = combined_expansion_scores(
+                    indices,
+                    lf,
+                    means,
+                    stds,
+                    low_fidelity_valid=valid,
+                    weights=(
+                        float(args.low_fidelity_score_weight),
+                        float(args.gp_mean_score_weight),
+                        float(args.gp_std_score_weight),
+                    ),
+                )
+                for local_pos, global_pos in enumerate(positions):
+                    index = shortlist_indices[global_pos]
+                    low_row = low_by_index[index]
+                    low_row.update(
+                        {
+                            "gp_mean": means[local_pos],
+                            "gp_std": stds[local_pos],
+                            "low_fidelity_rank": float(score_parts["low_fidelity_rank"][local_pos]),
+                            "gp_mean_rank": float(score_parts["gp_mean_rank"][local_pos]),
+                            "gp_std_rank": float(score_parts["gp_std_rank"][local_pos]),
+                            "combined_score": float(score_parts["combined_score"][local_pos]),
+                        }
+                    )
+                    combined_values[global_pos] = score_parts["combined_score"][local_pos]
+            expand_indices = select_by_cluster_scores(
+                shortlist_indices,
+                shortlist_cluster_ids,
+                combined_values,
+                expand_quotas,
+            )
+            selected_set = set(expand_indices)
+            for row in low_history:
+                row["selected_for_full_expansion"] = int(row["candidate_pool_index"]) in selected_set
+            atomic_initialization_json_dump(low_history, paths["low_fidelity_history.json"])
+            expansion_score_rows = [
+                {
+                    **row,
+                    "hp": json.dumps(row.get("hp", {}), sort_keys=True),
+                    "operations": json.dumps(row.get("operations", [])),
+                    "edges": json.dumps(row.get("edges", [])),
+                    "z_search": json.dumps(row.get("z_search", [])),
+                }
+                for row in low_history
+            ]
+        else:
+            shortlist_order = {int(row["candidate_index"]): int(row["selection_rank"]) for row in shortlist_trace}
+            deterministic_scores = [-float(shortlist_order[index]) for index in shortlist_indices]
+            expand_indices = select_by_cluster_scores(
+                shortlist_indices,
+                shortlist_cluster_ids,
+                deterministic_scores,
+                expand_quotas,
+            )
+            expansion_score_rows = [
+                {
+                    "candidate_pool_index": int(index),
+                    "cluster_id": int(cluster_ids[index]),
+                    "ted_selection_rank": int(shortlist_order[index]),
+                    "selected_for_full_expansion": int(index) in set(expand_indices),
+                }
+                for index in shortlist_indices
+            ]
+        if len(expand_indices) != expand_evals:
+            raise RuntimeError("expansion selection did not fill initial_expand_evals")
+        if os.path.exists(paths["selected_expand_indices.json"]):
+            saved_expand = _read_json(paths["selected_expand_indices.json"])
+            if saved_expand != expand_indices:
+                raise ValueError("resume expansion selection differs from saved indices")
+        else:
+            atomic_initialization_json_dump(expand_indices, paths["selected_expand_indices.json"])
+        _atomic_csv_dump(expansion_score_rows, paths["expansion_scores.csv"])
+        quota_payload = {"seed": seed_quota_diagnostics, "expand": expand_quota_diagnostics}
+        atomic_initialization_json_dump(quota_payload, paths["cluster_quota.json"])
+        shortlist_by_index = {int(row["candidate_index"]): row for row in shortlist_trace}
+        low_by_index = {int(row["candidate_pool_index"]): row for row in low_history}
+        for selection_rank, index in enumerate(expand_indices):
+            if ("initial_expand", int(index)) in completed:
+                continue
+            z = pool[int(index)].clone()
+            mask = masks[int(index)].tolist()
+            fingerprint = make_candidate_fingerprint(z.numpy())
+            trace_row = shortlist_by_index[int(index)]
+            low_row = low_by_index.get(int(index))
+            metadata = {
+                "initialization_strategy": args.initial_selection_strategy,
+                "evaluation_stage": "initial_expand",
+                "evaluation_fidelity": "full",
+                "cluster_id": int(cluster_ids[index]),
+                "cluster_responsibility": float(
+                    assignments["responsibilities"][index, cluster_ids[index]]
+                ),
+                "candidate_pool_index": int(index),
+                "candidate_fingerprint": fingerprint,
+                "selection_rank": int(selection_rank),
+                "ted_score": float(trace_row["ted_score"]),
+                "quota_mode": args.wgmm_quota_mode,
+                "low_fidelity_used": low_row is not None,
+                "low_fidelity_record_id": None if low_row is None else low_row["record_id"],
+                "full_evaluation_index": len(history),
+                "online_iteration": None,
+                "initialization_config_fingerprint": config_fingerprint,
+            }
+            best_before = max(Y_obs) if Y_obs else None
+            acc, valid, used_mask, safe = _append_eval(
+                vae,
+                z,
+                data,
+                in_ch,
+                out_ch,
+                args,
+                device,
+                history,
+                X_obs,
+                Y_obs,
+                len(history),
+                "wgmm_ted_expand",
+                logger,
+                predictor,
+                prediction_records,
+                "initial_expand_gp50",
+                _score_logei(predictor, z, mask, best_before),
+                False,
+                0,
+                mask,
+                best_acc=best_before,
+                record_metadata=metadata,
+            )
+            if low_row is not None:
+                _validate_low_full_candidate_consistency(low_row, history[-1])
+            if safe:
+                init_valid.append((z, acc, used_mask))
+            atomic_initialization_json_dump(history, paths["initialization_full_history.json"])
+        all_valid: list[tuple[torch.Tensor, float, list[float]]] = []
+        for row in history:
+            if row.get("evaluation_stage") in ("initial_seed", "initial_expand") and bool(row.get("valid")):
+                z = torch.tensor(row["z_search"], dtype=torch.float32)
+                mask = [1.0] * ARCH_NZ + [float(value) for value in row["condition_mask_vector"]]
+                all_valid.append((z, float(row["val_acc"]), mask))
+        predictor = _fit_scratch_predictor(all_valid, args, device, logger)
+        init_valid = all_valid
+    low_actual_epochs = sum(int(row.get("actual_epochs") or 0) for row in low_history)
+    low_wall = sum(float(row.get("runtime_seconds") or 0.0) for row in low_history)
+    low_equivalent = sum(float(row.get("equivalent_full_evaluations") or 0.0) for row in low_history)
+    budget_summary = {
+        "full_fidelity_definition": "completed full GNN candidate evaluations",
+        "initial_seed_full_evals": seed_evals,
+        "initial_expand_full_evals": expand_evals,
+        "online_full_eval_budget": int(args.n_iter),
+        "planned_total_full_evals": seed_evals + expand_evals + int(args.n_iter),
+        "max_total_full_evals": args.max_total_full_evals,
+        "completed_initial_full_evals": len(history),
+        "low_fidelity_candidate_count": len(low_history),
+        "low_fidelity_actual_epochs": low_actual_epochs,
+        "low_fidelity_wall_seconds": low_wall,
+        "low_fidelity_gpu_seconds": None,
+        "low_fidelity_equivalent_full_evaluations": low_equivalent,
+        "low_fidelity_counted_in_full_budget": False,
+    }
+    atomic_initialization_json_dump(budget_summary, paths["budget_summary.json"])
+    atomic_initialization_json_dump(
+        {
+            "seed_derivation": SEED_DERIVATION,
+            "search_seed": int(args.seed),
+            "lhs_seed": int(args.seed),
+            "wgmm_fit_seed": (
+                None
+                if args.wgmm_source == "checkpoint"
+                else stable_seed(int(args.seed), "wgmm_fit_pool", pool_fingerprint)
+            ),
+            "low_fidelity_seed_context": [
+                "search_seed", "candidate_fingerprint", "low", "initial_shortlist"
+            ],
+            "full_fidelity_seed_context": [
+                "search_seed", "candidate_fingerprint", "full", "evaluation_stage"
+            ],
+            "python_hash_used": False,
+        },
+        paths["rng_provenance.json"],
+    )
+    _save_prediction_csv(prediction_records, args.output)
+    return (
+        history,
+        X_obs,
+        Y_obs,
+        prediction_records,
+        init_valid,
+        predictor,
+        len(history),
+        {
+            "initialization_config": initialization_config,
+            "budget_summary": budget_summary,
+            "candidate_pool_fingerprint": pool_fingerprint,
+            "wgmm_source": wgmm_parameters.source,
+            "initialization_method_id": initialization_config["initialization_method_id"],
+            "wgmm_estimator_semantics": wgmm_parameters.estimator_semantics,
+            "wgmm_parameter_fingerprint": wgmm_parameters.parameter_fingerprint,
+            "wgmm_n_components": wgmm_parameters.n_components,
+        },
+    )
+
+
+def run_wgmm_bo(
+    vae: JointSpaceVAE,
+    data,
+    in_ch: int,
+    out_ch: int,
+    args: argparse.Namespace,
+    device: torch.device,
+    logger,
+) -> None:
+    """Run the unchanged Exact-GP online policy after WGMM-TED initialization."""
+
+    run_started = time.monotonic()
+    (
+        history,
+        X_obs,
+        Y_obs,
+        prediction_records,
+        init_valid,
+        predictor,
+        step,
+        initialization_context,
+    ) = run_wgmm_two_stage_initialization(
+        vae, data, in_ch, out_ch, args, device, logger,
+    )
+    if not Y_obs:
+        raise RuntimeError("WGMM-TED initialization produced no full-fidelity observations")
+
+    config = initialization_context["initialization_config"]
+    config_fingerprint = str(config["initialization_config_fingerprint"])
+    online_history_path = os.path.join(args.output, "wgmm_online_history.json")
+    online_checkpoint_path = os.path.join(args.output, "accuracy_gp_wgmm_resume.pt")
+    online_rng_path = os.path.join(args.output, "wgmm_online_rng.pt")
+    online_state_path = os.path.join(args.output, "wgmm_online_state.json")
+    online_history: list[dict[str, Any]] = []
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(int(args.seed) + 7919)
+
+    monitor = GPConvergenceMonitor(
+        min_bo_samples=args.min_bo_samples,
+        max_bo_samples=args.max_bo_samples,
+        convergence_check_every=args.convergence_check_every,
+        convergence_patience=args.convergence_patience,
+        prequential_window=args.prequential_window,
+        mae_relative_tol=args.mae_relative_tol,
+        mae_absolute_tol=args.mae_absolute_tol,
+        std_relative_tol=args.std_relative_tol,
+        spearman_tol=args.spearman_tol,
+        degradation_tolerance=args.degradation_tolerance,
+        best_acc_patience=args.best_acc_patience,
+        best_acc_min_delta=args.best_acc_min_delta,
+        max_wall_time_hours=args.max_wall_time_hours,
+    )
+    eval_times: list[float] = []
+    update_times: list[float] = []
+    online_valid_count = 0
+    initial_history_count = len(history)
+    elapsed_before_resume = 0.0
+
+    def current_elapsed_seconds() -> float:
+        return float(elapsed_before_resume + (time.monotonic() - run_started))
+
+    def commit_online_state() -> None:
+        atomic_initialization_json_dump(online_history, online_history_path)
+        predictor.save(online_checkpoint_path)
+        atomic_torch_save(generator.get_state().cpu(), online_rng_path)
+        atomic_initialization_json_dump(
+            {
+                "format_version": 2,
+                "initialization_config_fingerprint": config_fingerprint,
+                "completed_online_evals": len(online_history),
+                "gp_train_size": predictor.train_size,
+                "gp_observation_count": int(predictor.train_observation_counts.sum().item()),
+                "next_step": initial_history_count + len(online_history),
+                "adaptive_sampling": bool(args.adaptive_sampling),
+                "monitor_observed_online_evals": int(monitor.observed_results),
+                "monitor_state": monitor.state_dict(),
+                "elapsed_seconds_total": current_elapsed_seconds(),
+            },
+            online_state_path,
+        )
+
+    if not args.resume_initialization:
+        commit_online_state()
+    elif not os.path.exists(online_history_path):
+        partial = [
+            path for path in (online_checkpoint_path, online_rng_path, online_state_path)
+            if os.path.exists(path)
+        ]
+        if partial:
+            raise FileNotFoundError(
+                "incomplete zero-step WGMM online resume transaction: " + ", ".join(partial)
+            )
+        commit_online_state()
+
+    if args.resume_initialization and os.path.exists(online_history_path):
+        required_resume = (online_checkpoint_path, online_rng_path, online_state_path)
+        missing = [path for path in required_resume if not os.path.exists(path)]
+        if missing:
+            raise FileNotFoundError(
+                "incomplete WGMM online resume transaction; missing: " + ", ".join(missing)
+            )
+        raw_online = _read_json(online_history_path)
+        state = _read_json(online_state_path)
+        if not isinstance(raw_online, list) or not isinstance(state, dict):
+            raise ValueError("WGMM online resume artifacts have invalid JSON structure")
+        if int(state.get("format_version", -1)) != 2:
+            raise ValueError("WGMM online resume state lacks complete convergence-monitor state")
+        if state.get("initialization_config_fingerprint") != config_fingerprint:
+            raise ValueError("WGMM online resume configuration fingerprint mismatch")
+        if bool(state.get("adaptive_sampling")) != bool(args.adaptive_sampling):
+            raise ValueError("WGMM online resume adaptive_sampling mode mismatch")
+        completed_count = int(state.get("completed_online_evals", -1))
+        _validate_online_resume_boundary(
+            raw_history_count=len(raw_online),
+            completed_count=completed_count,
+            adaptive_sampling=bool(args.adaptive_sampling),
+            n_iter=int(args.n_iter),
+            max_bo_samples=int(args.max_bo_samples),
+        )
+        elapsed_before_resume = float(state.get("elapsed_seconds_total", -1.0))
+        if not math.isfinite(elapsed_before_resume) or elapsed_before_resume < 0.0:
+            raise ValueError("WGMM online resume elapsed time state is invalid")
+        monitor_state = state.get("monitor_state")
+        monitor.load_state_dict(monitor_state)
+        if int(state.get("monitor_observed_online_evals", -1)) != completed_count:
+            raise ValueError("WGMM online resume monitor observation count mismatch")
+        if monitor.observed_results != completed_count:
+            raise ValueError("WGMM online resume monitor state is not aligned with online history")
+        predictor = AccuracyGPPredictor.load(
+            online_checkpoint_path,
+            device=device,
+            expected={
+                "arch_nz": ARCH_NZ,
+                "hp_mode": args.hp_mode,
+                "search_dim": _search_dim(args),
+                "initialization_config_fingerprint": config_fingerprint,
+            },
+        )
+        state_train_size = int(state.get("gp_train_size", -1))
+        state_observation_count = int(state.get("gp_observation_count", -1))
+        actual_observation_count = int(predictor.train_observation_counts.sum().item())
+        checkpoint_has_pending_update = False
+        if predictor.train_size != state_train_size or actual_observation_count != state_observation_count:
+            if (
+                len(raw_online) == completed_count + 1
+                and actual_observation_count == state_observation_count + 1
+                and predictor.train_size in (state_train_size, state_train_size + 1)
+            ):
+                checkpoint_has_pending_update = True
+            else:
+                raise ValueError("WGMM online resume GP state/count mismatch")
+        generator.set_state(torch.as_tensor(_torch_load(online_rng_path, "cpu"), dtype=torch.uint8))
+        seen_iterations: set[int] = set()
+        for expected_iteration, raw in enumerate(raw_online):
+            if not isinstance(raw, dict):
+                raise ValueError("WGMM online history contains a non-object record")
+            if raw.get("initialization_config_fingerprint") != config_fingerprint:
+                raise ValueError("WGMM online history fingerprint mismatch")
+            iteration = int(raw.get("online_iteration", -1))
+            if iteration != expected_iteration or iteration in seen_iterations:
+                raise ValueError("WGMM online history iteration sequence is not contiguous")
+            if raw.get("evaluation_stage") != "online_bo" or raw.get("evaluation_fidelity") != "full":
+                raise ValueError("WGMM online resume contains a non-online/full record")
+            if int(raw.get("full_evaluation_index", -1)) != initial_history_count + iteration:
+                raise ValueError("WGMM online resume full-evaluation indices are not contiguous")
+            seen_iterations.add(iteration)
+            row = copy.deepcopy(raw)
+            z = torch.tensor(row["z_search"], dtype=torch.float32)
+            fingerprint = make_candidate_fingerprint(z.numpy())
+            if row.get("candidate_fingerprint") != fingerprint:
+                raise ValueError("WGMM online resume candidate fingerprint mismatch")
+            expected_seed = stable_seed(
+                int(args.seed), "candidate_evaluation", fingerprint, "full", "online_bo",
+            )
+            if int(row.get("evaluation_seed", -1)) != expected_seed:
+                raise ValueError("WGMM online resume evaluation seed mismatch")
+            history.append(row)
+            X_obs.append(z)
+            Y_obs.append(float(row["val_acc"]))
+            prediction = copy.deepcopy(row)
+            prediction["record_type"] = row.get("type")
+            prediction_records.append(prediction)
+            online_history.append(row)
+            if expected_iteration >= completed_count:
+                monitor.observe_bo_result(float(row["val_acc"]), prediction)
+            eval_times.append(float(row.get("eval_seconds") or 0.0))
+            update_times.append(float(row.get("gp_update_seconds") or 0.0))
+            if expected_iteration < completed_count:
+                online_valid_count += int(bool(row.get("gp_update_performed")))
+        if len(raw_online) == completed_count + 1:
+            pending = online_history[-1]
+            pending_prediction = prediction_records[-1]
+            safe = bool(pending.get("valid")) and not str(
+                pending.get("gp_update_skipped_reason") or ""
+            )
+            if checkpoint_has_pending_update and not safe:
+                raise ValueError("WGMM online resume checkpoint advanced for an unsafe record")
+            update_started = time.monotonic()
+            if safe and not checkpoint_has_pending_update:
+                z = X_obs[-1]
+                mask = [1.0] * ARCH_NZ + [
+                    float(value) for value in pending["condition_mask_vector"]
+                ]
+                predictor.append_observation(
+                    z,
+                    float(pending["val_acc"]),
+                    condition_mask=mask if predictor.use_conditional_kernel else None,
+                )
+                should_optimize = (
+                    args.gp_update_mode == "warm_refit"
+                    and (online_valid_count + 1) % int(args.gp_refit_every) == 0
+                )
+                predictor.refit(
+                    optimize=should_optimize,
+                    steps=int(args.gp_refit_steps) if should_optimize else None,
+                )
+            if safe:
+                online_valid_count += 1
+            update_seconds = time.monotonic() - update_started
+            recovered_fields = {
+                "gp_train_size_after": predictor.train_size,
+                "gp_update_performed": bool(safe),
+                "gp_update_seconds": (
+                    float(update_seconds) if safe and not checkpoint_has_pending_update else 0.0
+                ),
+                "resume_recovered_pre_update_record": True,
+                "resume_update_already_checkpointed": bool(checkpoint_has_pending_update),
+            }
+            pending.update(recovered_fields)
+            pending_prediction.update(recovered_fields)
+            update_times[-1] = float(recovered_fields["gp_update_seconds"])
+            _save_prediction_csv(prediction_records, args.output)
+            commit_online_state()
+        step = len(history)
+        logger.info("Resumed WGMM online BO at iteration %d", len(online_history))
+
+    logger.info(
+        "\n[Step 3] BO after %d WGMM-TED full initialization evaluations: n_iter=%d",
+        len(history) - len(online_history), int(args.n_iter),
+    )
+    probe_seed = args.probe_pool_seed if args.probe_pool_seed is not None else int(args.seed) + 104729
+    probe_norm = torch.tensor(
+        _sample_unit_lhs(int(args.probe_pool_size), _search_dim(args), int(probe_seed)),
+        dtype=torch.float32,
+    )
+    probe_raw = denormalize_search_vector(
+        probe_norm, arch_nz=ARCH_NZ, hp_mode=args.hp_mode, z_bound=args.z_bound,
+    ).float()
+    probe_masks = (
+        _candidate_masks(vae, probe_raw, args, device, logger)
+        if predictor.use_conditional_kernel else None
+    )
+    best_acc = max(Y_obs)
+    online_limit = int(args.max_bo_samples) if args.adaptive_sampling else int(args.n_iter)
+    stop_reason = "fixed_iteration_complete"
+    start_iteration = len(online_history)
+
+    for it in range(start_iteration, online_limit):
+        if args.adaptive_sampling:
+            last_estimate = 0.0
+            if eval_times or update_times:
+                last_estimate = float(np.median(eval_times[-5:])) + float(np.median(update_times[-5:]))
+            decision = monitor.stop_decision(it, current_elapsed_seconds(), last_estimate)
+            if decision.deferred_reason is not None:
+                logger.info("Adaptive stop deferred: %s", decision.deferred_reason)
+            if decision.stop_reason is not None:
+                stop_reason = decision.stop_reason
+                break
+        if args.online_candidate_strategy == "qlogei":
+            candidate_selection_seed = stable_seed(int(args.seed), "acquisition", int(step))
+            with isolated_rng(candidate_selection_seed, device):
+                z_next, logei_value, condition_mask = optimize_acq(
+                    predictor, best_acc, args, logger, vae, device, generator,
+                )
+        elif args.online_candidate_strategy == "random":
+            z_next, condition_mask, candidate_selection_seed = sample_random_online_candidate(
+                vae, args, device, logger, step,
+            )
+            logei_value = None
+        else:
+            raise ValueError(f"unsupported online candidate strategy: {args.online_candidate_strategy!r}")
+
+        z_next = torch.tensor(
+            clip_z_search_by_mode(z_next, args.hp_mode, ARCH_NZ, args.z_bound),
+            dtype=torch.float32,
+        )
+        fingerprint = make_candidate_fingerprint(z_next.numpy())
+        metadata = {
+            "initialization_strategy": args.initial_selection_strategy,
+            "evaluation_stage": "online_bo",
+            "evaluation_fidelity": "full",
+            "cluster_id": None,
+            "cluster_responsibility": None,
+            "candidate_pool_index": None,
+            "candidate_fingerprint": fingerprint,
+            "selection_rank": None,
+            "ted_score": None,
+            "quota_mode": None,
+            "low_fidelity_used": False,
+            "low_fidelity_record_id": None,
+            "full_evaluation_index": len(history),
+            "online_iteration": int(it),
+            "initialization_config_fingerprint": config_fingerprint,
+        }
+        def persist_pre_update_record() -> None:
+            pending_history = online_history + [copy.deepcopy(history[-1])]
+            atomic_initialization_json_dump(pending_history, online_history_path)
+            # qLogEI's local generator has already advanced; save that state with
+            # the evaluated label before allowing the GP mutation to begin.
+            atomic_torch_save(generator.get_state().cpu(), online_rng_path)
+
+        acc, _valid, _, _safe = _append_eval(
+            vae, z_next, data, in_ch, out_ch, args, device,
+            history, X_obs, Y_obs, step, "bo", logger, predictor,
+            prediction_records, "online_bo", logei_value, True,
+            online_valid_count, condition_mask, best_acc=best_acc,
+            convergence_monitor=monitor,
+            candidate_selection_seed=candidate_selection_seed,
+            record_metadata=metadata,
+            pre_update_persist=persist_pre_update_record,
+        )
+        current_record = prediction_records[-1]
+        online_history.append(copy.deepcopy(history[-1]))
+        if current_record["gp_update_performed"]:
+            online_valid_count += 1
+        eval_times.append(float(current_record["eval_seconds"]))
+        update_times.append(float(current_record["gp_update_seconds"]))
+        if acc > best_acc:
+            best_acc = acc
+            logger.info("  iter %3d: <-- NEW BEST %.4f", it, best_acc)
+        else:
+            logger.info("  iter %3d: best=%.4f", it, best_acc)
+        step += 1
+
+        online_samples = it + 1
+        if monitor.should_check(online_samples):
+            holdout = _evaluate_fixed_holdout(predictor, logger)
+            probe_predictions = predictor.predict_batch(
+                probe_raw,
+                condition_masks=probe_masks if predictor.use_conditional_kernel else None,
+            )
+            check = monitor.add_check(
+                online_samples=online_samples,
+                gp_train_size=predictor.train_size,
+                holdout_metrics=holdout,
+                probe_stds=[row["std"] for row in probe_predictions],
+                elapsed_seconds=current_elapsed_seconds(),
+                eval_seconds=eval_times,
+                gp_update_seconds=update_times,
+            )
+            _write_convergence_files(monitor.history, args.output)
+            logger.info("GP convergence check: %s", json.dumps(check, ensure_ascii=False))
+
+        # The state file inside this transaction is written last.
+        commit_online_state()
+        budget = dict(initialization_context["budget_summary"])
+        budget["completed_online_full_evals"] = len(online_history)
+        budget["completed_total_full_evals"] = len(history)
+        atomic_initialization_json_dump(
+            budget, os.path.join(args.output, "budget_summary.json"),
+        )
+        if online_samples % 10 == 0:
+            _save(history, X_obs, Y_obs, args, logger, f"step{it}", predictor=predictor)
+    else:
+        if args.adaptive_sampling:
+            stop_reason = "sample_budget_reached"
+
+    online_bo_samples = len(online_history)
+    final_decision = monitor.stop_decision(
+        online_bo_samples,
+        current_elapsed_seconds(),
+        monitor.history[-1]["estimated_next_step_seconds"] if monitor.history else 0.0,
+    )
+    if args.adaptive_sampling and final_decision.stop_reason is not None:
+        stop_reason = final_decision.stop_reason
+    best_idx = int(np.argmax(np.asarray(Y_obs, dtype=np.float64)))
+    best_z = X_obs[best_idx]
+    best_cfg = decode_arch(
+        vae, best_z[:ARCH_NZ], device, n_trials=10,
+        decoder_seed=stable_seed(int(args.seed), "decoder", best_z[:ARCH_NZ]),
+    )
+    logger.info("WGMM-TED Phase4 best val_acc=%.4f config=%s", max(Y_obs), best_cfg)
+    predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
+    summary = {
+        "gp_init_mode": "scratch",
+        **_surrogate_provenance(args, predictor),
+        "initialization_strategy": args.initial_selection_strategy,
+        "initialization_config_fingerprint": config_fingerprint,
+        "used_previous_history": False,
+        "used_offline_checkpoint": False,
+        "converged": bool(final_decision.converged),
+        "stop_reason": stop_reason,
+        "offline_train_size": int(predictor.offline_train_size),
+        "online_added": int(predictor.train_size - len(init_valid)),
+        "scratch_init_samples": len(history) - online_bo_samples,
+        "scratch_init_valid_samples": len(init_valid),
+        "online_bo_samples": online_bo_samples,
+        "total_evaluated_samples": len(history),
+        "gp_train_size_final": predictor.train_size,
+        "best_actual_val_acc": float(max(Y_obs)),
+        "elapsed_seconds": current_elapsed_seconds(),
+        "search_seed": int(args.seed),
+        "seed_derivation": SEED_DERIVATION,
+        "rng_isolation_enabled": True,
+        "online_candidate_strategy": args.online_candidate_strategy,
+        "initialization_source": "wgmm_clustered_ted",
+        "replayed_initial_samples": int(len(history) - online_bo_samples) if args.resume_initialization else 0,
+        "newly_evaluated_online_samples": int(online_bo_samples - start_iteration),
+        "convergence_checks": len(monitor.history),
+        "valid_convergence_checks": monitor.valid_convergence_checks,
+        "stagnation_deferred_events": list(monitor.stagnation_deferred_events),
+        "initialization": initialization_context,
+        **monitor.current_prequential_metrics(),
+    }
+    atomic_json_dump(summary, os.path.join(args.output, "gp_metrics.json"))
+    _write_convergence_files(monitor.history, args.output)
+    _save(history, X_obs, Y_obs, args, logger, "final", predictor=predictor, summary=summary)
+    _plot(history, args, logger)
+
+
 def run_bo(
     vae: JointSpaceVAE,
     data,
@@ -1677,6 +3302,11 @@ def run_bo(
     logger,
     predictor: AccuracyGPPredictor | None,
 ) -> None:
+    if args.initial_selection_strategy != "schur":
+        if predictor is not None:
+            raise ValueError("WGMM-clustered TED must not receive a preloaded GP predictor")
+        run_wgmm_bo(vae, data, in_ch, out_ch, args, device, logger)
+        return
     history: list[dict[str, Any]] = []
     X_obs: list[torch.Tensor] = []
     Y_obs: list[float] = []
@@ -2230,6 +3860,7 @@ def main() -> None:
     if float(args.max_wall_time_hours) <= 0.0:
         raise ValueError("--max_wall_time_hours must be positive")
     validate_frozen_init_configuration(args)
+    validate_two_stage_initialization_config(args)
     if float(args.novelty_w) != 0.0:
         warnings.warn(
             "--novelty_w is deprecated and ignored by all online candidate strategies",
@@ -2266,6 +3897,14 @@ def main() -> None:
         json.dumps(_surrogate_provenance(args), ensure_ascii=False),
     )
     logger.info(f"online_candidate_strategy={args.online_candidate_strategy}")
+    logger.info(
+        "initial_selection_strategy=%s initial_seed_evals=%d "
+        "initial_expand_evals=%d max_total_full_evals=%s",
+        args.initial_selection_strategy,
+        _resolved_initial_seed_evals(args),
+        int(args.initial_expand_evals),
+        args.max_total_full_evals,
+    )
     logger.info(
         "initialization_source=%s frozen_init_history=%s",
         "frozen_history" if args.frozen_init_history is not None else "evaluated",

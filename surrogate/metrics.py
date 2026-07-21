@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import statistics
 from dataclasses import dataclass
@@ -345,11 +346,87 @@ class GPConvergenceMonitor:
         self.best_actual = -math.inf
         self.no_best_improvement_steps = 0
         self.stagnation_deferred_events: list[dict[str, Any]] = []
+        self.observed_results = 0
+
+    def _settings_state(self) -> dict[str, int | float]:
+        return {
+            "min_bo_samples": self.min_bo_samples,
+            "max_bo_samples": self.max_bo_samples,
+            "convergence_check_every": self.check_every,
+            "convergence_patience": self.patience,
+            "prequential_window": self.prequential_window,
+            "mae_relative_tol": self.mae_relative_tol,
+            "mae_absolute_tol": self.mae_absolute_tol,
+            "std_relative_tol": self.std_relative_tol,
+            "spearman_tol": self.spearman_tol,
+            "degradation_tolerance": self.degradation_tolerance,
+            "best_acc_patience": self.best_acc_patience,
+            "best_acc_min_delta": self.best_acc_min_delta,
+            "max_wall_seconds": self.max_wall_seconds,
+        }
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe snapshot sufficient for adaptive resume."""
+
+        return {
+            "format_version": 1,
+            "settings": self._settings_state(),
+            "history": copy.deepcopy(self.history),
+            "prequential": copy.deepcopy(self.prequential),
+            "stable_checks": int(self.stable_checks),
+            "valid_convergence_checks": int(self.valid_convergence_checks),
+            "best_actual": None if self.best_actual == -math.inf else float(self.best_actual),
+            "no_best_improvement_steps": int(self.no_best_improvement_steps),
+            "stagnation_deferred_events": copy.deepcopy(self.stagnation_deferred_events),
+            "observed_results": int(self.observed_results),
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore a validated state produced by :meth:`state_dict`."""
+
+        if not isinstance(state, dict) or int(state.get("format_version", -1)) != 1:
+            raise ValueError("unsupported convergence monitor state format")
+        if state.get("settings") != self._settings_state():
+            raise ValueError("convergence monitor settings differ from the saved state")
+        history = state.get("history")
+        prequential = state.get("prequential")
+        deferred = state.get("stagnation_deferred_events")
+        if not isinstance(history, list) or not all(isinstance(row, dict) for row in history):
+            raise ValueError("convergence monitor history state is invalid")
+        if not isinstance(prequential, list) or not all(isinstance(row, dict) for row in prequential):
+            raise ValueError("convergence monitor prequential state is invalid")
+        if not isinstance(deferred, list) or not all(isinstance(row, dict) for row in deferred):
+            raise ValueError("convergence monitor deferred-event state is invalid")
+        integer_fields = {
+            "stable_checks": state.get("stable_checks"),
+            "valid_convergence_checks": state.get("valid_convergence_checks"),
+            "no_best_improvement_steps": state.get("no_best_improvement_steps"),
+            "observed_results": state.get("observed_results"),
+        }
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in integer_fields.values()
+        ):
+            raise ValueError(f"convergence monitor counters are invalid: {integer_fields}")
+        best_actual = state.get("best_actual")
+        if best_actual is not None and _finite_float(best_actual) is None:
+            raise ValueError("convergence monitor best_actual is invalid")
+        if int(integer_fields["observed_results"]) < len(prequential):
+            raise ValueError("convergence monitor observed count is smaller than prequential history")
+        self.history = copy.deepcopy(history)
+        self.prequential = copy.deepcopy(prequential)
+        self.stable_checks = int(integer_fields["stable_checks"])
+        self.valid_convergence_checks = int(integer_fields["valid_convergence_checks"])
+        self.best_actual = -math.inf if best_actual is None else float(best_actual)
+        self.no_best_improvement_steps = int(integer_fields["no_best_improvement_steps"])
+        self.stagnation_deferred_events = copy.deepcopy(deferred)
+        self.observed_results = int(integer_fields["observed_results"])
 
     def observe_bo_result(
         self, actual: float, prediction: dict[str, Any]
     ) -> dict[str, float | int | None]:
         actual = float(actual)
+        self.observed_results += 1
         if prediction.get("valid") is not False:
             mean = _finite_float(prediction.get("gp_pred_mean"))
             if math.isfinite(actual) and mean is not None:
