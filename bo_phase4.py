@@ -94,6 +94,11 @@ from initialization_wgmm_ted import (
 
 ARCH_NZ = 12
 HP_MODE_CHOICES = ("global4", "hybrid_cond7", "layer_cond19")
+CANDIDATE_EVALUATION_SEED_SCHEME = (
+    "sha256_v1_candidate_evaluation_search_seed_fingerprint_fidelity"
+)
+FULL_FIDELITY_SEED_CONTEXT = ["search_seed", "candidate_fingerprint", "full"]
+LOW_FIDELITY_SEED_CONTEXT = ["search_seed", "candidate_fingerprint", "low"]
 
 
 class ArchArgs:
@@ -138,8 +143,12 @@ def setup_logger(log_dir: str, script_name: str, version: str):
 
 def save_args_json(args: argparse.Namespace, log_path: str) -> str:
     json_path = log_path.replace(".log", ".json")
+    payload = {
+        **vars(args),
+        **candidate_evaluation_seed_provenance(),
+    }
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(vars(args), f, indent=2, ensure_ascii=False)
+        json.dump(payload, f, indent=2, ensure_ascii=False)
     return json_path
 
 
@@ -320,6 +329,154 @@ def clip_z_search_by_mode(
     return z.astype(np.float32, copy=False)
 
 
+def candidate_evaluation_seed(
+    search_seed: int,
+    candidate_fingerprint: str,
+    evaluation_fidelity: str,
+) -> int:
+    """Derive a method-, stage-, and order-independent candidate training seed."""
+
+    if not isinstance(candidate_fingerprint, str) or not candidate_fingerprint.strip():
+        raise ValueError("candidate_fingerprint must be a non-empty string")
+    if evaluation_fidelity not in ("full", "low"):
+        raise ValueError(
+            "evaluation_fidelity must be exactly 'full' or 'low', "
+            f"got {evaluation_fidelity!r}"
+        )
+    return stable_seed(
+        int(search_seed),
+        "candidate_evaluation",
+        candidate_fingerprint,
+        evaluation_fidelity,
+    )
+
+
+def candidate_evaluation_seed_provenance() -> dict[str, Any]:
+    """Return JSON-safe provenance for the unified candidate seed scheme."""
+
+    return {
+        "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+        "full_fidelity_seed_context": list(FULL_FIDELITY_SEED_CONTEXT),
+        "low_fidelity_seed_context": list(LOW_FIDELITY_SEED_CONTEXT),
+    }
+
+
+def _canonical_candidate_identity(
+    z_search: Any,
+    *,
+    hp_mode: str,
+    z_bound: float,
+    candidate_fingerprint: str | None = None,
+) -> tuple[np.ndarray, str]:
+    """Canonicalize a candidate and validate any caller-provided fingerprint."""
+
+    clipped = clip_z_search_by_mode(z_search, hp_mode, ARCH_NZ, z_bound)
+    expected_fingerprint = make_candidate_fingerprint(clipped)
+    if candidate_fingerprint is not None:
+        if not isinstance(candidate_fingerprint, str) or not candidate_fingerprint.strip():
+            raise ValueError("candidate_fingerprint must be a non-empty string")
+        if candidate_fingerprint != expected_fingerprint:
+            raise ValueError(
+                "candidate_fingerprint does not match canonical clipped float32 z_search: "
+                f"expected {expected_fingerprint}, got {candidate_fingerprint}"
+            )
+    return clipped, expected_fingerprint
+
+
+def _validated_explicit_seed(
+    value: Any,
+    *,
+    expected: int,
+    field: str,
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{field} must be an integer, got {value!r}")
+    actual = int(value)
+    if actual != int(expected):
+        raise ValueError(
+            f"{field} does not match {CANDIDATE_EVALUATION_SEED_SCHEME}: "
+            f"expected {expected}, got {actual}"
+        )
+    return actual
+
+
+def _validate_candidate_evaluation_record(
+    record: dict[str, Any],
+    z_search: Any,
+    *,
+    search_seed: int,
+    hp_mode: str,
+    z_bound: float,
+    evaluation_fidelity: str,
+    context: str,
+) -> tuple[np.ndarray, str, int]:
+    """Strictly validate persisted candidate identity and training-seed provenance."""
+
+    record_fingerprint = record.get("candidate_fingerprint")
+    if not isinstance(record_fingerprint, str) or not record_fingerprint.strip():
+        raise ValueError(f"{context} candidate_fingerprint is missing or empty")
+    canonical_z, fingerprint = _canonical_candidate_identity(
+        z_search,
+        hp_mode=hp_mode,
+        z_bound=z_bound,
+        candidate_fingerprint=record_fingerprint,
+    )
+    record_search_seed = record.get("search_seed")
+    if (
+        isinstance(record_search_seed, bool)
+        or not isinstance(record_search_seed, (int, np.integer))
+        or int(record_search_seed) != int(search_seed)
+    ):
+        raise ValueError(
+            f"{context} search_seed mismatch: expected {int(search_seed)}, "
+            f"got {record_search_seed!r}"
+        )
+    if record.get("seed_derivation") != SEED_DERIVATION:
+        raise ValueError(
+            f"{context} seed_derivation mismatch: expected {SEED_DERIVATION!r}, "
+            f"got {record.get('seed_derivation')!r}"
+        )
+    if record.get("candidate_evaluation_seed_scheme") != CANDIDATE_EVALUATION_SEED_SCHEME:
+        raise ValueError(
+            f"{context} candidate_evaluation_seed_scheme mismatch: expected "
+            f"{CANDIDATE_EVALUATION_SEED_SCHEME!r}, got "
+            f"{record.get('candidate_evaluation_seed_scheme')!r}; legacy stage/step seed "
+            "artifacts cannot be resumed under the current scheme"
+        )
+    if record.get("evaluation_fidelity") != evaluation_fidelity:
+        raise ValueError(
+            f"{context} evaluation_fidelity mismatch: expected {evaluation_fidelity!r}, "
+            f"got {record.get('evaluation_fidelity')!r}"
+        )
+    expected_seed = candidate_evaluation_seed(
+        int(search_seed), fingerprint, evaluation_fidelity,
+    )
+    if "evaluation_seed" not in record:
+        raise ValueError(f"{context} evaluation_seed is missing")
+    if "candidate_eval_seed" not in record:
+        raise ValueError(f"{context} candidate_eval_seed is missing")
+    _validated_explicit_seed(
+        record["evaluation_seed"], expected=expected_seed, field=f"{context} evaluation_seed",
+    )
+    _validated_explicit_seed(
+        record["candidate_eval_seed"],
+        expected=expected_seed,
+        field=f"{context} candidate_eval_seed",
+    )
+    expected_decoder_seed = stable_seed(
+        int(search_seed), "decoder", canonical_z[:ARCH_NZ],
+    )
+    _validated_explicit_seed(
+        record.get("decoder_seed"),
+        expected=expected_decoder_seed,
+        field=f"{context} decoder_seed",
+    )
+    initialization_strategy = record.get("initialization_strategy")
+    if not isinstance(initialization_strategy, str) or not initialization_strategy:
+        raise ValueError(f"{context} initialization_strategy is missing or empty")
+    return canonical_z, fingerprint, expected_seed
+
+
 def is_finite_z_search(z_search) -> bool:
     try:
         z = np.asarray(z_search, dtype=np.float64).reshape(-1)
@@ -430,26 +587,26 @@ def eval_candidate(
     max_epochs_override: int | None = None,
     patience_override: int | None = None,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
-    z_np = clip_z_search_by_mode(z_search, args.hp_mode, ARCH_NZ, args.z_bound)
+    z_np, expected_fingerprint = _canonical_candidate_identity(
+        z_search,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        candidate_fingerprint=candidate_fingerprint,
+    )
     z_tensor = torch.tensor(z_np, dtype=torch.float32)
     decoder_seed = stable_seed(int(args.seed), "decoder", z_tensor[:ARCH_NZ])
-    if evaluation_seed is None:
-        if evaluation_stage is None and candidate_fingerprint is None and evaluation_fidelity == "full":
-            candidate_eval_seed = stable_seed(int(args.seed), "candidate_eval", int(step))
-        else:
-            if candidate_fingerprint is None or evaluation_stage is None:
-                raise ValueError(
-                    "candidate_fingerprint and evaluation_stage are required for fidelity-isolated evaluation"
-                )
-            candidate_eval_seed = stable_seed(
-                int(args.seed),
-                "candidate_evaluation",
-                candidate_fingerprint,
-                evaluation_fidelity,
-                evaluation_stage,
-            )
-    else:
-        candidate_eval_seed = int(evaluation_seed)
+    expected_evaluation_seed = candidate_evaluation_seed(
+        int(args.seed), expected_fingerprint, evaluation_fidelity,
+    )
+    candidate_eval_seed = (
+        expected_evaluation_seed
+        if evaluation_seed is None
+        else _validated_explicit_seed(
+            evaluation_seed,
+            expected=expected_evaluation_seed,
+            field="evaluation_seed",
+        )
+    )
     result = eval_z_search(
         vae,
         z_tensor.to(device),
@@ -480,7 +637,8 @@ def eval_candidate(
             "evaluation_seed": candidate_eval_seed,
             "evaluation_stage": evaluation_stage,
             "evaluation_fidelity": evaluation_fidelity,
-            "candidate_fingerprint": candidate_fingerprint,
+            "candidate_fingerprint": expected_fingerprint,
+            "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
             "architecture_fingerprint": _decoded_architecture_fingerprint(
                 result.get("config")
             ),
@@ -575,14 +733,40 @@ def history_record(
     hp = result.get("hp", {})
     config = result.get("config")
     search_seed = int(result.get("search_seed", args.seed))
+    evaluation_fidelity = result.get("evaluation_fidelity", "full")
+    canonical_z, expected_fingerprint = _canonical_candidate_identity(
+        z_search,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        candidate_fingerprint=result.get("candidate_fingerprint"),
+    )
+    expected_eval_seed = candidate_evaluation_seed(
+        search_seed, expected_fingerprint, evaluation_fidelity,
+    )
     decoder_seed_value = result.get("decoder_seed")
     if decoder_seed_value is None:
-        decoder_seed_value = stable_seed(search_seed, "decoder", z_search[:ARCH_NZ])
+        decoder_seed_value = stable_seed(search_seed, "decoder", canonical_z[:ARCH_NZ])
     decoder_seed = int(decoder_seed_value)
     candidate_eval_seed_value = result.get("candidate_eval_seed")
     if candidate_eval_seed_value is None:
-        candidate_eval_seed_value = stable_seed(search_seed, "candidate_eval", int(step))
-    candidate_eval_seed = int(candidate_eval_seed_value)
+        candidate_eval_seed_value = expected_eval_seed
+    candidate_eval_seed = _validated_explicit_seed(
+        candidate_eval_seed_value,
+        expected=expected_eval_seed,
+        field="candidate_eval_seed",
+    )
+    evaluation_seed_value = result.get("evaluation_seed", candidate_eval_seed)
+    evaluation_seed = _validated_explicit_seed(
+        evaluation_seed_value,
+        expected=expected_eval_seed,
+        field="evaluation_seed",
+    )
+    scheme = result.get("candidate_evaluation_seed_scheme")
+    if scheme is not None and scheme != CANDIDATE_EVALUATION_SEED_SCHEME:
+        raise ValueError(
+            "candidate_evaluation_seed_scheme mismatch: "
+            f"expected {CANDIDATE_EVALUATION_SEED_SCHEME!r}, got {scheme!r}"
+        )
     epochs_ran = int(result.get("epochs_ran") or 0)
     stopped_epoch = int(result.get("stopped_epoch") or epochs_ran)
     params = {
@@ -600,8 +784,8 @@ def history_record(
         "type": record_type,
         "hp_mode": args.hp_mode,
         "search_dim": ARCH_NZ + hp_dim_from_mode(args.hp_mode),
-        "z_search": z_search.detach().cpu().float().flatten().tolist(),
-        "z_arch": z_search[:ARCH_NZ].detach().cpu().float().flatten().tolist(),
+        "z_search": canonical_z.tolist(),
+        "z_arch": canonical_z[:ARCH_NZ].tolist(),
         "val_acc": float(result.get("val_acc", 0.0)),
         "value": float(result.get("val_acc", 0.0)),
         "valid": bool(result.get("valid", False)),
@@ -625,6 +809,15 @@ def history_record(
         "search_seed": search_seed,
         "decoder_seed": decoder_seed,
         "candidate_eval_seed": candidate_eval_seed,
+        "evaluation_seed": evaluation_seed,
+        "candidate_fingerprint": expected_fingerprint,
+        "evaluation_stage": result.get("evaluation_stage"),
+        "evaluation_fidelity": evaluation_fidelity,
+        "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+        "initialization_strategy": result.get(
+            "initialization_strategy", getattr(args, "initial_selection_strategy", "schur")
+        ),
+        "full_evaluation_index": result.get("full_evaluation_index"),
         "architecture_fingerprint": result.get("architecture_fingerprint"),
         "hp_fingerprint": result.get("hp_fingerprint"),
         "seed_derivation": SEED_DERIVATION,
@@ -936,6 +1129,15 @@ def _append_eval(
     """Predict, evaluate, record, and optionally update in that strict order."""
 
     step_started = time.monotonic()
+    canonical_z, expected_fingerprint = _canonical_candidate_identity(
+        z_search,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        candidate_fingerprint=(
+            None if record_metadata is None else record_metadata.get("candidate_fingerprint")
+        ),
+    )
+    z_search = torch.tensor(canonical_z, dtype=torch.float32)
     online_candidate_strategy = (
         getattr(args, "online_candidate_strategy", "qlogei")
         if update_online
@@ -946,28 +1148,67 @@ def _append_eval(
     pre_candidate_eval_seed = None
     pre_seed_derivation = None
     metadata = {} if record_metadata is None else dict(record_metadata)
-    evaluation_stage = metadata.get("evaluation_stage")
+    default_stage = (
+        "online_bo"
+        if update_online or record_type == "bo"
+        else "initial_seed"
+        if record_type == "lhs_init"
+        else "initial_expand"
+    )
+    evaluation_stage = str(metadata.get("evaluation_stage", default_stage))
     evaluation_fidelity = str(metadata.get("evaluation_fidelity", "full"))
-    fingerprint = metadata.get("candidate_fingerprint")
+    expected_evaluation_seed = candidate_evaluation_seed(
+        int(args.seed), expected_fingerprint, evaluation_fidelity,
+    )
+    if "evaluation_seed" in metadata:
+        _validated_explicit_seed(
+            metadata["evaluation_seed"],
+            expected=expected_evaluation_seed,
+            field="evaluation_seed",
+        )
+    if "candidate_eval_seed" in metadata:
+        _validated_explicit_seed(
+            metadata["candidate_eval_seed"],
+            expected=expected_evaluation_seed,
+            field="candidate_eval_seed",
+        )
+    supplied_scheme = metadata.get("candidate_evaluation_seed_scheme")
+    if supplied_scheme is not None and supplied_scheme != CANDIDATE_EVALUATION_SEED_SCHEME:
+        raise ValueError(
+            "candidate_evaluation_seed_scheme mismatch: "
+            f"expected {CANDIDATE_EVALUATION_SEED_SCHEME!r}, got {supplied_scheme!r}"
+        )
+    metadata.update(
+        {
+            "search_seed": int(args.seed),
+            "candidate_fingerprint": expected_fingerprint,
+            "evaluation_stage": evaluation_stage,
+            "evaluation_fidelity": evaluation_fidelity,
+            "evaluation_seed": expected_evaluation_seed,
+            "candidate_eval_seed": expected_evaluation_seed,
+            "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+            "initialization_strategy": metadata.get(
+                "initialization_strategy",
+                getattr(args, "initial_selection_strategy", "schur"),
+            ),
+            "full_evaluation_index": metadata.get(
+                "full_evaluation_index", len(history) if evaluation_fidelity == "full" else None,
+            ),
+            "seed_derivation": SEED_DERIVATION,
+        }
+    )
+    fingerprint = expected_fingerprint
     if pre_search_seed is not None:
         pre_search_seed = int(pre_search_seed)
         pre_decoder_seed = stable_seed(
             pre_search_seed, "decoder", z_search[:ARCH_NZ],
         )
-        pre_candidate_eval_seed = (
-            stable_seed(pre_search_seed, "candidate_eval", int(step))
-            if evaluation_stage is None and fingerprint is None and evaluation_fidelity == "full"
-            else stable_seed(
-                pre_search_seed,
-                "candidate_evaluation",
-                str(fingerprint),
-                evaluation_fidelity,
-                str(evaluation_stage),
-            )
+        pre_candidate_eval_seed = candidate_evaluation_seed(
+            pre_search_seed,
+            fingerprint,
+            evaluation_fidelity,
         )
         pre_seed_derivation = SEED_DERIVATION
-        if record_metadata is not None:
-            metadata.setdefault("evaluation_seed", pre_candidate_eval_seed)
     if update_online and predictor is None:
         raise RuntimeError("online GP update requested before a GP predictor exists")
     train_size_before = 0 if predictor is None else predictor.train_size
@@ -1015,6 +1256,8 @@ def _append_eval(
         "search_seed": pre_search_seed,
         "decoder_seed": pre_decoder_seed,
         "candidate_eval_seed": pre_candidate_eval_seed,
+        "evaluation_seed": pre_candidate_eval_seed,
+        "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
         "seed_derivation": pre_seed_derivation,
         "best_epoch": None,
         "stopped_epoch": None,
@@ -1102,6 +1345,10 @@ def _append_eval(
             "search_seed": result.get("search_seed"),
             "decoder_seed": result.get("decoder_seed"),
             "candidate_eval_seed": result.get("candidate_eval_seed"),
+            "evaluation_seed": result.get("evaluation_seed"),
+            "candidate_evaluation_seed_scheme": result.get(
+                "candidate_evaluation_seed_scheme"
+            ),
             "architecture_fingerprint": result.get("architecture_fingerprint"),
             "hp_fingerprint": result.get("hp_fingerprint"),
             "seed_derivation": result.get("seed_derivation"),
@@ -1193,7 +1440,8 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
     tmp_path = path + ".tmp"
     fields = [
         "step", "record_type", "gp_stage", "valid", "search_seed",
-        "decoder_seed", "candidate_eval_seed", "seed_derivation", "best_epoch",
+        "decoder_seed", "candidate_eval_seed", "evaluation_seed",
+        "candidate_evaluation_seed_scheme", "seed_derivation", "best_epoch",
         "architecture_fingerprint", "hp_fingerprint",
         "stopped_epoch", "epochs_ran", "online_candidate_strategy",
         "candidate_selection_seed", "initial_record_replayed",
@@ -1213,7 +1461,7 @@ def _save_prediction_csv(records: list[dict[str, Any]], output: str) -> None:
         "initialization_strategy", "evaluation_stage", "evaluation_fidelity",
         "cluster_id", "cluster_responsibility", "candidate_pool_index",
         "candidate_fingerprint", "selection_rank", "ted_score", "quota_mode",
-        "low_fidelity_used", "low_fidelity_record_id", "evaluation_seed",
+        "low_fidelity_used", "low_fidelity_record_id",
         "full_evaluation_index", "online_iteration",
     ]
     if any(any(field in row for field in initialization_fields) for row in records):
@@ -1382,6 +1630,45 @@ def load_frozen_init_records(args: argparse.Namespace) -> list[dict[str, Any]]:
             )
         if not np.isfinite(z_array).all():
             raise _frozen_record_error(source, step, "z_search", "contains non-finite values")
+        clipped_z = clip_z_search_by_mode(
+            z_array, args.hp_mode, ARCH_NZ, args.z_bound,
+        )
+        expected_fingerprint = make_candidate_fingerprint(clipped_z)
+        if record.get("candidate_fingerprint") != expected_fingerprint:
+            raise _frozen_record_error(
+                source,
+                step,
+                "candidate_fingerprint",
+                f"expected {expected_fingerprint}, got {record.get('candidate_fingerprint')!r}",
+            )
+        if record.get("candidate_evaluation_seed_scheme") != CANDIDATE_EVALUATION_SEED_SCHEME:
+            raise _frozen_record_error(
+                source,
+                step,
+                "candidate_evaluation_seed_scheme",
+                f"expected {CANDIDATE_EVALUATION_SEED_SCHEME!r}, got "
+                f"{record.get('candidate_evaluation_seed_scheme')!r}; legacy stage/step "
+                "seed artifacts cannot be replayed",
+            )
+        if record.get("evaluation_stage") != "initial_seed":
+            raise _frozen_record_error(
+                source, step, "evaluation_stage", "must equal 'initial_seed'",
+            )
+        if record.get("evaluation_fidelity") != "full":
+            raise _frozen_record_error(
+                source, step, "evaluation_fidelity", "must equal 'full'",
+            )
+        if record.get("initialization_strategy") != "schur":
+            raise _frozen_record_error(
+                source, step, "initialization_strategy", "must equal 'schur'",
+            )
+        if record.get("full_evaluation_index") != step:
+            raise _frozen_record_error(
+                source,
+                step,
+                "full_evaluation_index",
+                f"expected {step}, got {record.get('full_evaluation_index')!r}",
+            )
 
         val_acc = _finite_record_number(record, "val_acc", source, step)
         if not 0.0 <= val_acc <= 1.0:
@@ -1442,18 +1729,20 @@ def load_frozen_init_records(args: argparse.Namespace) -> list[dict[str, Any]]:
             )
 
         derivation = record.get("seed_derivation")
-        if derivation is not None and derivation != SEED_DERIVATION:
+        if derivation != SEED_DERIVATION:
             raise _frozen_record_error(
                 source,
                 step,
                 "seed_derivation",
                 f"expected {SEED_DERIVATION!r}, got {derivation!r}",
             )
-        expected_eval_seed = stable_seed(int(args.seed), "candidate_eval", step)
+        expected_eval_seed = candidate_evaluation_seed(
+            int(args.seed), expected_fingerprint, "full",
+        )
         candidate_eval_seed = record.get("candidate_eval_seed")
         if (
-            candidate_eval_seed is not None
-            and (
+            candidate_eval_seed is None
+            or (
                 isinstance(candidate_eval_seed, bool)
                 or not isinstance(candidate_eval_seed, int)
                 or candidate_eval_seed != expected_eval_seed
@@ -1465,13 +1754,25 @@ def load_frozen_init_records(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "candidate_eval_seed",
                 f"expected {expected_eval_seed}, got {record.get('candidate_eval_seed')!r}",
             )
+        evaluation_seed = record.get("evaluation_seed")
+        if (
+            isinstance(evaluation_seed, bool)
+            or not isinstance(evaluation_seed, int)
+            or evaluation_seed != expected_eval_seed
+        ):
+            raise _frozen_record_error(
+                source,
+                step,
+                "evaluation_seed",
+                f"expected {expected_eval_seed}, got {record.get('evaluation_seed')!r}",
+            )
         expected_decoder_seed = stable_seed(
-            int(args.seed), "decoder", z_array[:ARCH_NZ],
+            int(args.seed), "decoder", clipped_z[:ARCH_NZ],
         )
         decoder_seed = record.get("decoder_seed")
         if (
-            decoder_seed is not None
-            and (
+            decoder_seed is None
+            or (
                 isinstance(decoder_seed, bool)
                 or not isinstance(decoder_seed, int)
                 or decoder_seed != expected_decoder_seed
@@ -1538,6 +1839,15 @@ def replay_frozen_initialization(
                 "search_seed": int(args.seed),
                 "decoder_seed": record.get("decoder_seed"),
                 "candidate_eval_seed": record.get("candidate_eval_seed"),
+                "evaluation_seed": record.get("evaluation_seed"),
+                "candidate_evaluation_seed_scheme": record.get(
+                    "candidate_evaluation_seed_scheme"
+                ),
+                "candidate_fingerprint": record.get("candidate_fingerprint"),
+                "evaluation_stage": record.get("evaluation_stage"),
+                "evaluation_fidelity": record.get("evaluation_fidelity"),
+                "initialization_strategy": record.get("initialization_strategy"),
+                "full_evaluation_index": record.get("full_evaluation_index"),
                 "seed_derivation": record.get("seed_derivation", SEED_DERIVATION),
                 "best_epoch": record.get("best_epoch"),
                 "stopped_epoch": record.get("stopped_epoch"),
@@ -1790,6 +2100,7 @@ def _fit_scratch_predictor(
         "seed": int(args.seed),
         "surrogate_type": getattr(args, "surrogate_type", "exact_gp"),
         "seed_derivation": SEED_DERIVATION,
+        **candidate_evaluation_seed_provenance(),
     }
     if getattr(args, "initial_selection_strategy", "schur") != "schur":
         metadata.update(
@@ -2044,6 +2355,9 @@ def _load_resume_full_history(
     path: str,
     *,
     config_fingerprint: str,
+    search_seed: int,
+    hp_mode: str,
+    z_bound: float,
 ) -> tuple[
     list[dict[str, Any]],
     list[torch.Tensor],
@@ -2077,11 +2391,23 @@ def _load_resume_full_history(
         if key in seen:
             raise ValueError(f"resume history contains duplicate candidate {key}")
         seen.add(key)
-        z = torch.tensor(raw["z_search"], dtype=torch.float32)
-        if raw.get("candidate_fingerprint") != make_candidate_fingerprint(z.numpy()):
-            raise ValueError("resume initialization candidate fingerprint mismatch")
+        try:
+            canonical_z, _fingerprint, _evaluation_seed = _validate_candidate_evaluation_record(
+                raw,
+                raw["z_search"],
+                search_seed=search_seed,
+                hp_mode=hp_mode,
+                z_bound=z_bound,
+                evaluation_fidelity="full",
+                context="resume initialization",
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"resume initialization candidate seed validation failed: {exc}") from exc
+        z = torch.tensor(canonical_z, dtype=torch.float32)
         if int(raw.get("full_evaluation_index", -1)) != len(history):
-            raise ValueError("resume initialization full-evaluation indices are not contiguous")
+            raise ValueError(
+                "resume initialization full_evaluation_index values are not contiguous"
+            )
         acc = float(raw["val_acc"])
         mask_hp = [float(value) for value in raw["condition_mask_vector"]]
         full_mask = [1.0] * ARCH_NZ + mask_hp
@@ -2156,13 +2482,14 @@ def _low_fidelity_eval(
     cluster_id: int,
     fingerprint: str,
 ) -> dict[str, Any]:
-    evaluation_seed = stable_seed(
-        int(args.seed),
-        "candidate_evaluation",
-        fingerprint,
-        "low",
-        "initial_shortlist",
+    canonical_z, fingerprint = _canonical_candidate_identity(
+        z,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        candidate_fingerprint=fingerprint,
     )
+    z = torch.tensor(canonical_z, dtype=torch.float32)
+    evaluation_seed = candidate_evaluation_seed(int(args.seed), fingerprint, "low")
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     started = time.monotonic()
@@ -2200,6 +2527,10 @@ def _low_fidelity_eval(
         "evaluation_fidelity": "low",
         "search_seed": int(args.seed),
         "evaluation_seed": int(evaluation_seed),
+        "candidate_eval_seed": int(evaluation_seed),
+        "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+        "initialization_strategy": args.initial_selection_strategy,
+        "full_evaluation_index": None,
         "decoder_seed": result.get("decoder_seed"),
         "architecture_fingerprint": result.get("architecture_fingerprint"),
         "hp_fingerprint": result.get("hp_fingerprint"),
@@ -2382,6 +2713,7 @@ def run_wgmm_two_stage_initialization(
             args.initial_selection_strategy, wgmm_parameters.source,
         ),
         "search_seed": int(args.seed),
+        **candidate_evaluation_seed_provenance(),
         "hp_mode": args.hp_mode,
         "search_dim": int(pool.shape[1]),
         "initial_seed_evals": seed_evals,
@@ -2453,6 +2785,11 @@ def run_wgmm_two_stage_initialization(
         if not os.path.exists(config_path):
             raise FileNotFoundError("--resume_initialization requires initialization_config.json")
         prior_config = _read_json(config_path)
+        if prior_config.get("candidate_evaluation_seed_scheme") != CANDIDATE_EVALUATION_SEED_SCHEME:
+            raise ValueError(
+                "resume initialization uses a legacy or missing "
+                "candidate_evaluation_seed_scheme; old stage/step seed artifacts cannot be mixed"
+            )
         if prior_config.get("initialization_config_fingerprint") != config_fingerprint:
             raise ValueError("resume initialization metadata/fingerprint mismatch")
         if prior_config != initialization_config:
@@ -2478,6 +2815,9 @@ def run_wgmm_two_stage_initialization(
     history, X_obs, Y_obs, init_valid, prediction_records = _load_resume_full_history(
         paths["initialization_full_history.json"],
         config_fingerprint=config_fingerprint,
+        search_seed=int(args.seed),
+        hp_mode=args.hp_mode,
+        z_bound=float(args.z_bound),
     )
     for row in history:
         index = int(row["candidate_pool_index"])
@@ -2625,12 +2965,15 @@ def run_wgmm_two_stage_initialization(
                         raise ValueError("low-fidelity resume candidate fingerprint mismatch")
                     if row.get("initialization_config_fingerprint") != config_fingerprint:
                         raise ValueError("low-fidelity resume configuration fingerprint mismatch")
-                    expected_seed = stable_seed(
-                        int(args.seed), "candidate_evaluation", fingerprint,
-                        "low", "initial_shortlist",
+                    _validate_candidate_evaluation_record(
+                        row,
+                        pool[index].numpy(),
+                        search_seed=int(args.seed),
+                        hp_mode=args.hp_mode,
+                        z_bound=float(args.z_bound),
+                        evaluation_fidelity="low",
+                        context="low-fidelity resume",
                     )
-                    if int(row.get("evaluation_seed", -1)) != expected_seed:
-                        raise ValueError("low-fidelity resume evaluation seed mismatch")
             low_by_index = {int(row["candidate_pool_index"]): row for row in low_history}
             for index in shortlist_indices:
                 if int(index) in low_by_index:
@@ -2833,6 +3176,7 @@ def run_wgmm_two_stage_initialization(
     atomic_initialization_json_dump(
         {
             "seed_derivation": SEED_DERIVATION,
+            **candidate_evaluation_seed_provenance(),
             "search_seed": int(args.seed),
             "lhs_seed": int(args.seed),
             "wgmm_fit_seed": (
@@ -2840,12 +3184,6 @@ def run_wgmm_two_stage_initialization(
                 if args.wgmm_source == "checkpoint"
                 else stable_seed(int(args.seed), "wgmm_fit_pool", pool_fingerprint)
             ),
-            "low_fidelity_seed_context": [
-                "search_seed", "candidate_fingerprint", "low", "initial_shortlist"
-            ],
-            "full_fidelity_seed_context": [
-                "search_seed", "candidate_fingerprint", "full", "evaluation_stage"
-            ],
             "python_hash_used": False,
         },
         paths["rng_provenance.json"],
@@ -2940,6 +3278,7 @@ def run_wgmm_bo(
         atomic_initialization_json_dump(
             {
                 "format_version": 2,
+                "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
                 "initialization_config_fingerprint": config_fingerprint,
                 "completed_online_evals": len(online_history),
                 "gp_train_size": predictor.train_size,
@@ -2979,6 +3318,11 @@ def run_wgmm_bo(
             raise ValueError("WGMM online resume artifacts have invalid JSON structure")
         if int(state.get("format_version", -1)) != 2:
             raise ValueError("WGMM online resume state lacks complete convergence-monitor state")
+        if state.get("candidate_evaluation_seed_scheme") != CANDIDATE_EVALUATION_SEED_SCHEME:
+            raise ValueError(
+                "WGMM online resume uses a legacy or missing "
+                "candidate_evaluation_seed_scheme"
+            )
         if state.get("initialization_config_fingerprint") != config_fingerprint:
             raise ValueError("WGMM online resume configuration fingerprint mismatch")
         if bool(state.get("adaptive_sampling")) != bool(args.adaptive_sampling):
@@ -3039,15 +3383,16 @@ def run_wgmm_bo(
                 raise ValueError("WGMM online resume full-evaluation indices are not contiguous")
             seen_iterations.add(iteration)
             row = copy.deepcopy(raw)
-            z = torch.tensor(row["z_search"], dtype=torch.float32)
-            fingerprint = make_candidate_fingerprint(z.numpy())
-            if row.get("candidate_fingerprint") != fingerprint:
-                raise ValueError("WGMM online resume candidate fingerprint mismatch")
-            expected_seed = stable_seed(
-                int(args.seed), "candidate_evaluation", fingerprint, "full", "online_bo",
+            canonical_z, _fingerprint, _expected_seed = _validate_candidate_evaluation_record(
+                row,
+                row["z_search"],
+                search_seed=int(args.seed),
+                hp_mode=args.hp_mode,
+                z_bound=float(args.z_bound),
+                evaluation_fidelity="full",
+                context="WGMM online resume",
             )
-            if int(row.get("evaluation_seed", -1)) != expected_seed:
-                raise ValueError("WGMM online resume evaluation seed mismatch")
+            z = torch.tensor(canonical_z, dtype=torch.float32)
             history.append(row)
             X_obs.append(z)
             Y_obs.append(float(row["val_acc"]))
@@ -3275,6 +3620,7 @@ def run_wgmm_bo(
         "elapsed_seconds": current_elapsed_seconds(),
         "search_seed": int(args.seed),
         "seed_derivation": SEED_DERIVATION,
+        **candidate_evaluation_seed_provenance(),
         "rng_isolation_enabled": True,
         "online_candidate_strategy": args.online_candidate_strategy,
         "initialization_source": "wgmm_clustered_ted",
@@ -3472,6 +3818,7 @@ def run_bo(
             "elapsed_seconds": float(time.monotonic() - run_started),
             "search_seed": int(args.seed),
             "seed_derivation": SEED_DERIVATION,
+            **candidate_evaluation_seed_provenance(),
             "rng_isolation_enabled": True,
             "online_candidate_strategy": args.online_candidate_strategy,
             "initialization_source": initialization_source,
@@ -3694,6 +4041,7 @@ def run_bo(
         "elapsed_seconds": float(time.monotonic() - run_started),
         "search_seed": int(args.seed),
         "seed_derivation": SEED_DERIVATION,
+        **candidate_evaluation_seed_provenance(),
         "rng_isolation_enabled": True,
         "online_candidate_strategy": args.online_candidate_strategy,
         "initialization_source": initialization_source,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import random
+import logging
 from types import SimpleNamespace
 import subprocess
 import sys
@@ -228,10 +229,12 @@ def test_candidate_seed_propagation_and_history_metadata(monkeypatch):
 
     z_tensor, result = bo_phase4.eval_candidate(
         object(), z, object(), 8, 3, args, torch.device("cpu"), step=9,
+        evaluation_stage="online_bo",
     )
 
     expected_decoder = eval_utils.stable_seed(17, "decoder", z_tensor[: bo_phase4.ARCH_NZ])
-    expected_eval = eval_utils.stable_seed(17, "candidate_eval", 9)
+    fingerprint = bo_phase4.make_candidate_fingerprint(z_tensor.numpy())
+    expected_eval = bo_phase4.candidate_evaluation_seed(17, fingerprint, "full")
     assert captured["decoder_seed"] == expected_decoder
     assert captured["candidate_eval_seed"] == expected_eval
 
@@ -239,10 +242,146 @@ def test_candidate_seed_propagation_and_history_metadata(monkeypatch):
     assert record["search_seed"] == 17
     assert record["decoder_seed"] == expected_decoder
     assert record["candidate_eval_seed"] == expected_eval
+    assert record["evaluation_seed"] == expected_eval
+    assert record["candidate_fingerprint"] == fingerprint
+    assert record["evaluation_stage"] == "online_bo"
+    assert record["candidate_evaluation_seed_scheme"] == (
+        bo_phase4.CANDIDATE_EVALUATION_SEED_SCHEME
+    )
     assert record["seed_derivation"] == "sha256_v1"
     assert record["best_epoch"] == 6
     assert record["stopped_epoch"] == 10
     assert record["epochs_ran"] == 10
+
+
+def test_candidate_evaluation_seed_is_cross_stage_and_order_independent():
+    pytest.importorskip("botorch")
+    import bo_phase4
+
+    fingerprint = "a" * 64
+    contexts = [
+        ("schur", "initial_seed", 0),
+        ("wgmm_ted", "initial_expand", 91),
+        ("wgmm_ted_lowfid", "online_bo", 7),
+    ]
+    forward = {
+        context: bo_phase4.candidate_evaluation_seed(11, fingerprint, "full")
+        for context in contexts
+    }
+    reverse = {
+        context: bo_phase4.candidate_evaluation_seed(11, fingerprint, "full")
+        for context in reversed(contexts)
+    }
+
+    assert set(forward.values()) == set(reverse.values())
+    assert len(set(forward.values())) == 1
+    assert forward[contexts[0]] != bo_phase4.candidate_evaluation_seed(
+        11, fingerprint, "low",
+    )
+    assert forward[contexts[0]] != bo_phase4.candidate_evaluation_seed(
+        12, fingerprint, "full",
+    )
+    assert forward[contexts[0]] != bo_phase4.candidate_evaluation_seed(
+        11, "b" * 64, "full",
+    )
+
+
+def test_candidate_evaluation_seed_rejects_invalid_identity_or_fidelity():
+    pytest.importorskip("botorch")
+    import bo_phase4
+
+    with pytest.raises(ValueError, match="non-empty"):
+        bo_phase4.candidate_evaluation_seed(1, "", "full")
+    with pytest.raises(ValueError, match="exactly 'full' or 'low'"):
+        bo_phase4.candidate_evaluation_seed(1, "a" * 64, "preview")
+
+
+def test_eval_candidate_rejects_wrong_explicit_seed_and_fingerprint(monkeypatch):
+    pytest.importorskip("botorch")
+    import bo_phase4
+
+    monkeypatch.setattr(
+        bo_phase4,
+        "eval_z_search",
+        lambda *args, **kwargs: pytest.fail("invalid candidate identity must fail before evaluation"),
+    )
+    args = _phase4_args(seed=5)
+    z = torch.linspace(-0.4, 0.4, bo_phase4.ARCH_NZ + 4)
+    clipped = bo_phase4.clip_z_search_by_mode(
+        z, args.hp_mode, bo_phase4.ARCH_NZ, args.z_bound,
+    )
+    fingerprint = bo_phase4.make_candidate_fingerprint(clipped)
+    expected_seed = bo_phase4.candidate_evaluation_seed(5, fingerprint, "full")
+
+    with pytest.raises(ValueError, match="candidate_fingerprint does not match"):
+        bo_phase4.eval_candidate(
+            object(), z, object(), 8, 3, args, torch.device("cpu"),
+            candidate_fingerprint="b" * 64,
+        )
+    with pytest.raises(ValueError, match="evaluation_seed does not match"):
+        bo_phase4.eval_candidate(
+            object(), z, object(), 8, 3, args, torch.device("cpu"),
+            candidate_fingerprint=fingerprint,
+            evaluation_seed=expected_seed + 1,
+        )
+
+
+def test_schur_append_writes_complete_candidate_seed_metadata(tmp_path, monkeypatch):
+    pytest.importorskip("botorch")
+    import bo_phase4
+
+    args = _phase4_args(seed=29)
+    args.output = str(tmp_path)
+    args.initial_selection_strategy = "schur"
+    args.online_candidate_strategy = "qlogei"
+    args.gp_update_mode = "warm_refit"
+    args.gp_init_mode = "scratch"
+    args.gp_checkpoint = None
+    args.surrogate_type = "exact_gp"
+    z = torch.linspace(-0.3, 0.3, bo_phase4.ARCH_NZ + 4)
+
+    def fake_eval(*_args, **kwargs):
+        return torch.as_tensor(_args[1]).float(), {
+            "val_acc": 0.71,
+            "valid": True,
+            "hp": {
+                "lr": 0.01,
+                "dropout": 0.2,
+                "hidden_dim": 64,
+                "weight_decay": 1e-4,
+                "condition_mask_vector": [1.0] * 4,
+            },
+            "config": {"operations": ["GCNConv"], "edges": [[0, 1]]},
+            "epochs_ran": 4,
+            "search_seed": args.seed,
+            "decoder_seed": eval_utils.stable_seed(
+                args.seed, "decoder", torch.as_tensor(_args[1])[: bo_phase4.ARCH_NZ],
+            ),
+            "candidate_eval_seed": kwargs["evaluation_seed"],
+            "evaluation_seed": kwargs["evaluation_seed"],
+        }
+
+    monkeypatch.setattr(bo_phase4, "eval_candidate", fake_eval)
+    history, x_obs, y_obs, predictions = [], [], [], []
+    bo_phase4._append_eval(
+        object(), z, object(), 8, 3, args, torch.device("cpu"),
+        history, x_obs, y_obs, 37, "lhs_init", logging.getLogger("schur-seed"),
+        None, predictions, "scratch_init_no_gp", None, False, 0,
+        [1.0] * (bo_phase4.ARCH_NZ + 4),
+    )
+
+    row = history[0]
+    assert row["evaluation_stage"] == "initial_seed"
+    assert row["evaluation_fidelity"] == "full"
+    assert row["initialization_strategy"] == "schur"
+    assert row["full_evaluation_index"] == 0
+    assert row["candidate_eval_seed"] == row["evaluation_seed"]
+    assert row["candidate_evaluation_seed_scheme"] == (
+        bo_phase4.CANDIDATE_EVALUATION_SEED_SCHEME
+    )
+    assert row["candidate_fingerprint"] == bo_phase4.make_candidate_fingerprint(
+        np.asarray(row["z_search"], dtype=np.float32)
+    )
 
 
 def test_eval_z_search_passes_candidate_seed_to_training(monkeypatch):

@@ -361,19 +361,23 @@ def test_cli_default_is_legacy_schur_and_run_bo_dispatches_only_when_selected(
     assert len(called) == 1
 
 
-def test_fidelity_seed_is_order_independent_and_stage_isolated() -> None:
+def test_fidelity_seed_is_method_stage_step_and_order_independent() -> None:
     fingerprints = ["a" * 64, "b" * 64, "c" * 64]
     forward = {
-        value: stable_seed(7, "candidate_evaluation", value, "full", "initial_expand")
+        value: bo_phase4.candidate_evaluation_seed(7, value, "full")
         for value in fingerprints
     }
     reverse = {
-        value: stable_seed(7, "candidate_evaluation", value, "full", "initial_expand")
+        value: bo_phase4.candidate_evaluation_seed(7, value, "full")
         for value in reversed(fingerprints)
     }
     assert forward == reverse
-    assert forward[fingerprints[0]] != stable_seed(
-        7, "candidate_evaluation", fingerprints[0], "low", "initial_shortlist",
+    schur_initial = bo_phase4.candidate_evaluation_seed(7, fingerprints[0], "full")
+    gmm_expand = bo_phase4.candidate_evaluation_seed(7, fingerprints[0], "full")
+    online_bo = bo_phase4.candidate_evaluation_seed(7, fingerprints[0], "full")
+    assert schur_initial == gmm_expand == online_bo
+    assert forward[fingerprints[0]] != bo_phase4.candidate_evaluation_seed(
+        7, fingerprints[0], "low",
     )
 
 
@@ -473,6 +477,87 @@ def test_adaptive_resume_requires_clean_committed_boundary() -> None:
             adaptive_sampling=True,
             n_iter=120,
             max_bo_samples=60,
+        )
+
+
+def _resume_full_record(*, search_seed: int = 13) -> dict:
+    z = np.linspace(-0.5, 0.5, bo_phase4.ARCH_NZ + 4, dtype=np.float32)
+    fingerprint = bo_phase4.make_candidate_fingerprint(z)
+    evaluation_seed = bo_phase4.candidate_evaluation_seed(
+        search_seed, fingerprint, "full",
+    )
+    return {
+        "type": "wgmm_ted_seed",
+        "evaluation_stage": "initial_seed",
+        "evaluation_fidelity": "full",
+        "initialization_strategy": "wgmm_ted",
+        "initialization_config_fingerprint": "config-fingerprint",
+        "candidate_pool_index": 0,
+        "candidate_fingerprint": fingerprint,
+        "candidate_evaluation_seed_scheme": (
+            bo_phase4.CANDIDATE_EVALUATION_SEED_SCHEME
+        ),
+        "search_seed": search_seed,
+        "seed_derivation": bo_phase4.SEED_DERIVATION,
+        "evaluation_seed": evaluation_seed,
+        "candidate_eval_seed": evaluation_seed,
+        "decoder_seed": stable_seed(search_seed, "decoder", z[: bo_phase4.ARCH_NZ]),
+        "full_evaluation_index": 0,
+        "z_search": z.tolist(),
+        "val_acc": 0.75,
+        "valid": True,
+        "condition_mask_vector": [1.0] * 4,
+    }
+
+
+def test_full_history_resume_accepts_current_candidate_seed_scheme(tmp_path) -> None:
+    path = tmp_path / "initialization_full_history.json"
+    path.write_text(json.dumps([_resume_full_record()]), encoding="utf-8")
+
+    history, x_obs, y_obs, valid_rows, predictions = bo_phase4._load_resume_full_history(
+        str(path),
+        config_fingerprint="config-fingerprint",
+        search_seed=13,
+        hp_mode="global4",
+        z_bound=2.5,
+    )
+
+    assert len(history) == len(x_obs) == len(y_obs) == len(valid_rows) == len(predictions) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "mutation"),
+    [
+        ("candidate_evaluation_seed_scheme", "missing"),
+        ("candidate_evaluation_seed_scheme", "legacy_stage_seed_v0"),
+        ("evaluation_seed", "increment"),
+        ("candidate_eval_seed", "increment"),
+        ("candidate_fingerprint", "fingerprint"),
+        ("full_evaluation_index", "increment"),
+    ],
+)
+def test_full_history_resume_rejects_legacy_or_tampered_seed_artifact(
+    tmp_path, field, mutation,
+) -> None:
+    record = _resume_full_record()
+    if mutation == "missing":
+        record.pop(field)
+    elif mutation == "increment":
+        record[field] += 1
+    elif mutation == "fingerprint":
+        record[field] = "f" * 64
+    else:
+        record[field] = mutation
+    path = tmp_path / "initialization_full_history.json"
+    path.write_text(json.dumps([record]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=field):
+        bo_phase4._load_resume_full_history(
+            str(path),
+            config_fingerprint="config-fingerprint",
+            search_seed=13,
+            hp_mode="global4",
+            z_bound=2.5,
         )
 
 

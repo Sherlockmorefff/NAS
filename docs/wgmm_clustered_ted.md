@@ -206,24 +206,38 @@ WGMM run.
 
 ## RNG, history, and resume
 
-Candidate evaluation seeds are derived from search seed, candidate SHA-256
-fingerprint, fidelity, and stage. Decoder seeds retain the existing derivation.
-Low- and full-fidelity evaluation contexts are isolated, so changing low-
-fidelity order or failure behavior cannot change another candidate's full seed.
-The decoder seed excludes fidelity and stage, while the training seed includes
-both. Low/full consistency is checked before an expansion record is accepted.
-TED and GMM utilities use local deterministic state and never Python `hash()`.
+Candidate training seeds use one SHA-256 scheme for every initialization
+strategy and online path:
+
+```text
+stable_seed(search_seed, "candidate_evaluation", candidate_fingerprint, fidelity)
+```
+
+The fingerprint is computed from canonical, clipped, float32 `z_search`, and
+`fidelity` is exactly `full` or `low`. Therefore a candidate's full-fidelity
+seed is independent of initialization method, evaluation stage, search step,
+full-evaluation index, and evaluation order. Its low-fidelity seed is different
+from its full-fidelity seed. Decoder seeds retain the existing candidate-based
+derivation, so low/full evaluations reuse the same decode and HP configuration.
+Low/full consistency is checked before an expansion record is accepted. TED
+and GMM utilities use local deterministic state and never Python `hash()`.
 
 Full-fidelity records use explicit `initial_seed`, `initial_expand`, or
 `online_bo` stages; low-fidelity records are kept only in
 `low_fidelity_history.json`. Candidate pool, assignments, quotas, TED traces,
 selected indices, scoring, budget, RNG provenance, and configuration are
 written separately. Initialization artifacts and per-evaluation resume files
-use temporary files plus atomic rename.
+use temporary files plus atomic rename. `evaluation_stage` is audit metadata
+only and never participates in candidate training-seed derivation.
 
 `--resume_initialization` regenerates the unlabeled design and rejects any
 candidate-pool, checkpoint, strategy, quota, or configuration fingerprint
-mismatch. Completed candidate/stage pairs are never reevaluated. Fixed-budget
+mismatch. It also verifies the candidate fingerprint, both evaluation-seed
+fields, seed-scheme marker, decoder seed, and contiguous full-evaluation
+indices. Old experiment directories created with step- or stage-dependent
+candidate seeds are intentionally incompatible and cannot be mixed into a new
+run through resume or frozen-history replay. Completed candidate/stage pairs
+are never reevaluated. Fixed-budget
 online runs also restore the latest Exact GP and local qLogEI generator state.
 Adaptive runs additionally persist the complete convergence-monitor state and
 accumulated elapsed time. Resume from a clean committed iteration boundary is

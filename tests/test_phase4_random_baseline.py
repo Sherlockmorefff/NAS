@@ -199,6 +199,12 @@ def _valid_records(module, args, *, include_bo: bool = True):
     records = []
     for step in range(args.n_init):
         z = [(-0.5 + 0.1 * step)] * module.ARCH_NZ + [0.5] * hp_dim
+        fingerprint = module.make_candidate_fingerprint(
+            module.np.asarray(z, dtype=module.np.float32)
+        )
+        evaluation_seed = module.candidate_evaluation_seed(
+            args.seed, fingerprint, "full",
+        )
         records.append(
             {
                 "step": step,
@@ -218,9 +224,16 @@ def _valid_records(module, args, *, include_bo: bool = True):
                 "l2": 5e-4,
                 "condition_mask_vector": [1.0] * module.hp_dim_from_mode(args.hp_mode),
                 "seed_derivation": module.SEED_DERIVATION,
-                "candidate_eval_seed": module.stable_seed(
-                    args.seed, "candidate_eval", step,
+                "candidate_fingerprint": fingerprint,
+                "evaluation_stage": "initial_seed",
+                "evaluation_fidelity": "full",
+                "evaluation_seed": evaluation_seed,
+                "candidate_eval_seed": evaluation_seed,
+                "candidate_evaluation_seed_scheme": (
+                    module.CANDIDATE_EVALUATION_SEED_SCHEME
                 ),
+                "initialization_strategy": "schur",
+                "full_evaluation_index": step,
                 "decoder_seed": module.stable_seed(
                     args.seed, "decoder", module.np.asarray(z[: module.ARCH_NZ], dtype=module.np.float32),
                 ),
@@ -414,12 +427,36 @@ def test_frozen_history_rejects_non_finite_values(tmp_path, field):
 
 
 @runtime_only
-@pytest.mark.parametrize("field", ["decoder_seed", "candidate_eval_seed"])
+@pytest.mark.parametrize("field", ["decoder_seed", "candidate_eval_seed", "evaluation_seed"])
 def test_frozen_history_rejects_mismatched_derived_seeds(tmp_path, field):
     module = _module()
     args = _args()
     records = _valid_records(module, args)
     records[2][field] += 1
+    args.frozen_init_history = _write_history(tmp_path, records)
+    with pytest.raises(ValueError, match=field):
+        module.load_frozen_init_records(args)
+
+
+@runtime_only
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("candidate_evaluation_seed_scheme", "legacy_stage_seed_v0"),
+        ("candidate_evaluation_seed_scheme", None),
+        ("candidate_fingerprint", "f" * 64),
+    ],
+)
+def test_frozen_history_rejects_legacy_scheme_or_tampered_fingerprint(
+    tmp_path, field, value,
+):
+    module = _module()
+    args = _args()
+    records = _valid_records(module, args)
+    if value is None:
+        records[0].pop(field)
+    else:
+        records[0][field] = value
     args.frozen_init_history = _write_history(tmp_path, records)
     with pytest.raises(ValueError, match=field):
         module.load_frozen_init_records(args)
