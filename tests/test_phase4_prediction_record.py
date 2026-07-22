@@ -6,6 +6,8 @@ import ast
 import copy
 from types import SimpleNamespace
 
+import torch
+
 from surrogate.metrics import prediction_record_fields
 
 
@@ -212,9 +214,46 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
     def save_prediction_csv(records, output):
         events.append(("save", copy.deepcopy(records[-1])))
 
-    def evaluate(*args, **kwargs):
+    candidate_fingerprint = "candidate-fingerprint"
+    evaluation_seed = 123
+    decoder_seed = 456
+
+    def canonical_candidate_identity(
+        z_search, *, hp_mode, z_bound, candidate_fingerprint=None,
+    ):
+        assert hp_mode == "global4"
+        assert z_bound == 2.5
+        assert candidate_fingerprint in (None, "candidate-fingerprint")
+        canonical = torch.as_tensor(z_search, dtype=torch.float32).detach().cpu().numpy()
+        assert canonical.shape == (16,)
+        return canonical, "candidate-fingerprint"
+
+    def derive_candidate_evaluation_seed(search_seed, fingerprint, fidelity):
+        assert search_seed == 7
+        assert fingerprint == "candidate-fingerprint"
+        assert fidelity == "full"
+        return evaluation_seed
+
+    def validate_explicit_seed(value, *, expected, field):
+        assert field in ("evaluation_seed", "candidate_eval_seed")
+        assert value == expected == evaluation_seed
+        return value
+
+    def derive_stable_seed(search_seed, namespace, *components):
+        assert search_seed == 7
+        assert namespace == "decoder"
+        assert len(components) == 1
+        return decoder_seed
+
+    def evaluate(*call_args, **kwargs):
         events.append("evaluate")
-        return "z", {
+        z_search = call_args[1]
+        assert isinstance(z_search, torch.Tensor)
+        assert z_search.dtype == torch.float32
+        assert z_search.shape == (16,)
+        assert kwargs["candidate_fingerprint"] == candidate_fingerprint
+        assert kwargs["evaluation_seed"] == evaluation_seed
+        return z_search, {
             "val_acc": 0.75,
             "valid": True,
             "config": {"operations": ["GCNConv"], "edges": [[0, 1], [1, 2]]},
@@ -226,6 +265,14 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
 
     namespace = {
         "time": SimpleNamespace(monotonic=lambda: 1.0),
+        "torch": torch,
+        "_canonical_candidate_identity": canonical_candidate_identity,
+        "candidate_evaluation_seed": derive_candidate_evaluation_seed,
+        "_validated_explicit_seed": validate_explicit_seed,
+        "stable_seed": derive_stable_seed,
+        "CANDIDATE_EVALUATION_SEED_SCHEME": "test-scheme",
+        "SEED_DERIVATION": "sha256_v1",
+        "ARCH_NZ": 12,
         "_null_gp_record_fields": null_fields,
         "_save_prediction_csv": save_prediction_csv,
         "eval_candidate": evaluate,
@@ -235,6 +282,10 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
     }
     exec("from __future__ import annotations\n" + _function_source("_append_eval"), namespace)
     args = SimpleNamespace(
+        seed=7,
+        hp_mode="global4",
+        z_bound=2.5,
+        initial_selection_strategy="schur",
         output="unused",
         gp_update_mode="warm_refit",
         gp_checkpoint=None,
@@ -244,10 +295,11 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
     )
     predictor = FakePredictor()
     prediction_records = []
+    z_search = torch.linspace(-0.5, 0.5, 16, dtype=torch.float32)
 
     namespace["_append_eval"](
         object(),
-        "z",
+        z_search,
         object(),
         8,
         3,
@@ -265,7 +317,7 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
         0.1,
         True,
         0,
-        [1.0],
+        [1.0] * 16,
         best_acc=0.70,
         convergence_monitor=FakeMonitor(),
     )
@@ -284,6 +336,11 @@ def test_append_eval_persists_pre_update_prediction_and_metrics_before_gp_update
     snapshots = [event[1] for event in events if isinstance(event, tuple)]
     assert snapshots[0]["val_acc"] is None
     assert snapshots[0]["gp_pred_mean"] == 0.74
+    assert snapshots[0]["candidate_fingerprint"] == candidate_fingerprint
+    assert snapshots[0]["evaluation_seed"] == evaluation_seed
+    assert snapshots[0]["candidate_eval_seed"] == evaluation_seed
+    assert snapshots[0]["candidate_evaluation_seed_scheme"] == "test-scheme"
+    assert snapshots[0]["evaluation_seed"] == snapshots[0]["candidate_eval_seed"]
     assert snapshots[0]["gp_train_size_after"] == 10
     assert snapshots[1]["val_acc"] == 0.75
     assert snapshots[1]["prequential_spearman"] == 1.0
