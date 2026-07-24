@@ -49,6 +49,9 @@ def _load_final_eval_with_dependency_stubs():
     eval_utils_stub.DEFAULT_GAT_HEADS = 1
     eval_utils_stub.DEFAULT_SAGE_AGGR = "mean"
     eval_utils_stub.DEFAULT_GIN_EPS = 0.0
+    eval_utils_stub.stable_seed = (
+        lambda base_seed, namespace, *components: int(base_seed)
+    )
     eval_utils_stub.train_and_eval_arch = lambda **kwargs: (0.0, False, 0.0)
 
     hp_modes_stub = types.ModuleType("hp_modes")
