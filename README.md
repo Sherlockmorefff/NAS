@@ -12,6 +12,24 @@ The unified node-classification dataset protocol and isolated S0/G100/G150
 runner are documented in
 [docs/cross_dataset_protocol.md](docs/cross_dataset_protocol.md).
 
+Repository layout and launch scripts
+------------------------------------
+
+The current code, experiment-state, and artifact responsibilities are described
+in [docs/repository_layout.md](docs/repository_layout.md). Formal Python entry
+points such as `bo_phase4.py`, `cross_dataset_runner.py`, and `final_eval.py`
+remain at the repository root.
+
+Maintained shell launchers are organized under `scripts/`:
+
+    scripts/analysis/run_collect_results.sh --help
+    scripts/analysis/run_diagnostics_suite.sh --help
+    scripts/evaluation/run_final_eval_topk_seedfair.sh --help
+
+The historical paths remain compatible wrappers, so existing commands using
+`analyse/run_collect_results.sh`, `analyse/run_diagnostics_suite.sh`, or the
+root `run_final_eval_topk_seedfair.sh` continue to work.
+
 About
 -----
 

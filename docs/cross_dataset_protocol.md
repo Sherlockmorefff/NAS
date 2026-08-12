@@ -76,6 +76,13 @@ results/<run-tag>/<dataset>/<method>/search_seed<N>/
 logs/<run-tag>/<dataset>/<method>/search_seed<N>/
 ```
 
+The maintained Top-k seed-fair evaluation launcher is
+`scripts/evaluation/run_final_eval_topk_seedfair.sh`. The historical root
+command `run_final_eval_topk_seedfair.sh` remains a compatibility wrapper and
+forwards all arguments unchanged. Both forms resolve paths relative to the
+repository rather than the caller's working directory. See
+`docs/repository_layout.md` for the launcher and artifact policy.
+
 Flickr requires both the historical static-pool evidence and
 `flickr_continuous_extreme_preflight.py`. The latter deterministically searches
 the real continuous decoder domain without labels, excludes all five formal
