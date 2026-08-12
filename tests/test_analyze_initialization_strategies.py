@@ -40,9 +40,37 @@ def test_analysis_uses_explicit_own_history_and_marks_counterfactual_limit(tmp_p
         )
     (run / "history_final.json").write_text(json.dumps(rows), encoding="utf-8")
     (run / "budget_summary.json").write_text(
-        json.dumps({"low_fidelity_candidate_count": 6, "low_fidelity_actual_epochs": 120}),
+        json.dumps(
+            {
+                "requested_shortlist_count": 6,
+                "completed_low_fidelity_count": 6,
+                "low_fidelity_candidate_count": 6,
+                "low_fidelity_actual_epochs": 120,
+                "promoted_count": 3,
+                "selected_gmm_n_components": 2,
+            }
+        ),
         encoding="utf-8",
     )
+    with open(
+        run / "gmm_cluster_assignments.csv",
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["cluster_id", "responsibility_entropy"],
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"cluster_id": 0, "responsibility_entropy": 0.1},
+                {"cluster_id": 0, "responsibility_entropy": 0.2},
+                {"cluster_id": 1, "responsibility_entropy": 0.3},
+                {"cluster_id": 1, "responsibility_entropy": 0.4},
+            ]
+        )
     output = tmp_path / "analysis"
     assert analysis.main(
         [
@@ -60,6 +88,13 @@ def test_analysis_uses_explicit_own_history_and_marks_counterfactual_limit(tmp_p
     assert metric["full_evaluation_count"] == "4"
     assert metric["full_evals_to_val_0.72"] == "3"
     assert metric["low_fidelity_candidate_count"] == "6"
+    assert metric["requested_shortlist_count"] == "6"
+    assert metric["promoted_count"] == "3"
+    assert metric["selected_gmm_n_components"] == "2"
+    assert json.loads(metric["cluster_candidate_counts_json"]) == {
+        "0": 2,
+        "1": 2,
+    }
     assert metric["test_metric_status"] == "unavailable:no_explicit_final_results"
     assert metric["final_test_mean_best"] == ""
 

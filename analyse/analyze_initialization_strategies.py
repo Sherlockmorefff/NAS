@@ -381,6 +381,8 @@ def analyze_run(
         metrics[f"full_evals_to_val_{threshold:g}"] = reached
 
     assignment_path = run_dir / "wgmm_assignments.csv"
+    if not assignment_path.exists():
+        assignment_path = run_dir / "gmm_cluster_assignments.csv"
     if assignment_path.exists():
         with open(assignment_path, "r", encoding="utf-8", newline="") as handle:
             assignments = list(csv.DictReader(handle))
@@ -403,11 +405,19 @@ def analyze_run(
     if budget_path.exists():
         budget = _read_json(budget_path)
         for key in (
+            "requested_shortlist_count",
+            "completed_low_fidelity_count",
             "low_fidelity_candidate_count",
+            "low_fidelity_invalid_count",
+            "invalid_replenished_count",
+            "promoted_count",
+            "promoted_low_fidelity_invalid_count",
+            "promoted_full_invalid_count",
             "low_fidelity_actual_epochs",
             "low_fidelity_wall_seconds",
             "low_fidelity_gpu_seconds",
             "low_fidelity_equivalent_full_evaluations",
+            "selected_gmm_n_components",
         ):
             metrics[key] = budget.get(key)
     return metrics, best_curve
