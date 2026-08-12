@@ -4,11 +4,11 @@
   "source": {
     "artifact_family": "formal_seedfair_full300_*_global4_seed{0..4}_pool768",
     "recovered_from": [
-      "logs/bo_phase4/train_formal_seedfair_full300_schur_global4_seed0_pool768_0722_0541.json",
-      "logs/bo_phase4/train_formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768_0722_0610.json",
-      "logs/bo_phase4/train_formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768_0722_0557.json",
-      "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768/initialization_config.json",
-      "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768/initialization_config.json"
+      "legacy_artifacts/pre_20260813/logs/bo_phase4/train_formal_seedfair_full300_schur_global4_seed0_pool768_0722_0541.json",
+      "legacy_artifacts/pre_20260813/logs/bo_phase4/train_formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768_0722_0610.json",
+      "legacy_artifacts/pre_20260813/logs/bo_phase4/train_formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768_0722_0557.json",
+      "legacy_artifacts/pre_20260813/results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768/initialization_config.json",
+      "legacy_artifacts/pre_20260813/results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768/initialization_config.json"
     ]
   },
   "common": {

@@ -29,11 +29,11 @@ def _read(path: Path) -> Any:
         return json.load(handle)
 
 
-def _reference_method_overhead(repo: Path) -> dict[str, dict[str, float]]:
+def _reference_method_overhead(legacy_results: Path) -> dict[str, dict[str, float]]:
     paths = {
-        "S0": repo / "results/formal_seedfair_full300_schur_global4_seed0_pool768",
-        "G100": repo / "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768",
-        "G150": repo / "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768",
+        "S0": legacy_results / "formal_seedfair_full300_schur_global4_seed0_pool768",
+        "G100": legacy_results / "formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768",
+        "G150": legacy_results / "formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768",
     }
     result: dict[str, dict[str, float]] = {}
     for method, root in paths.items():
@@ -121,12 +121,12 @@ def _dataset_measurements(preflight: Path, dataset: str) -> dict[str, Any]:
     }
 
 
-def _cora_reference_measurements(repo: Path, preflight: Path) -> dict[str, Any]:
+def _cora_reference_measurements(legacy_results: Path, preflight: Path) -> dict[str, Any]:
     timing = _read(preflight / "timing150" / "cora" / "smoke_result.json")
     roots = (
-        repo / "results/formal_seedfair_full300_schur_global4_seed0_pool768",
-        repo / "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768",
-        repo / "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768",
+        legacy_results / "formal_seedfair_full300_schur_global4_seed0_pool768",
+        legacy_results / "formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed0_pool768",
+        legacy_results / "formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768",
     )
     full_rates: list[float] = []
     low_rates: list[float] = []
@@ -248,10 +248,13 @@ def _two_gpu_makespan_seconds(durations: Sequence[float]) -> float:
 def build(
     repo: Path,
     *,
+    legacy_root: Path | None = None,
     flickr_continuous_preflight: Path | None = None,
 ) -> dict[str, Any]:
-    preflight = repo / "results" / "cross_dataset_v1_preflight"
-    overhead = _reference_method_overhead(repo)
+    archive = legacy_root or repo / "legacy_artifacts" / "pre_20260813"
+    legacy_results = archive / "results"
+    preflight = legacy_results / "cross_dataset_v1_preflight"
+    overhead = _reference_method_overhead(legacy_results)
     measurements = {
         dataset: _dataset_measurements(preflight, dataset)
         for dataset in TARGET_DATASETS
@@ -424,6 +427,11 @@ def build(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default=str(REPO_ROOT))
+    parser.add_argument(
+        "--legacy-root",
+        default=None,
+        help="archive containing the historical results/ input tree",
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--flickr-continuous-preflight", default=None)
     return parser.parse_args(argv)
@@ -433,6 +441,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     payload = build(
         Path(args.repo).resolve(),
+        legacy_root=(
+            None if args.legacy_root is None else Path(args.legacy_root).resolve()
+        ),
         flickr_continuous_preflight=(
             None
             if args.flickr_continuous_preflight is None

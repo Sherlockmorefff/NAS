@@ -22,3 +22,11 @@ result*
 # Local, machine-specific repository inventory snapshots
 artifacts/indexes/repository_inventory_*/
 log*
+
+# Local scientific artifacts: keep policy/readme files tracked, payloads local.
+legacy_artifacts/*
+!legacy_artifacts/README.md
+checkpoints/*
+!checkpoints/README.md
+artifacts/reference/*
+!artifacts/reference/README.md

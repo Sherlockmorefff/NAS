@@ -77,11 +77,11 @@ detect_results_root() {
     echo "results"
     return
   fi
-  if result_root_has_artifacts "results-wgmm1"; then
-    echo "results-wgmm1"
+  if result_root_has_artifacts "legacy_artifacts/pre_20260813/results-wgmm1"; then
+    echo "legacy_artifacts/pre_20260813/results-wgmm1"
     return
   fi
-  for candidate in results-*; do
+  for candidate in legacy_artifacts/pre_20260813/results-*; do
     if result_root_has_artifacts "$candidate"; then
       echo "$candidate"
       return
@@ -365,7 +365,7 @@ Skipped diagnostics are expected when Cora, torch_geometric, botorch/gpytorch, o
 GMM density is not predicted accuracy. GP surrogate predicts search-time validation accuracy, not final test accuracy.
 
 To scan a non-default results directory:
-  RESULTS_ROOT=results-wgmm1 BUNDLE_DIR=results_analysis_bundle_after_diagnostics_wgmm1 scripts/analysis/run_diagnostics_suite.sh
+  RESULTS_ROOT=legacy_artifacts/pre_20260813/results-wgmm1 BUNDLE_DIR=/tmp/wgmm1-diagnostics scripts/analysis/run_diagnostics_suite.sh
 
 To force a Cora location:
   CORA_ROOT=Cora scripts/analysis/run_diagnostics_suite.sh
