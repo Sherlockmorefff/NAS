@@ -218,7 +218,10 @@ def build_differentiable_dvae(joint_vae) -> DVAEDifferentiable:
 
 if __name__ == '__main__':
     import sys
-    sys.path.insert(0, '/mnt/project')
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
     from nas_space import JointSpaceVAE
 
     class ArchArgs:

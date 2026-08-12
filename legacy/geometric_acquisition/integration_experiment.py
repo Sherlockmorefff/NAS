@@ -11,21 +11,28 @@ test_integration.py
 6. 完整 BO 迷你循环（10步，合成目标函数）
 """
 
-import sys, os
-sys.path.insert(0, '/mnt/project')
-sys.path.insert(0, '/home/claude')
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 import torch
 import torch.nn.functional as F
 import numpy as np
 
 from nas_space import JointSpaceVAE
-from dvae_differentiable import build_differentiable_dvae
-from jacobian_utils import (
+from legacy.geometric_acquisition.dvae_differentiable import (
+    build_differentiable_dvae,
+)
+from legacy.geometric_acquisition.jacobian_utils import (
     compute_jacobian, compute_jacobian_svd,
     JacobianCache, analyze_latent_smoothness
 )
-from acqf_geometric import GeometricLogEI, optimize_geometric_logei
+from legacy.geometric_acquisition.acqf_geometric import (
+    GeometricLogEI,
+    make_acqf_and_optimize,
+)
 
 DEVICE = 'cpu'
 NZ     = 56
@@ -83,7 +90,7 @@ def test_jacobian_consistency(dvae_diff):
     J_rp   = compute_jacobian(dvae_diff, z, method='random_proj',   tau=0.5, n_probes=20)
     J_auto = compute_jacobian(dvae_diff, z, method='autograd',      tau=0.5)
 
-    from jacobian_utils import svd_decompose
+    from legacy.geometric_acquisition.jacobian_utils import svd_decompose
 
     res_fd   = svd_decompose(J_fd,   top_k_orth=4)
     res_rp   = svd_decompose(J_rp,   top_k_orth=4)
@@ -318,7 +325,7 @@ def test_mini_bo_loop(dvae_diff):
         Y_t = torch.tensor(Y_obs, dtype=torch.float32).unsqueeze(-1)
 
         try:
-            z_next = optimize_geometric_logei(
+            z_next = make_acqf_and_optimize(
                 X_t, Y_t,
                 dvae_diff      = dvae_diff,
                 search_dim     = NZ,

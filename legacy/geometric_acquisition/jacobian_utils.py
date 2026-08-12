@@ -293,10 +293,15 @@ def analyze_latent_smoothness(
 
 if __name__ == '__main__':
     import sys
-    sys.path.insert(0, '/mnt/project')
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
 
     from nas_space import JointSpaceVAE
-    from dvae_differentiable import build_differentiable_dvae
+    from legacy.geometric_acquisition.dvae_differentiable import (
+        build_differentiable_dvae,
+    )
 
     class ArchArgs:
         max_n=7; num_vertex_type=8; START_TYPE=0; END_TYPE=1
