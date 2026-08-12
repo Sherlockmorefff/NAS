@@ -33,7 +33,13 @@ SOURCE_GATE_DISCOVERY_RULES = [
     {"root": ".", "recursive": False, "suffixes": [".py"]},
     {"root": "analyse", "recursive": True, "suffixes": [".py"]},
     {"root": "configs", "recursive": True, "suffixes": [".json"]},
+    {"root": "scripts", "recursive": True, "suffixes": [".py", ".sh"]},
     {"root": "surrogate", "recursive": True, "suffixes": [".py"]},
+    {
+        "root": "legacy/phased_cora_pipeline",
+        "recursive": True,
+        "suffixes": [".py"],
+    },
 ]
 SNAPSHOT_EXCLUDED_PREFIXES = (
     ".git/",
@@ -153,6 +159,10 @@ def _category(relative: str, formal_required: bool) -> str:
             return "formal_surrogate_runtime"
         if relative.startswith("analyse/"):
             return "formal_analysis_runtime"
+        if relative.startswith("scripts/"):
+            return "formal_operational_utility"
+        if relative.startswith("legacy/phased_cora_pipeline/"):
+            return "legacy_compatibility_runtime"
         return "formal_search_runtime"
     if relative.startswith("tests/"):
         return "maintained_test"
