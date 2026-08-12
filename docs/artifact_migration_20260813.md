@@ -40,7 +40,9 @@ The initial cleanup removed eleven untracked Python `__pycache__/` directories
 (517,865 bytes total) and three verified empty run directories (30
 directory-entry bytes). Required validation then regenerated 1,618,294 bytes of
 pytest/bytecode cache, which was recorded and removed after the two full test
-runs. Total recorded removal was 2,136,189 bytes. Each cache was checked for tracked files
+runs. A final focused regression check regenerated another 694,130 bytes of
+cache, which was likewise recorded before removal. Total recorded removal was
+2,830,319 bytes. Each cache was checked for tracked files
 and each run directory was checked to be empty. No checkpoint, history,
 manifest/provenance, SQLite state, archive, or unique diagnostic was deleted.
 The pre-deletion path, type, size, reason, and replacement are recorded in the
