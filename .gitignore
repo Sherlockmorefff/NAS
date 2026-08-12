@@ -18,4 +18,7 @@ logs-LHS/
 # 忽略实验结果分析
 results_analysis_bundle/
 result*
+
+# Local, machine-specific repository inventory snapshots
+artifacts/indexes/repository_inventory_*/
 log*
