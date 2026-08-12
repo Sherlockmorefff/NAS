@@ -99,7 +99,9 @@ loader or a separate read-only audit before its source is classified.
   random state. Candidate sample weights are all one, so this is mathematically
   an **ordinary diagonal GMM**, not a weighted-data fit and not a checkpoint
   WGMM. It is an explicitly named fallback/ablation and must not silently stand
-  in for a formal checkpoint-WGMM experiment.
+  in for a formal checkpoint-WGMM experiment. The separate fixed K=6
+  conditional-Schur initializer is documented in
+  [`gmm_clustered_schur.md`](gmm_clustered_schur.md).
 
 Responsibilities, entropy, component weights, fit parameters, source-file or
 fit-configuration fingerprints, and a separate fingerprint of the effective
@@ -133,7 +135,8 @@ time, and epoch-ratio equivalent full evaluations are separate fields in
 `budget_summary.json`. Low-fidelity observations never enter the Exact GP.
 The same candidate uses the same `z_search`, HP fingerprint, candidate-specific
 fidelity-independent decoder seed, and decoded-architecture fingerprint at low
-and full fidelity. The GNN training seed remains fidelity/stage-specific.
+and full fidelity. The GNN training seed is fidelity-specific and remains
+independent of method, stage, order, and full-evaluation index.
 
 Quota modes are `equal`, `proportional`, and `hybrid`. Hybrid uses
 `alpha / K + (1-alpha) * pi_k`, where `pi_k` is the unlabeled pool's normalized
@@ -154,7 +157,7 @@ cluster, which is why their epochs and timings are reported separately.
 The selector is optional:
 
 ```text
---initial_selection_strategy schur|wgmm_ted|wgmm_ted_lowfid
+--initial_selection_strategy schur|wgmm_ted|wgmm_ted_lowfid|gmm_schur_lowfid
 ```
 
 The default is `schur`. With no new arguments, the old `initial_points`, RNG
@@ -170,7 +173,7 @@ If `--max_total_full_evals` is supplied, startup requires exactly:
 initial_seed_evals + initial_expand_evals + n_iter == max_total_full_evals
 ```
 
-The supported 300-full-evaluation comparisons are:
+The supported 300-full-evaluation WGMM-TED comparisons are:
 
 | Run | Seed | Expansion | Online |
 |---|---:|---:|---:|
@@ -180,6 +183,9 @@ The supported 300-full-evaluation comparisons are:
 | WGMM-TED-150 | 50 | 100 | 150 |
 | WGMM-TED-200 | 50 | 150 | 100 |
 | WGMM-TED-LF-200 | 50 | 150 | 100 |
+
+The separate strict 50/200/100/150 K6-LF protocol is documented in
+[`gmm_clustered_schur.md`](gmm_clustered_schur.md).
 
 Use the same search seed, LHS pool size, Exact GP settings, data split,
 full-fidelity settings, and qLogEI settings. Different initial points are

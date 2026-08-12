@@ -1,9 +1,16 @@
 D-VAE -- A Variational Autoencoder for Directed Acyclic Graphs
 ===============================================================================
 
-The optional Exact-GP WGMM-clustered TED two-stage initializer is documented
-in [docs/wgmm_clustered_ted.md](docs/wgmm_clustered_ted.md). The default Phase4
-initializer remains the legacy Schur strategy.
+The optional Exact-GP clustered initializers are documented in
+[docs/wgmm_clustered_ted.md](docs/wgmm_clustered_ted.md) and
+[docs/gmm_clustered_schur.md](docs/gmm_clustered_schur.md). The latter covers
+the fixed K=6 ordinary diagonal-GMM plus shared-kernel conditional Schur plus
+low-fidelity path. The default Phase4 initializer remains the legacy Schur
+strategy.
+
+The unified node-classification dataset protocol and isolated S0/G100/G150
+runner are documented in
+[docs/cross_dataset_protocol.md](docs/cross_dataset_protocol.md).
 
 About
 -----
