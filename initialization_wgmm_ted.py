@@ -21,12 +21,14 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 import torch
 
+from eval_utils import stable_seed
 from surrogate.accuracy_gp import normalize_search_vector
 from weighted_diag_gmm_init import WeightedDiagonalGMM, standardize_apply, standardize_fit
 
 
 WGMM_TED_FORMAT_VERSION = 1
 WGMM_ASSIGNMENT_SOURCES = ("checkpoint", "gmm_fit_pool")
+GMM_COMPONENT_SELECTION_MODES = ("fixed", "bic")
 QUOTA_MODES = ("equal", "proportional", "hybrid")
 
 
@@ -266,14 +268,15 @@ def fit_pool_gmm(
     if not np.isfinite(arch).all():
         raise ValueError("z_arch contains NaN or Inf")
     standardized, mean, std = standardize_fit(arch)
-    model = WeightedDiagonalGMM(
+    model = _fit_standardized_pool_gmm(
+        standardized,
         n_components=int(n_components),
+        random_state=int(random_state),
+        covariance_regularization=float(covariance_regularization),
+        var_floor=float(var_floor),
         max_iter=int(max_iter),
         tol=float(tol),
-        var_floor=float(var_floor),
-        reg_covar=float(covariance_regularization),
-        random_state=int(random_state),
-    ).fit(standardized, sample_weight=np.ones(arch.shape[0], dtype=np.float64))
+    )
     assert model.weights_ is not None and model.means_ is not None and model.vars_ is not None
     source_config = {
         "source": "gmm_fit_pool",
@@ -296,6 +299,307 @@ def fit_pool_gmm(
         standardize_mean=mean,
         standardize_std=std,
     ).validate(arch.shape[1])
+
+
+def _fit_standardized_pool_gmm(
+    standardized: np.ndarray,
+    *,
+    n_components: int,
+    random_state: int,
+    covariance_regularization: float,
+    var_floor: float,
+    max_iter: int,
+    tol: float,
+) -> WeightedDiagonalGMM:
+    features = np.asarray(standardized, dtype=np.float64)
+    if features.ndim != 2 or features.shape[0] == 0:
+        raise ValueError("standardized GMM features must be a non-empty 2D array")
+    if not np.isfinite(features).all():
+        raise ValueError("standardized GMM features contain NaN or Inf")
+    return WeightedDiagonalGMM(
+        n_components=int(n_components),
+        max_iter=int(max_iter),
+        tol=float(tol),
+        var_floor=float(var_floor),
+        reg_covar=float(covariance_regularization),
+        random_state=int(random_state),
+    ).fit(features, sample_weight=np.ones(features.shape[0], dtype=np.float64))
+
+
+def diagonal_gmm_parameter_count(n_components: int, n_features: int) -> int:
+    n_components = int(n_components)
+    n_features = int(n_features)
+    if n_components <= 0 or n_features <= 0:
+        raise ValueError("GMM component and feature counts must be positive")
+    return n_components * (2 * n_features + 1) - 1
+
+
+def diagonal_gmm_bic(
+    log_likelihood: float,
+    *,
+    n_samples: int,
+    n_components: int,
+    n_features: int,
+) -> float:
+    log_likelihood = float(log_likelihood)
+    n_samples = int(n_samples)
+    if not math.isfinite(log_likelihood):
+        raise ValueError("GMM log likelihood must be finite")
+    if n_samples <= 0:
+        raise ValueError("GMM sample count must be positive")
+    parameter_count = diagonal_gmm_parameter_count(n_components, n_features)
+    return -2.0 * log_likelihood + parameter_count * math.log(n_samples)
+
+
+def _numerically_tied(left: float, right: float) -> bool:
+    return math.isclose(float(left), float(right), rel_tol=1e-12, abs_tol=1e-12)
+
+
+def select_bic_model_records(
+    records: Sequence[dict[str, Any]],
+) -> tuple[int, int, list[dict[str, Any]]]:
+    """Mark converged per-K restart winners and the final BIC model."""
+
+    marked = [dict(record) for record in records]
+    valid_by_k: dict[int, list[int]] = {}
+    for position, record in enumerate(marked):
+        record["is_best_restart_for_k"] = False
+        record["is_final_model"] = False
+        record["selection_eligible"] = False
+        record["selection_exclusion_reason"] = ""
+        record["k_available"] = None
+        record["k_selection_status"] = "invalid_component_count"
+        if not bool(record.get("fit_success")):
+            record["selection_exclusion_reason"] = "fit_failed"
+            continue
+        if record.get("converged") is not True:
+            record["selection_exclusion_reason"] = "not_converged"
+            continue
+        if record.get("parameters_finite") is not True:
+            record["selection_exclusion_reason"] = "non_finite_parameters"
+            continue
+        try:
+            component_count = int(record["n_components"])
+            restart_id = int(record["restart_id"])
+            log_likelihood = float(record["log_likelihood"])
+            bic = float(record["bic"])
+        except (KeyError, TypeError, ValueError):
+            record["selection_exclusion_reason"] = "invalid_numeric_fields"
+            continue
+        if component_count <= 0:
+            record["selection_exclusion_reason"] = "invalid_component_count"
+            continue
+        if restart_id < 0:
+            record["selection_exclusion_reason"] = "invalid_restart_id"
+            continue
+        if not math.isfinite(log_likelihood):
+            record["selection_exclusion_reason"] = "non_finite_log_likelihood"
+            continue
+        if not math.isfinite(bic):
+            record["selection_exclusion_reason"] = "non_finite_bic"
+            continue
+        record["selection_eligible"] = True
+        record["selection_exclusion_reason"] = ""
+        valid_by_k.setdefault(component_count, []).append(position)
+
+    known_components: set[int] = set()
+    for record in marked:
+        try:
+            component_count = int(record["n_components"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if component_count > 0:
+            known_components.add(component_count)
+            available = component_count in valid_by_k
+            record["k_available"] = available
+            record["k_selection_status"] = (
+                "available" if available else "unavailable"
+            )
+    if not valid_by_k:
+        unavailable = ", ".join(str(value) for value in sorted(known_components))
+        suffix = "" if not unavailable else f" for K={unavailable}"
+        raise RuntimeError(
+            "all BIC-GMM component counts are unavailable: no restart satisfied "
+            "fit_success=True, converged=True, finite likelihood/BIC, and finite "
+            f"parameters{suffix}"
+        )
+
+    best_positions: list[int] = []
+    for component_count in sorted(valid_by_k):
+        positions = valid_by_k[component_count]
+        best_log_likelihood = max(float(marked[pos]["log_likelihood"]) for pos in positions)
+        tied = [
+            pos
+            for pos in positions
+            if _numerically_tied(float(marked[pos]["log_likelihood"]), best_log_likelihood)
+        ]
+        best_position = min(tied, key=lambda pos: int(marked[pos]["restart_id"]))
+        marked[best_position]["is_best_restart_for_k"] = True
+        best_positions.append(best_position)
+
+    best_bic = min(float(marked[pos]["bic"]) for pos in best_positions)
+    tied_models = [
+        pos
+        for pos in best_positions
+        if _numerically_tied(float(marked[pos]["bic"]), best_bic)
+    ]
+    final_position = min(tied_models, key=lambda pos: int(marked[pos]["n_components"]))
+    marked[final_position]["is_final_model"] = True
+    selected_components = int(marked[final_position]["n_components"])
+    selected_restart = int(marked[final_position]["restart_id"])
+    for record in marked:
+        record["selected_n_components"] = selected_components
+        record["selected_restart_id"] = selected_restart
+    return selected_components, selected_restart, marked
+
+
+def fit_pool_gmm_bic(
+    z_arch: Any,
+    *,
+    search_seed: int,
+    candidate_pool_fingerprint: str,
+    min_components: int,
+    max_components: int,
+    restarts: int,
+    covariance_regularization: float,
+    var_floor: float = 1e-4,
+    max_iter: int = 100,
+    tol: float = 1e-4,
+) -> tuple[DiagonalGMMParameters, list[dict[str, Any]]]:
+    """Fit deterministic ordinary diagonal-GMM restarts and select K by BIC."""
+
+    arch = np.asarray(z_arch, dtype=np.float64)
+    if arch.ndim != 2 or arch.shape[0] == 0:
+        raise ValueError("z_arch must be a non-empty 2D array")
+    if not np.isfinite(arch).all():
+        raise ValueError("z_arch contains NaN or Inf")
+    if not isinstance(candidate_pool_fingerprint, str) or not candidate_pool_fingerprint:
+        raise ValueError("candidate_pool_fingerprint must be a non-empty string")
+    min_components = int(min_components)
+    max_components = int(max_components)
+    restarts = int(restarts)
+    if min_components <= 0 or max_components < min_components:
+        raise ValueError("invalid BIC-GMM component range")
+    if min_components > 1 or max_components < 1:
+        raise ValueError("BIC-GMM component range must include K=1")
+    if max_components > arch.shape[0]:
+        raise ValueError(
+            f"BIC-GMM max components {max_components} exceeds sample count {arch.shape[0]}"
+        )
+    if restarts <= 0:
+        raise ValueError("BIC-GMM restarts must be positive")
+
+    standardized, mean, std = standardize_fit(arch)
+    n_samples, n_features = standardized.shape
+    fitted_models: dict[tuple[int, int], WeightedDiagonalGMM] = {}
+    trace: list[dict[str, Any]] = []
+    for component_count in range(min_components, max_components + 1):
+        parameter_count = diagonal_gmm_parameter_count(component_count, n_features)
+        for restart_id in range(restarts):
+            restart_seed = stable_seed(
+                int(search_seed),
+                "gmm_bic",
+                candidate_pool_fingerprint,
+                int(component_count),
+                int(restart_id),
+            )
+            record: dict[str, Any] = {
+                "n_components": int(component_count),
+                "restart_id": int(restart_id),
+                "restart_seed": int(restart_seed),
+                "fit_success": False,
+                "converged": False,
+                "parameters_finite": False,
+                "n_iter": None,
+                "log_likelihood": None,
+                "parameter_count": int(parameter_count),
+                "bic": None,
+                "fit_error": "",
+                "candidate_pool_fingerprint": candidate_pool_fingerprint,
+                "gmm_parameter_fingerprint": None,
+            }
+            try:
+                model = _fit_standardized_pool_gmm(
+                    standardized,
+                    n_components=component_count,
+                    random_state=restart_seed,
+                    covariance_regularization=float(covariance_regularization),
+                    var_floor=float(var_floor),
+                    max_iter=int(max_iter),
+                    tol=float(tol),
+                )
+                log_likelihood = float(n_samples) * float(model.lower_bound_)
+                bic = diagonal_gmm_bic(
+                    log_likelihood,
+                    n_samples=n_samples,
+                    n_components=component_count,
+                    n_features=n_features,
+                )
+                if not math.isfinite(log_likelihood) or not math.isfinite(bic):
+                    raise FloatingPointError("GMM produced a non-finite likelihood or BIC")
+                assert model.weights_ is not None
+                assert model.means_ is not None
+                assert model.vars_ is not None
+                parameters = DiagonalGMMParameters(
+                    weights=model.weights_.copy(),
+                    means=model.means_.copy(),
+                    variances=model.vars_.copy(),
+                    source="gmm_fit_pool",
+                    source_fingerprint="pending_bic_selection",
+                    standardize_mean=mean,
+                    standardize_std=std,
+                ).validate(n_features)
+                record.update(
+                    {
+                        "fit_success": True,
+                        "converged": bool(model.converged_),
+                        "parameters_finite": True,
+                        "n_iter": int(model.n_iter_),
+                        "log_likelihood": log_likelihood,
+                        "bic": bic,
+                        "gmm_parameter_fingerprint": parameters.parameter_fingerprint,
+                    }
+                )
+                fitted_models[(component_count, restart_id)] = model
+            except Exception as exc:
+                record["fit_error"] = f"{type(exc).__name__}: {exc}"
+            trace.append(record)
+
+    selected_components, selected_restart, marked_trace = select_bic_model_records(trace)
+    selected_model = fitted_models[(selected_components, selected_restart)]
+    assert selected_model.weights_ is not None
+    assert selected_model.means_ is not None
+    assert selected_model.vars_ is not None
+    source_config = {
+        "source": "gmm_fit_pool",
+        "component_selection": "bic",
+        "pool_fingerprint": candidate_pool_fingerprint,
+        "search_seed": int(search_seed),
+        "min_components": min_components,
+        "max_components": max_components,
+        "restarts": restarts,
+        "selected_n_components": selected_components,
+        "selected_restart_id": selected_restart,
+        "covariance_regularization": float(covariance_regularization),
+        "var_floor": float(var_floor),
+        "max_iter": int(max_iter),
+        "tol": float(tol),
+        "candidate_sample_weights": "uniform_ones",
+        "estimator_semantics": "ordinary_diagonal_gmm",
+    }
+    selected_parameters = DiagonalGMMParameters(
+        weights=selected_model.weights_.copy(),
+        means=selected_model.means_.copy(),
+        variances=selected_model.vars_.copy(),
+        source="gmm_fit_pool",
+        source_fingerprint=canonical_json_fingerprint(source_config),
+        standardize_mean=mean,
+        standardize_std=std,
+    ).validate(n_features)
+    for record in marked_trace:
+        if bool(record["is_final_model"]):
+            record["gmm_parameter_fingerprint"] = selected_parameters.parameter_fingerprint
+    return selected_parameters, marked_trace
 
 
 def gmm_responsibilities(z_arch: Any, parameters: DiagonalGMMParameters) -> np.ndarray:
@@ -364,7 +668,16 @@ def allocate_cluster_quotas(
     active = np.asarray(sorted(key for key, value in capacities.items() if int(value) > 0), dtype=np.int64)
     total_capacity = int(sum(max(0, int(capacities[int(key)])) for key in active))
     if budget > total_capacity:
-        raise ValueError(f"budget {budget} exceeds active cluster capacity {total_capacity}")
+        normalized_capacities = {
+            int(key): max(0, int(value))
+            for key, value in sorted(capacities.items())
+        }
+        raise ValueError(
+            f"cluster quota capacity is insufficient: requested={budget} "
+            f"available_capacity={total_capacity} "
+            f"per_cluster_capacity={normalized_capacities} "
+            f"unfilled_count={budget - total_capacity}"
+        )
     if active.size == 0:
         if budget != 0:
             raise ValueError("cannot allocate positive budget to empty clusters")

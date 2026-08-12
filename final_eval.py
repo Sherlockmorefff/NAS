@@ -13,9 +13,18 @@ import re
 import sys
 import tempfile
 import time
+import traceback
 import warnings
 from datetime import datetime
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
+
+from deterministic_runtime import (
+    assert_strict_torch_determinism,
+    deterministic_provenance,
+    prepare_deterministic_environment,
+)
+
+prepare_deterministic_environment()
 
 import numpy as np
 import torch
@@ -24,6 +33,17 @@ from torch_geometric.datasets import Planetoid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from dataset_utils import (  # noqa: E402
+    DATASET_CONTEXT_FIELDS,
+    assert_dataset_context_matches,
+    dataset_context_from_manifest,
+    history_dataset_context,
+    legacy_cora_context,
+    load_dataset_from_request,
+    resolve_dataset_request,
+    write_dataset_artifacts,
+)
+from evaluation_errors import InfrastructureEvaluationError  # noqa: E402
 from eval_utils import (  # noqa: E402
     DEFAULT_GAT_HEADS,
     DEFAULT_GIN_EPS,
@@ -72,6 +92,12 @@ SIGNATURE_FIELDS = (
     "gin_eps_by_layer",
 )
 IDENTITY_FIELDS = (
+    "dataset",
+    "dataset_content_fingerprint",
+    "split_fingerprint",
+    "graph_transform",
+    "training_mode",
+    "metric",
     "method_label",
     "search_seed",
     "candidate_rank",
@@ -110,12 +136,21 @@ PER_REPLICATE_FIELDS = (
     "valid",
     "best_epoch",
     "epochs_ran",
+    "trajectory_hash",
+    "model_final_state_hash",
+    "deterministic_provenance",
     "train_time_seconds",
     *ARCHITECTURE_HP_FIELDS,
 )
 # Backward-compatible public name used by existing callers/tests.
 PER_SEED_FIELDS = PER_REPLICATE_FIELDS
 AGGREGATE_FIELDS = (
+    "dataset",
+    "dataset_content_fingerprint",
+    "split_fingerprint",
+    "graph_transform",
+    "training_mode",
+    "metric",
     "method_label",
     "search_seed",
     "candidate_rank",
@@ -140,6 +175,20 @@ AGGREGATE_FIELDS = (
     "n_seeds",
     *ARCHITECTURE_HP_FIELDS,
 )
+
+
+def _strict_runtime_provenance(device: Any | None = None) -> dict[str, Any] | None:
+    """Assert real PyTorch state while retaining dependency-stub test compatibility."""
+
+    if hasattr(torch, "are_deterministic_algorithms_enabled"):
+        assert_strict_torch_determinism(torch)
+        return deterministic_provenance(torch, device=device)
+    if getattr(torch, "__version__", None) is None and getattr(torch, "__file__", None) is None:
+        # The history-only unit tests intentionally load this module with a
+        # minimal non-training torch stub.  A real PyTorch module may never
+        # bypass the strict assertion above.
+        return None
+    raise RuntimeError("real PyTorch lacks deterministic-algorithm APIs")
 
 
 def setup_logger(log_dir: str, script_name: str, version: str):
@@ -215,7 +264,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--eval_epochs", type=int, default=300)
     parser.add_argument("--patience", type=int, default=80)
     parser.add_argument("--hp_mode", type=str, default="global4", choices=HP_MODE_CHOICES)
-    parser.add_argument("--cora_root", type=str, default="/tmp/Cora")
+    parser.add_argument("--dataset", type=str, default="cora")
+    parser.add_argument("--data_root", type=str, default=None)
+    parser.add_argument(
+        "--cora_root",
+        type=str,
+        default=None,
+        help="legacy Cora-only data root; mutually exclusive with --data_root",
+    )
+    parser.add_argument("--split_seed", type=int, default=None)
+    parser.add_argument(
+        "--ogbn_arxiv_edge_mode",
+        choices=("directed", "undirected"),
+        default=None,
+    )
+    parser.add_argument("--require_cuda", action="store_true")
     parser.add_argument("--output", type=str, default="results/final_eval_history_topk")
     parser.add_argument("--version", type=str, default="final_eval_history_topk")
     parser.add_argument("--log_dir", type=str, default="logs/")
@@ -225,6 +288,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(raw_argv)
+    args._dataset_explicit = "--dataset" in raw_argv
+    args._data_root_explicit = "--data_root" in raw_argv
+    args._cora_root_explicit = "--cora_root" in raw_argv
+    args._split_seed_explicit = "--split_seed" in raw_argv
+    args._ogbn_arxiv_edge_mode_explicit = (
+        "--ogbn_arxiv_edge_mode" in raw_argv
+    )
     legacy_options_explicit = any(
         option in raw_argv for option in ("--seed_start", "--n_seeds")
     )
@@ -241,6 +311,179 @@ def load_cora(root: str, device: torch.device):
     pyg_root = os.path.dirname(root) if os.path.basename(root) == "Cora" else root
     dataset = Planetoid(root=pyg_root, name="Cora", transform=T.NormalizeFeatures())
     return dataset[0].to(device), dataset.num_features, dataset.num_classes
+
+
+def _final_dataset_context(args: argparse.Namespace) -> dict[str, Any]:
+    raw = getattr(args, "dataset_context", None)
+    if isinstance(raw, dict):
+        return {key: raw.get(key) for key in DATASET_CONTEXT_FIELDS}
+    return legacy_cora_context()
+
+
+def _resolve_final_dataset_request(
+    args: argparse.Namespace,
+    records: Sequence[dict[str, Any]],
+):
+    history_context, legacy_history = history_dataset_context(
+        args.history_path, records
+    )
+    history_name = str(history_context["canonical_name"])
+    requested_name = args.dataset if getattr(args, "_dataset_explicit", False) else history_name
+    if getattr(args, "_dataset_explicit", False):
+        explicit = resolve_dataset_request(
+            requested_name,
+            None,
+        ).canonical_name
+        if explicit != history_name:
+            raise ValueError(
+                "final_eval dataset mismatch: explicit CLI dataset "
+                f"{explicit!r} does not match history dataset {history_name!r}"
+            )
+
+    split_seed = getattr(args, "split_seed", None)
+    if not getattr(args, "_split_seed_explicit", False):
+        split_seed = (
+            history_context.get("split_seed") if history_name == "dblp" else None
+        )
+    edge_mode = getattr(args, "ogbn_arxiv_edge_mode", None)
+    if not getattr(args, "_ogbn_arxiv_edge_mode_explicit", False):
+        if history_name == "ogbn-arxiv":
+            edge_mode = (
+                "undirected"
+                if history_context.get("graph_transform") == "to_undirected"
+                else "directed"
+            )
+        else:
+            edge_mode = None
+
+    request = resolve_dataset_request(
+        requested_name,
+        getattr(args, "data_root", None),
+        cora_root=getattr(args, "cora_root", None),
+        split_seed=split_seed,
+        ogbn_arxiv_edge_mode=edge_mode,
+    )
+    if request.canonical_name != history_name:
+        raise ValueError(
+            f"final_eval dataset {request.canonical_name!r} does not match "
+            f"history dataset {history_name!r}"
+        )
+    if not legacy_history:
+        if (
+            request.canonical_name == "dblp"
+            and int(request.split_seed) != int(history_context["split_seed"])
+        ):
+            raise ValueError(
+                "final_eval DBLP split_seed does not match search history"
+            )
+        if request.canonical_name == "ogbn-arxiv":
+            expected_transform = (
+                "to_undirected"
+                if request.ogbn_arxiv_edge_mode == "undirected"
+                else "preserve_directed"
+            )
+            if history_context["graph_transform"] != expected_transform:
+                raise ValueError(
+                    "final_eval ogbn-arxiv edge mode does not match search history"
+                )
+
+    args.dataset = request.canonical_name
+    args.data_root = request.data_root
+    args.cora_root = (
+        request.data_root
+        if request.canonical_name == "cora" and request.legacy_cora_root
+        else None
+    )
+    args.split_seed = request.split_seed if request.canonical_name == "dblp" else None
+    args.ogbn_arxiv_edge_mode = (
+        request.ogbn_arxiv_edge_mode
+        if request.canonical_name == "ogbn-arxiv"
+        else None
+    )
+    args.dataset_context = history_context
+    args._legacy_history_dataset_context = bool(legacy_history)
+    return request
+
+
+def _write_final_infrastructure_error(
+    args: argparse.Namespace,
+    exc: InfrastructureEvaluationError,
+    *,
+    candidate: Mapping[str, Any] | None,
+    replicate_id: int | None,
+    device: torch.device | str,
+) -> str:
+    os.makedirs(args.output, exist_ok=True)
+    fingerprint = (
+        "dataset"
+        if candidate is None
+        else str(candidate.get("candidate_fingerprint", "candidate"))[:16]
+    )
+    path = os.path.join(
+        args.output,
+        f"infrastructure_error_{fingerprint}_{time.time_ns()}.json",
+    )
+    gpu: dict[str, Any] = {
+        "device": str(device),
+        "cuda_available": bool(torch.cuda.is_available()),
+    }
+    if torch.cuda.is_available() and str(device).startswith("cuda"):
+        index = torch.cuda.current_device()
+        properties = torch.cuda.get_device_properties(index)
+        raw_uuid = getattr(properties, "uuid", None)
+        gpu.update(
+            {
+                "gpu_index": int(index),
+                "gpu_name": properties.name,
+                "gpu_uuid": None if raw_uuid is None else str(raw_uuid),
+                "gpu_total_memory_bytes": int(properties.total_memory),
+                "gpu_allocated_bytes": int(torch.cuda.memory_allocated(index)),
+                "gpu_reserved_bytes": int(torch.cuda.memory_reserved(index)),
+                "gpu_peak_allocated_bytes": int(
+                    torch.cuda.max_memory_allocated(index)
+                ),
+            }
+        )
+    atomic_json_dump(
+        {
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+            "dataset_context": _final_dataset_context(args),
+            "candidate_fingerprint": (
+                None if candidate is None else candidate.get("candidate_fingerprint")
+            ),
+            "architecture": (
+                None
+                if candidate is None
+                else {
+                    "operations": candidate.get("operations"),
+                    "edges": candidate.get("edges"),
+                }
+            ),
+            "hp": (
+                None
+                if candidate is None
+                else {
+                    key: candidate.get(key)
+                    for key in (
+                        "lr",
+                        "dropout",
+                        "hidden_dim",
+                        "l2",
+                        "gat_heads",
+                        "sage_aggr",
+                        "gin_eps",
+                    )
+                }
+            ),
+            "replicate_id": replicate_id,
+            "context": exc.context,
+            "gpu": gpu,
+            "traceback": traceback.format_exc(),
+        },
+        path,
+    )
+    return path
 
 
 def sha256_file(path: str) -> str:
@@ -383,7 +626,9 @@ def _existing_candidate_fingerprint(z_search: Any) -> str:
 
 
 def validate_formal_history(
-    records: Sequence[dict[str, Any]], expected_search_seed: int
+    records: Sequence[dict[str, Any]],
+    expected_search_seed: int,
+    expected_method_label: str | None = None,
 ) -> None:
     valid_records = [record for record in records if record.get("valid") is True]
     if not valid_records:
@@ -417,6 +662,50 @@ def validate_formal_history(
                 f"history record {index} search_seed mismatch: expected "
                 f"{expected_search_seed}, got {record_search_seed}"
             )
+        record_method = record.get("method_label")
+        if (
+            record_method is not None
+            and expected_method_label is not None
+            and str(record_method) != str(expected_method_label)
+        ):
+            raise ValueError(
+                f"history record {index} method_label mismatch: expected "
+                f"{expected_method_label!r}, got {record_method!r}"
+            )
+
+
+def validate_history_metadata_identity(
+    history_path: str,
+    *,
+    expected_search_seed: int,
+    expected_method_label: str,
+) -> None:
+    metadata_path = os.path.join(
+        os.path.dirname(os.path.abspath(history_path)),
+        "history_metadata.json",
+    )
+    if not os.path.isfile(metadata_path):
+        return
+    with open(metadata_path, "r", encoding="utf-8") as handle:
+        metadata = json.load(handle)
+    if not isinstance(metadata, dict):
+        raise ValueError(f"history metadata must be a JSON object: {metadata_path}")
+    if (
+        metadata.get("search_seed") is not None
+        and int(metadata["search_seed"]) != int(expected_search_seed)
+    ):
+        raise ValueError(
+            "history metadata search_seed mismatch: expected "
+            f"{expected_search_seed}, got {metadata['search_seed']!r}"
+        )
+    if (
+        metadata.get("method_label") is not None
+        and str(metadata["method_label"]) != str(expected_method_label)
+    ):
+        raise ValueError(
+            "history metadata method_label mismatch: expected "
+            f"{expected_method_label!r}, got {metadata['method_label']!r}"
+        )
 
 
 def _freeze(value: Any) -> Any:
@@ -624,7 +913,16 @@ def _common_result_fields(
     candidate: dict[str, Any], args: argparse.Namespace
 ) -> dict[str, Any]:
     formal = _is_formal(args)
+    dataset_context = _final_dataset_context(args)
     return {
+        "dataset": dataset_context["canonical_name"],
+        "dataset_content_fingerprint": dataset_context[
+            "dataset_content_fingerprint"
+        ],
+        "split_fingerprint": dataset_context["split_fingerprint"],
+        "graph_transform": dataset_context["graph_transform"],
+        "training_mode": dataset_context["training_mode"],
+        "metric": dataset_context["metric"],
         "method_label": getattr(args, "method_label", None),
         "search_seed": getattr(args, "search_seed", None),
         "candidate_rank": int(candidate["candidate_rank"]),
@@ -654,6 +952,9 @@ def _common_result_fields(
         "gcnii_alpha": float(args.gcnii_alpha),
         "gcnii_theta": float(args.gcnii_theta),
         "hp_mode": getattr(args, "hp_mode", None),
+        "deterministic_provenance": getattr(
+            args, "deterministic_provenance", None
+        ),
     }
 
 
@@ -671,6 +972,8 @@ def _manifest_row(
         "valid": None,
         "best_epoch": None,
         "epochs_ran": None,
+        "trajectory_hash": None,
+        "model_final_state_hash": None,
         "train_time_seconds": None,
     }
 
@@ -754,17 +1057,42 @@ def evaluate_candidate(
                 seed=seed,
                 track_test=True,
                 return_metadata=True,
+                return_reproducibility_metadata=True,
             )
             val_acc, is_valid, test_acc, metadata = _unpack_training_result(result)
-        except Exception:
-            logger.exception(
-                "candidate rank=%s replicate_id=%s final_eval_seed=%s raised; "
-                "recording invalid without changing its seed",
-                candidate["candidate_rank"],
-                replicate_id,
-                seed,
+        except InfrastructureEvaluationError as exc:
+            artifact = _write_final_infrastructure_error(
+                args,
+                exc,
+                candidate=candidate,
+                replicate_id=replicate_id,
+                device=device,
             )
-            val_acc, is_valid, test_acc = 0.0, False, 0.0
+            raise InfrastructureEvaluationError(
+                f"{exc}; error artifact: {artifact}",
+                context=exc.context,
+            ) from exc
+        except Exception as exc:
+            infrastructure_error = InfrastructureEvaluationError(
+                "unexpected final candidate training failure: "
+                f"{type(exc).__name__}: {exc}",
+                context={
+                    "candidate_rank": candidate["candidate_rank"],
+                    "replicate_id": replicate_id,
+                    "final_eval_seed": seed,
+                },
+            )
+            artifact = _write_final_infrastructure_error(
+                args,
+                infrastructure_error,
+                candidate=candidate,
+                replicate_id=replicate_id,
+                device=device,
+            )
+            raise InfrastructureEvaluationError(
+                f"{infrastructure_error}; error artifact: {artifact}",
+                context=infrastructure_error.context,
+            ) from exc
         elapsed = time.monotonic() - started
         row = {
             **_manifest_row(candidate, args, replicate_id),
@@ -773,6 +1101,8 @@ def evaluate_candidate(
             "valid": is_valid,
             "best_epoch": metadata.get("best_epoch"),
             "epochs_ran": metadata.get("epochs_ran", 0),
+            "trajectory_hash": metadata.get("trajectory_hash"),
+            "model_final_state_hash": metadata.get("model_final_state_hash"),
             "train_time_seconds": float(elapsed),
             "completed": True,
         }
@@ -950,7 +1280,17 @@ def _formal_config(
         "eval_epochs": int(args.eval_epochs),
         "patience": int(args.patience),
         "hp_mode": args.hp_mode,
-        "cora_root": os.path.abspath(args.cora_root),
+        "dataset_context": _final_dataset_context(args),
+        "data_root": os.path.abspath(args.data_root),
+        "cora_root": (
+            None
+            if args.cora_root is None
+            else os.path.abspath(args.cora_root)
+        ),
+        "split_seed": args.split_seed,
+        "ogbn_arxiv_edge_mode": args.ogbn_arxiv_edge_mode,
+        "training_mode": _final_dataset_context(args)["training_mode"],
+        "metric": _final_dataset_context(args)["metric"],
         "deduplicate": bool(args.deduplicate),
         "sort_by": args.sort_by,
         "seed_scheme": FINAL_EVALUATION_SEED_SCHEME,
@@ -1096,6 +1436,7 @@ def _selected_manifest(
 def run_final_evaluation(
     args: argparse.Namespace, logger: logging.Logger
 ) -> dict[str, Any]:
+    args.deterministic_provenance = _strict_runtime_provenance()
     _validate_args(args)
     formal = _is_formal(args)
     if not formal:
@@ -1109,8 +1450,20 @@ def run_final_evaluation(
     logger.info("history path: %s", args.history_path)
     history_digest = sha256_file(args.history_path)
     records = load_history_records(args.history_path)
+    dataset_request = _resolve_final_dataset_request(args, records)
+    if hasattr(args, "_log_path"):
+        save_args_json(args, args._log_path)
     if formal:
-        validate_formal_history(records, args.search_seed)
+        validate_formal_history(
+            records,
+            args.search_seed,
+            expected_method_label=args.method_label,
+        )
+        validate_history_metadata_identity(
+            args.history_path,
+            expected_search_seed=args.search_seed,
+            expected_method_label=args.method_label,
+        )
     selected = select_history_records(
         records,
         top_k=args.top_k,
@@ -1206,6 +1559,7 @@ def run_final_evaluation(
             ),
             "selected_manifest": selected_path,
             "seed_manifest": seed_manifest_path,
+            "dataset_context": _final_dataset_context(args),
         }
         atomic_json_dump(
             dry_summary,
@@ -1216,7 +1570,24 @@ def run_final_evaluation(
         )
         return dry_summary
 
+    if args.require_cuda and not torch.cuda.is_available():
+        infrastructure_error = InfrastructureEvaluationError(
+            "--require_cuda was set but CUDA is unavailable",
+            context={"dataset": dataset_request.canonical_name},
+        )
+        artifact = _write_final_infrastructure_error(
+            args,
+            infrastructure_error,
+            candidate=None,
+            replicate_id=None,
+            device="cpu",
+        )
+        raise InfrastructureEvaluationError(
+            f"{infrastructure_error}; error artifact: {artifact}",
+            context=infrastructure_error.context,
+        )
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    args.deterministic_provenance = _strict_runtime_provenance(device)
     logger.info(
         "device=%s hp_mode=%s n_replicates=%d seed_scheme=%s",
         device,
@@ -1224,8 +1595,47 @@ def run_final_evaluation(
         _replicate_count(args),
         FINAL_EVALUATION_SEED_SCHEME if formal else LEGACY_SEQUENTIAL_SEED_SCHEME,
     )
-    data, in_ch, out_ch = load_cora(args.cora_root, device)
-    logger.info("Cora: %d features, %d classes", in_ch, out_ch)
+    try:
+        if bool(getattr(args, "_legacy_history_dataset_context", False)):
+            data, in_ch, out_ch = load_cora(args.cora_root, device)
+        else:
+            bundle = load_dataset_from_request(dataset_request)
+            assert_dataset_context_matches(
+                _final_dataset_context(args),
+                bundle.context,
+                context="final_eval loaded dataset",
+            )
+            write_dataset_artifacts(bundle, args.output)
+            bundle.to(device)
+            data = bundle.data
+            in_ch = bundle.num_features
+            out_ch = bundle.num_classes
+    except InfrastructureEvaluationError:
+        raise
+    except Exception as exc:
+        infrastructure_error = InfrastructureEvaluationError(
+            f"dataset load/transfer failed for {dataset_request.canonical_name}: "
+            f"{type(exc).__name__}: {exc}",
+            context={"dataset": dataset_request.canonical_name},
+        )
+        artifact = _write_final_infrastructure_error(
+            args,
+            infrastructure_error,
+            candidate=None,
+            replicate_id=None,
+            device=device,
+        )
+        raise InfrastructureEvaluationError(
+            f"{infrastructure_error}; error artifact: {artifact}",
+            context=infrastructure_error.context,
+        ) from exc
+    logger.info(
+        "Dataset=%s features=%d classes=%d split_fingerprint=%s",
+        dataset_request.canonical_name,
+        in_ch,
+        out_ch,
+        _final_dataset_context(args)["split_fingerprint"],
+    )
 
     def save_progress(row: dict[str, Any]) -> None:
         if not formal:
@@ -1299,6 +1709,7 @@ def run_final_evaluation(
             if selected_by_validation is not None
             else "failed_no_fully_valid_candidate"
         ),
+        "dataset_context": _final_dataset_context(args),
         "history_path": os.path.abspath(args.history_path),
         "history_sha256": history_digest,
         "method_label": getattr(args, "method_label", None),
@@ -1374,6 +1785,7 @@ def run_final_evaluation(
 def main() -> None:
     args = parse_args()
     logger, log_path = setup_logger(args.log_dir, "final_eval", args.version)
+    args._log_path = log_path
     save_args_json(args, log_path)
     run_final_evaluation(args, logger)
 

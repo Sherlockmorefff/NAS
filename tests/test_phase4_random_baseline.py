@@ -90,16 +90,27 @@ def test_random_branch_never_calls_optimize_acq_and_sets_logei_none():
     branch = _strategy_branch("random")
     assert _calls(branch, "sample_random_online_candidate")
     assert not _calls(branch, "optimize_acq")
-    assert "logei_value = None" in ast.unparse(branch)
+    returns = [node for node in ast.walk(branch) if isinstance(node, ast.Return)]
+    assert any(
+        isinstance(node.value, ast.Tuple)
+        and len(node.value.elts) == 3
+        and isinstance(node.value.elts[1], ast.Constant)
+        and node.value.elts[1].value is None
+        for node in returns
+    )
 
 
 def test_qlogei_branch_still_calls_original_optimize_acq():
     branch = _strategy_branch("qlogei")
     assert len(_calls(branch, "optimize_acq")) == 1
     text = ast.unparse(branch)
-    assert "stable_seed(int(args.seed), 'acquisition', int(step))" in text
-    assert "candidate_selection_seed = acquisition_seed" in text
-    assert "with isolated_rng(acquisition_seed, device)" in text
+    assert "with isolated_rng(selection_seed, device)" in text
+    seed_source = _source("online_candidate_proposal_seed")
+    assert "if retry_id == 0:" in seed_source
+    assert (
+        'stable_seed(int(search_seed), "acquisition", int(online_full_step))'
+        in seed_source
+    )
 
 
 def test_online_strategies_share_prediction_evaluation_and_gp_update_path():

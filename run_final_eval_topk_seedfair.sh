@@ -3,9 +3,10 @@ set -u
 
 usage() {
   echo "Usage: $0 --final-base-seed N [--run-dir DIR] [--top-k N] [--n-replicates N]"
+  echo "          [--dataset NAME] [--data-root DIR] [--search-run-tag TAG]"
   echo "          [--eval-epochs N] [--patience N] [--train] [--resume]"
   echo
-  echo "Without --train, all 15 histories are preflighted and no Cora training starts."
+  echo "Without --train, all 15 histories are preflighted and no GNN training starts."
 }
 
 FINAL_BASE_SEED=""
@@ -16,6 +17,9 @@ EVAL_EPOCHS=300
 PATIENCE=80
 START_TRAINING=0
 RESUME=0
+DATASET="cora"
+DATA_ROOT=""
+SEARCH_RUN_TAG=""
 
 while (($#)); do
   case "$1" in
@@ -43,6 +47,18 @@ while (($#)); do
       PATIENCE="$2"
       shift 2
       ;;
+    --dataset)
+      DATASET="$2"
+      shift 2
+      ;;
+    --data-root)
+      DATA_ROOT="$2"
+      shift 2
+      ;;
+    --search-run-tag)
+      SEARCH_RUN_TAG="$2"
+      shift 2
+      ;;
     --train)
       START_TRAINING=1
       shift
@@ -62,6 +78,30 @@ while (($#)); do
       ;;
   esac
 done
+
+case "${DATASET,,}" in
+  cora) DATASET="cora" ;;
+  citeseer|cite-seer|cite_seer) DATASET="citeseer" ;;
+  pubmed|pub-med|pub_med) DATASET="pubmed" ;;
+  dblp|citationfull-dblp|citationfull_dblp) DATASET="dblp" ;;
+  flickr) DATASET="flickr" ;;
+  ogbn-arxiv|ogbn_arxiv) DATASET="ogbn-arxiv" ;;
+  *)
+    echo "Unsupported dataset: $DATASET" >&2
+    exit 2
+    ;;
+esac
+if [[ -z "$DATA_ROOT" ]]; then
+  if [[ "$DATASET" == "cora" ]]; then
+    DATA_ROOT="/tmp/Cora"
+  else
+    DATA_ROOT="/tmp/gnn_datasets"
+  fi
+fi
+if [[ "$DATASET" != "cora" && -z "$SEARCH_RUN_TAG" ]]; then
+  echo "--search-run-tag is required for non-Cora isolated histories" >&2
+  exit 2
+fi
 
 if [[ -z "$FINAL_BASE_SEED" ]]; then
   echo "--final-base-seed is required" >&2
@@ -83,7 +123,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
 fi
 
 if [[ -z "$RUN_DIR" ]]; then
-  RUN_DIR="results/final_eval_topk_seedfair_$(date +%Y%m%d_%H%M%S)"
+  RUN_DIR="results/final_eval_topk_seedfair_${DATASET}_$(date +%Y%m%d_%H%M%S)"
 elif [[ -d "$RUN_DIR" ]]; then
   RESUME=1
 fi
@@ -99,20 +139,25 @@ fi
 history_path() {
   local method_label="$1"
   local search_seed="$2"
-  case "$method_label" in
-    schur)
-      printf "results/formal_seedfair_full300_schur_global4_seed%s_pool768/history_final.json" "$search_seed"
-      ;;
-    gmm_exp100)
-      printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed%s_pool768/history_final.json" "$search_seed"
-      ;;
-    gmm_exp150)
-      printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed%s_pool768/history_final.json" "$search_seed"
-      ;;
-    *)
-      return 2
-      ;;
-  esac
+  if [[ -z "$SEARCH_RUN_TAG" && "$DATASET" == "cora" ]]; then
+    case "$method_label" in
+      global_schur)
+        printf "results/formal_seedfair_full300_schur_global4_seed%s_pool768/history_final.json" "$search_seed"
+        ;;
+      gmm_exp100)
+        printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed%s_pool768/history_final.json" "$search_seed"
+        ;;
+      gmm_exp150)
+        printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed%s_pool768/history_final.json" "$search_seed"
+        ;;
+      *)
+        return 2
+        ;;
+    esac
+    return
+  fi
+  printf "results/%s/%s/%s/search_seed%s/history_final.json" \
+    "$SEARCH_RUN_TAG" "$DATASET" "$method_label" "$search_seed"
 }
 
 record_status() {
@@ -144,10 +189,23 @@ run_task() {
     --eval_epochs "$EVAL_EPOCHS"
     --patience "$PATIENCE"
     --hp_mode global4
+    --dataset "$DATASET"
+    --require_cuda
     --output "$output"
     --log_dir "$LOG_DIR"
     --version "${stage}_${method_label}_seed${search_seed}"
   )
+  if [[ -z "$SEARCH_RUN_TAG" && "$DATASET" == "cora" ]]; then
+    command+=(--cora_root "$DATA_ROOT")
+  else
+    command+=(--data_root "$DATA_ROOT")
+  fi
+  if [[ "$DATASET" == "dblp" ]]; then
+    command+=(--split_seed 0)
+  fi
+  if [[ "$DATASET" == "ogbn-arxiv" ]]; then
+    command+=(--ogbn_arxiv_edge_mode undirected)
+  fi
   if [[ "$stage" == "preflight" ]]; then
     command+=(--dry_run)
   fi
@@ -162,7 +220,7 @@ run_task() {
   return "$exit_code"
 }
 
-METHODS=(schur gmm_exp100 gmm_exp150)
+METHODS=(global_schur gmm_exp100 gmm_exp150)
 PREFLIGHT_FAILED=0
 for method_label in "${METHODS[@]}"; do
   for search_seed in 0 1 2 3 4; do

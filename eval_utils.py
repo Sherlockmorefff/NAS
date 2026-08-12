@@ -15,16 +15,30 @@ from __future__ import annotations
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
 import hashlib
+import json
 import random
 from typing import Any
 import warnings
 
+from deterministic_runtime import (
+    assert_strict_torch_determinism,
+    configure_torch_determinism,
+    deterministic_provenance,
+    prepare_deterministic_environment,
+)
+
+prepare_deterministic_environment()
+
 import numpy as np
 import torch
+
+configure_torch_determinism(torch)
+
 import torch.nn.functional as F
 from torch.nn import Linear, ModuleList, ReLU, Sequential
 from torch_geometric.nn import GATConv, GCN2Conv, GCNConv, GINConv, SAGEConv
 
+from evaluation_errors import InfrastructureEvaluationError, is_infrastructure_failure
 from hp_modes import (
     GAT_HEAD_OPTIONS,
     GIN_EPS_MAX,
@@ -159,12 +173,46 @@ def isolated_rng(seed: int, device=None):
 def _training_metadata(
     best_epoch: int | None = None,
     epochs_ran: int = 0,
-) -> dict[str, int | None]:
-    return {
+    *,
+    trajectory_hash: str | None = None,
+    model_final_state_hash: str | None = None,
+) -> dict[str, int | str | None]:
+    metadata: dict[str, int | str | None] = {
         "best_epoch": best_epoch,
         "stopped_epoch": int(epochs_ran),
         "epochs_ran": int(epochs_ran),
     }
+    if trajectory_hash is not None:
+        metadata["trajectory_hash"] = trajectory_hash
+    if model_final_state_hash is not None:
+        metadata["model_final_state_hash"] = model_final_state_hash
+    return metadata
+
+
+def _canonical_trajectory_hash(rows: list[dict[str, Any]]) -> str:
+    payload = json.dumps(
+        rows,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _model_state_hash(module: torch.nn.Module) -> str:
+    digest = hashlib.sha256()
+    for name, tensor in sorted(module.state_dict().items()):
+        value = tensor.detach().cpu().contiguous()
+        for component in (
+            name.encode("utf-8"),
+            str(value.dtype).encode("ascii"),
+            json.dumps(list(value.shape), separators=(",", ":")).encode("ascii"),
+            value.numpy().tobytes(order="C"),
+        ):
+            digest.update(len(component).to_bytes(8, "big"))
+            digest.update(component)
+    return digest.hexdigest()
 
 
 def _invalid_eval_result(
@@ -188,6 +236,33 @@ def _warn_dynamic_gnn_failure(stage: str, exc: BaseException) -> None:
         RuntimeWarning,
         stacklevel=2,
     )
+
+
+def _raise_if_infrastructure_failure(
+    exc: BaseException,
+    *,
+    stage: str,
+    config: dict,
+    device: torch.device,
+    hp: dict[str, Any],
+) -> None:
+    if not is_infrastructure_failure(exc):
+        return
+    _empty_cuda_cache_if_oom(exc)
+    raise InfrastructureEvaluationError(
+        f"DynamicGNN {stage} infrastructure failure: "
+        f"{type(exc).__name__}: {exc}",
+        context={
+            "stage": stage,
+            "architecture": {
+                "operations": list(config.get("operations", [])),
+                "edges": [list(edge) for edge in config.get("edges", [])],
+            },
+            "hp": hp,
+            "device": str(device),
+            "original_exception_type": type(exc).__name__,
+        },
+    ) from exc
 
 
 def _clip01(x: float) -> float:
@@ -668,7 +743,9 @@ def train_and_eval_arch(
     seed: int = None,
     track_test: bool = False,
     return_metadata: bool = False,
+    return_reproducibility_metadata: bool = False,
 ) -> tuple:
+    assert_strict_torch_determinism(torch)
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -693,7 +770,22 @@ def train_and_eval_arch(
                 sage_aggr_by_layer=sage_aggr_by_layer,
                 gin_eps_by_layer=gin_eps_by_layer,
             ).to(device)
-        except (RuntimeError, ValueError, TypeError, KeyError) as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, MemoryError) as exc:
+            _raise_if_infrastructure_failure(
+                exc,
+                stage="build",
+                config=config,
+                device=device,
+                hp={
+                    "lr": float(lr),
+                    "dropout": float(dropout),
+                    "hidden_dim": int(hidden_dim),
+                    "weight_decay": float(weight_decay),
+                    "gat_heads": int(gat_heads),
+                    "sage_aggr": str(sage_aggr),
+                    "gin_eps": float(gin_eps),
+                },
+            )
             _empty_cuda_cache_if_oom(exc)
             _warn_dynamic_gnn_failure("build", exc)
             return _invalid_eval_result(track_test, return_metadata)
@@ -710,6 +802,7 @@ def train_and_eval_arch(
         best_epoch = None
         epochs_ran = 0
         no_improve = 0
+        trajectory: list[dict[str, Any]] = []
 
         try:
             for epoch in range(max_epochs):
@@ -748,6 +841,14 @@ def train_and_eval_arch(
                         )
 
                 epochs_ran = epoch + 1
+                trajectory.append(
+                    {
+                        "epoch_1based": epochs_ran,
+                        "loss": float(loss.detach().cpu().item()),
+                        "validation_accuracy": float(val_acc),
+                        "test_accuracy": float(test_acc) if track_test else None,
+                    }
+                )
                 if val_acc > best_val:
                     best_val = val_acc
                     best_epoch = epochs_ran
@@ -758,13 +859,47 @@ def train_and_eval_arch(
                     no_improve += 1
                     if no_improve >= patience:
                         break
-        except (RuntimeError, ValueError, FloatingPointError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            FloatingPointError,
+            MemoryError,
+        ) as exc:
+            _raise_if_infrastructure_failure(
+                exc,
+                stage="eval",
+                config=config,
+                device=device,
+                hp={
+                    "lr": float(lr),
+                    "dropout": float(dropout),
+                    "hidden_dim": int(hidden_dim),
+                    "weight_decay": float(weight_decay),
+                    "gat_heads": int(gat_heads),
+                    "sage_aggr": str(sage_aggr),
+                    "gin_eps": float(gin_eps),
+                },
+            )
             _empty_cuda_cache_if_oom(exc)
             _warn_dynamic_gnn_failure("eval", exc)
             metadata = _training_metadata(best_epoch, epochs_ran)
+            if return_reproducibility_metadata:
+                metadata.update(
+                    {
+                        "trajectory_hash": _canonical_trajectory_hash(trajectory),
+                        "model_final_state_hash": _model_state_hash(gnn),
+                    }
+                )
             return _invalid_eval_result(track_test, return_metadata, metadata)
 
         metadata = _training_metadata(best_epoch, epochs_ran)
+        if return_reproducibility_metadata:
+            metadata.update(
+                {
+                    "trajectory_hash": _canonical_trajectory_hash(trajectory),
+                    "model_final_state_hash": _model_state_hash(gnn),
+                }
+            )
         result = (best_val, True, best_test) if track_test else (best_val, True)
         return result + (metadata,) if return_metadata else result
 
@@ -907,6 +1042,7 @@ def eval_z_search(
         seed=candidate_eval_seed,
         track_test=False,
         return_metadata=return_hp,
+        return_reproducibility_metadata=return_hp,
     )
     if return_hp:
         val_acc, is_valid, training_metadata = train_result
