@@ -1187,7 +1187,18 @@ def _append_progress_tsv(
 
 
 def prepare_pipeline(args: argparse.Namespace) -> dict[str, Any]:
-    pipeline_root = Path(args.pipeline_root).resolve()
+    from experiment_paths import validate_protocol_id
+
+    protocol_id = validate_protocol_id(args.protocol_id)
+    pipeline_root = (
+        REPOSITORY_ROOT
+        / "results"
+        / "final_eval"
+        / protocol_id
+        / "first_formal_pipeline"
+        if args.pipeline_root is None
+        else Path(args.pipeline_root)
+    ).resolve()
     _require(not pipeline_root.exists(), f"pipeline root already exists: {pipeline_root}")
     analysis_root = Path(args.analysis_root).resolve()
     summary_path = Path(args.search_summary).resolve()
@@ -3296,7 +3307,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     prepare = subparsers.add_parser("prepare", help="audit histories and create queue")
-    prepare.add_argument("--pipeline-root", required=True)
+    prepare.add_argument("--protocol-id", required=True)
+    prepare.add_argument(
+        "--pipeline-root",
+        default=None,
+        help=(
+            "explicit output override; defaults to "
+            "results/final_eval/<protocol-id>/first_formal_pipeline"
+        ),
+    )
     prepare.add_argument("--analysis-root", default=str(DEFAULT_ANALYSIS_ROOT))
     prepare.add_argument("--search-summary", default=str(DEFAULT_SEARCH_SUMMARY))
     prepare.add_argument("--frozen-snapshot", default=str(DEFAULT_FROZEN_SNAPSHOT))

@@ -16,20 +16,24 @@ from deterministic_runtime import prepare_deterministic_environment
 prepare_deterministic_environment()
 
 from dataset_utils import canonicalize_dataset_name
+from experiment_paths import log_dir as structured_log_dir
+from experiment_paths import search_dir as structured_search_dir
 from source_verification import canonical_json_sha256, verify_frozen_source
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_METHOD_CONFIG = ROOT / "configs" / "cross_dataset_methods.json"
 DEFAULT_MANIFEST_ROOT = (
-    ROOT / "results" / "cross_dataset_v1_preflight" / "manifests"
+    ROOT / "artifacts" / "reference" / "cross_dataset_v1_preflight" / "manifests"
 )
 DEFAULT_TRAINING_MODE_DECISIONS = (
     ROOT
-    / "results"
+    / "artifacts"
+    / "reference"
     / "cross_dataset_v1_preflight"
     / "training_mode_decisions.json"
 )
+DEFAULT_CHECKPOINT = ROOT / "checkpoints" / "joint_model_pipeline_global4_best.pth"
 METHOD_KEYS = ("S0", "G100", "G150")
 FORMAL_DATASETS = ("citeseer", "pubmed", "dblp", "flickr")
 DEVELOPMENT_SEARCH_SEEDS = (0, 1, 2, 3, 4)
@@ -159,20 +163,40 @@ def validate_training_mode_decision(
 
 
 def isolated_run_paths(
-    run_tag: str,
+    run_tag: str | None,
     dataset: str,
     method_label: str,
     search_seed: int,
     *,
     repo_root: str | os.PathLike[str] = ROOT,
     artifact_root: str | os.PathLike[str] | None = None,
+    protocol_id: str | None = None,
+    method_key: str | None = None,
 ) -> tuple[Path, Path]:
+    base = Path(repo_root) if artifact_root is None else Path(artifact_root).resolve()
+    canonical = canonicalize_dataset_name(dataset)
+    if protocol_id is not None:
+        if run_tag is not None:
+            raise ValueError("protocol_id and legacy run_tag are mutually exclusive")
+        method = (method_key or method_label).lower()
+        output = structured_search_dir(
+            base, protocol_id, canonical, method, int(search_seed)
+        )
+        logs = structured_log_dir(
+            base,
+            protocol_id,
+            "search",
+            dataset=canonical,
+            method=method,
+            search_seed=int(search_seed),
+        )
+        return output, logs
+    if run_tag is None:
+        raise ValueError("protocol_id is required for new runs; run_tag is legacy-only")
     if not _SAFE_COMPONENT.fullmatch(run_tag):
         raise ValueError(
             "run_tag must contain only letters, numbers, '.', '_' and '-'"
         )
-    canonical = canonicalize_dataset_name(dataset)
-    base = Path(repo_root) if artifact_root is None else Path(artifact_root).resolve()
     relative = Path(run_tag) / canonical / method_label / f"search_seed{int(search_seed)}"
     return base / "results" / relative, base / "logs" / relative
 
@@ -186,7 +210,8 @@ def build_search_command(
     python_executable: str,
     checkpoint: str,
     data_root: str,
-    run_tag: str,
+    run_tag: str | None = None,
+    protocol_id: str | None = None,
     dataset: str,
     method_key: str,
     search_seed: int,
@@ -229,9 +254,12 @@ def build_search_command(
         int(search_seed),
         repo_root=repo_root,
         artifact_root=artifact_root,
+        protocol_id=protocol_id,
+        method_key=key,
     )
+    identity = protocol_id if protocol_id is not None else run_tag
     version = (
-        f"{run_tag}_{canonical}_{method['label']}_seed{int(search_seed)}"
+        f"{identity}_{canonical}_{method['label']}_seed{int(search_seed)}"
     )
     command = [
         str(python_executable),
@@ -371,11 +399,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build or execute one cross-dataset S0/G100/G150 search"
     )
-    parser.add_argument("--run-tag", required=True)
+    identity = parser.add_mutually_exclusive_group(required=True)
+    identity.add_argument(
+        "--protocol-id",
+        help="required fixed-format identity for new formal experiment outputs",
+    )
+    identity.add_argument(
+        "--run-tag",
+        help="legacy output layout compatibility; do not use for new formal runs",
+    )
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--method", required=True, choices=METHOD_KEYS)
     parser.add_argument("--search-seed", required=True, type=int)
-    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--checkpoint", default=str(DEFAULT_CHECKPOINT))
     parser.add_argument("--data-root", default="/tmp/gnn_datasets")
     parser.add_argument(
         "--manifest-root",
@@ -426,6 +462,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     canonical = canonicalize_dataset_name(args.dataset)
     source_verification = None
     if args.execute or args.dry_run:
+        if args.protocol_id is None:
+            raise ValueError(
+                "new --execute/--dry-run workflows require --protocol-id; "
+                "--run-tag is retained only for historical compatibility"
+            )
         if not args.expected_source_manifest or not args.frozen_source_id:
             raise ValueError(
                 "--expected-source-manifest and --frozen-source-id are required "
@@ -454,6 +495,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         checkpoint=args.checkpoint,
         data_root=args.data_root,
         run_tag=args.run_tag,
+        protocol_id=args.protocol_id,
         dataset=args.dataset,
         method_key=args.method,
         search_seed=args.search_seed,
@@ -474,6 +516,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
     payload = {
         "method": args.method,
+        "protocol_id": args.protocol_id,
         "dataset": canonical,
         "expected_dataset_manifest": str(expected_manifest.resolve()),
         "training_mode_decision": training_mode_decision,

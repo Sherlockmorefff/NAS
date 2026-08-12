@@ -220,8 +220,8 @@ def test_runner_dry_run_executes_source_gate_and_never_starts_training(
 
     exit_code = cross_dataset_runner.main(
         [
-            "--run-tag",
-            "dry_gate",
+            "--protocol-id",
+            f"dry-gate_v1_20260813_{source_id[:8]}",
             "--dataset",
             "citeseer",
             "--method",

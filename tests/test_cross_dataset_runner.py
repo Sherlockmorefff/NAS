@@ -9,13 +9,24 @@ import formal_matrix
 from source_freeze import SOURCE_GATE_DISCOVERY_RULES
 
 
+def test_current_reference_defaults_and_source_freeze_boundary() -> None:
+    assert cross_dataset_runner.DEFAULT_CHECKPOINT == (
+        cross_dataset_runner.ROOT / "checkpoints/joint_model_pipeline_global4_best.pth"
+    )
+    assert "artifacts/reference" in str(cross_dataset_runner.DEFAULT_MANIFEST_ROOT)
+    discovered = {
+        row["path"] for row in pipeline.current_source_identity()["formal_source_rows"]
+    }
+    assert "experiment_paths.py" in discovered
+
+
 def test_formal_search_command_uses_isolated_artifact_root_and_real_cli(tmp_path: Path) -> None:
     config = cross_dataset_runner.load_and_validate_method_config()
     command, output, log_dir = cross_dataset_runner.build_search_command(
         python_executable=sys.executable,
         checkpoint="/tmp/checkpoint.pth",
         data_root="/tmp/data",
-        run_tag="deterministic_test",
+        protocol_id="deterministic-test_v1_20260813_aaaaaaaa",
         dataset="citeseer",
         method_key="G100",
         search_seed=5,
@@ -25,8 +36,8 @@ def test_formal_search_command_uses_isolated_artifact_root_and_real_cli(tmp_path
         formal_source_id="a" * 64,
         formal_config_fingerprint="b" * 64,
     )
-    assert output == tmp_path / "results" / "deterministic_test" / "citeseer" / "gmm_exp100" / "search_seed5"
-    assert log_dir == tmp_path / "logs" / "deterministic_test" / "citeseer" / "gmm_exp100" / "search_seed5"
+    assert output == tmp_path / "results/search/deterministic-test_v1_20260813_aaaaaaaa/citeseer/g100/search_seed5"
+    assert log_dir == tmp_path / "logs/deterministic-test_v1_20260813_aaaaaaaa/search/citeseer/g100/search_seed5"
     parsed = cross_dataset_runner.validate_phase4_command(command)
     assert parsed.formal_source_id == "a" * 64
     assert parsed.formal_config_fingerprint == "b" * 64
@@ -132,14 +143,15 @@ def test_builder_generates_matrix_from_self_contained_fixtures(
         training_mode_decisions=decisions_path,
         method_config=pipeline.METHOD_CONFIG,
         python_executable=sys.executable,
-        run_tag="test_deterministic_matrix",
+        protocol_id=f"test-deterministic-matrix_v1_20260813_{identity['source_id'][:8]}",
         artifact_root=artifact_root,
     )
     assert manifest["task_count"] == 60
     assert audit["total_requested_full_evaluations"] == 18_000
     assert all(
-        Path(task["output_directory"]).is_relative_to(artifact_root / "results")
+        Path(task["output_directory"]).is_relative_to(artifact_root / "results/search")
         for task in manifest["tasks"]
     )
     assert all("--artifact-root" in task["exact_argv"] for task in manifest["tasks"])
+    assert all("--protocol-id" in task["exact_argv"] for task in manifest["tasks"])
     assert all(task["exact_argv"][-1] == "--execute" for task in manifest["tasks"])

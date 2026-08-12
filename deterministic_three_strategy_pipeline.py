@@ -34,25 +34,25 @@ prepare_deterministic_environment()
 
 
 REPO_ROOT = Path(__file__).resolve().parent
-PIPELINE_ROOT = (
-    REPO_ROOT
-    / "server_validation"
-    / "deterministic_three_strategy_20260804"
-)
+PIPELINE_ROOT = REPO_ROOT / "results" / "final_eval"
 PYTHON_BIN = Path(sys.executable).resolve()
-CHECKPOINT = (
-    REPO_ROOT
-    / "results-wgmm1"
-    / "joint_search"
-    / "joint_model_pipeline_global4_best.pth"
-)
+CHECKPOINT = REPO_ROOT / "checkpoints" / "joint_model_pipeline_global4_best.pth"
 METHOD_CONFIG = REPO_ROOT / "configs" / "cross_dataset_methods.json"
-MANIFEST_ROOT = REPO_ROOT / "results" / "cross_dataset_v1_preflight" / "manifests"
+MANIFEST_ROOT = (
+    REPO_ROOT
+    / "artifacts"
+    / "reference"
+    / "cross_dataset_v1_preflight"
+    / "manifests"
+)
 TRAINING_MODE_DECISIONS = (
     REPO_ROOT
-    / "server_validation"
-    / "training_mode_decisions_formal.json"
+    / "artifacts"
+    / "reference"
+    / "cross_dataset_v1_preflight"
+    / "training_mode_decisions.json"
 )
+ACTIVE_PROTOCOL_ID: str | None = None
 DATA_ROOT = Path("/tmp/dvae_cross_dataset_data")
 DATASETS = ("citeseer", "pubmed", "dblp", "flickr")
 METHODS = ("S0", "G100", "G150")
@@ -146,12 +146,16 @@ def configure_runtime_paths(
     *,
     python_executable: str | os.PathLike[str],
     training_mode_decisions: str | os.PathLike[str],
+    protocol_id: str,
 ) -> None:
     """Apply portable CLI-selected runtime resources for this process."""
 
-    global PYTHON_BIN, TRAINING_MODE_DECISIONS
+    from experiment_paths import validate_protocol_id
+
+    global PYTHON_BIN, TRAINING_MODE_DECISIONS, ACTIVE_PROTOCOL_ID
     PYTHON_BIN = _resolve_python_executable(python_executable)
     TRAINING_MODE_DECISIONS = resolve_repository_path(training_mode_decisions)
+    ACTIVE_PROTOCOL_ID = validate_protocol_id(protocol_id)
 
 
 def utc_now() -> str:
@@ -372,7 +376,8 @@ def initialize_dual_pipeline(root: Path) -> dict[str, Any]:
     program_arg = shlex.quote(str(REPO_ROOT / "deterministic_three_strategy_pipeline.py"))
     runtime_args = (
         f"--python-executable {python_arg} "
-        f"--training-mode-decisions {shlex.quote(str(TRAINING_MODE_DECISIONS))}"
+        f"--training-mode-decisions {shlex.quote(str(TRAINING_MODE_DECISIONS))} "
+        f"--protocol-id {shlex.quote(str(ACTIVE_PROTOCOL_ID))}"
     )
     script_payloads = {
         "preflight.sh": f"""#!/usr/bin/env bash
@@ -572,8 +577,8 @@ def dual_worker_paths(root: Path, worker_id: int) -> dict[str, Path]:
 
 def preflight(*, require_acceptance: bool = True, root: Path = PIPELINE_ROOT) -> dict[str, Any]:
     identity = current_source_identity(root)
-    if identity["git_branch"] != "feature/gp-offline-online-update":
-        raise RuntimeError(f"wrong branch: {identity['git_branch']}")
+    if not identity["git_branch"]:
+        raise RuntimeError("formal pipeline refuses detached HEAD")
     _run_read_only(["git", "diff", "--check"])
     for path in (PYTHON_BIN, CHECKPOINT, METHOD_CONFIG, TRAINING_MODE_DECISIONS):
         if not path.is_file():
@@ -967,7 +972,8 @@ def freeze_pipeline(root: Path = PIPELINE_ROOT) -> dict[str, Any]:
         write_formal_shards,
     )
 
-    run_tag = f"deterministic_three_strategy_{identity['source_id'][:12]}"
+    if ACTIVE_PROTOCOL_ID is None:
+        raise RuntimeError("--protocol-id is required before freezing a formal pipeline")
     manifest, audit = build_formal_manifest(
         repo_root=REPO_ROOT,
         source_manifest_path=freeze / "source_manifest.json",
@@ -978,8 +984,8 @@ def freeze_pipeline(root: Path = PIPELINE_ROOT) -> dict[str, Any]:
         training_mode_decisions=TRAINING_MODE_DECISIONS,
         method_config=METHOD_CONFIG,
         python_executable=str(PYTHON_BIN),
-        run_tag=run_tag,
-        artifact_root=root,
+        protocol_id=ACTIVE_PROTOCOL_ID,
+        artifact_root=REPO_ROOT,
     )
     digest = write_formal_manifest(
         manifest,
@@ -2188,7 +2194,19 @@ def write_mock_task_results(root: Path) -> None:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", default=str(PIPELINE_ROOT))
+    parser.add_argument(
+        "--protocol-id",
+        required=True,
+        help="fixed-format protocol identity for every new formal pipeline",
+    )
+    parser.add_argument(
+        "--root",
+        default=None,
+        help=(
+            "operational pipeline root; defaults to "
+            "results/final_eval/<protocol-id>/pipeline"
+        ),
+    )
     parser.add_argument(
         "--python-executable",
         default=str(PYTHON_BIN),
@@ -2236,8 +2254,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_runtime_paths(
         python_executable=args.python_executable,
         training_mode_decisions=args.training_mode_decisions,
+        protocol_id=args.protocol_id,
     )
-    root = Path(args.root).resolve()
+    root = (
+        REPO_ROOT / "results" / "final_eval" / args.protocol_id / "pipeline"
+        if args.root is None
+        else resolve_repository_path(args.root)
+    ).resolve()
     if args.command == "initialize-dual":
         result = initialize_dual_pipeline(root)
     elif args.command == "preflight":

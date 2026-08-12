@@ -43,6 +43,8 @@ from dataset_utils import (  # noqa: E402
     resolve_dataset_request,
     write_dataset_artifacts,
 )
+from dataset_utils import canonicalize_dataset_name  # noqa: E402
+from experiment_paths import final_eval_dir, log_dir as experiment_log_dir  # noqa: E402
 from evaluation_errors import InfrastructureEvaluationError  # noqa: E402
 from eval_utils import (  # noqa: E402
     DEFAULT_GAT_HEADS,
@@ -191,9 +193,11 @@ def _strict_runtime_provenance(device: Any | None = None) -> dict[str, Any] | No
     raise RuntimeError("real PyTorch lacks deterministic-algorithm APIs")
 
 
-def setup_logger(log_dir: str, script_name: str, version: str):
+def setup_logger(
+    log_dir: str, script_name: str, version: str, *, append_script_name: bool = True
+):
     ts = datetime.now().strftime("%m%d_%H%M%S")
-    log_subdir = os.path.join(log_dir, script_name)
+    log_subdir = os.path.join(log_dir, script_name) if append_script_name else log_dir
     os.makedirs(log_subdir, exist_ok=True)
     log_path = os.path.join(log_subdir, f"train_{version}_{ts}.log")
 
@@ -246,6 +250,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--final_base_seed", type=int)
     parser.add_argument("--n_replicates", type=int, default=10)
     parser.add_argument("--method_label", type=str)
+    parser.add_argument(
+        "--protocol-id",
+        help="fixed-format protocol identity for structured final-evaluation output",
+    )
     parser.add_argument("--search_seed", type=int)
     parser.add_argument("--dry_run", action="store_true")
     parser.add_argument("--resume", action="store_true")
@@ -279,9 +287,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
     )
     parser.add_argument("--require_cuda", action="store_true")
-    parser.add_argument("--output", type=str, default="results/final_eval_history_topk")
+    parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--version", type=str, default="final_eval_history_topk")
-    parser.add_argument("--log_dir", type=str, default="logs/")
+    parser.add_argument("--log_dir", type=str, default=None)
     parser.add_argument("--include_baselines", action="store_true")
     parser.add_argument("--gcnii_alpha", type=float, default=0.1)
     parser.add_argument("--gcnii_theta", type=float, default=0.5)
@@ -295,6 +303,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args._ogbn_arxiv_edge_mode_explicit = (
         "--ogbn_arxiv_edge_mode" in raw_argv
     )
+    args._output_explicit = "--output" in raw_argv
+    args._log_dir_explicit = "--log_dir" in raw_argv
     legacy_options_explicit = any(
         option in raw_argv for option in ("--seed_start", "--n_seeds")
     )
@@ -1784,7 +1794,50 @@ def run_final_evaluation(
 
 def main() -> None:
     args = parse_args()
-    logger, log_path = setup_logger(args.log_dir, "final_eval", args.version)
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    structured_log = False
+    if args.protocol_id is not None:
+        if not args.method_label:
+            raise ValueError("--method_label is required with --protocol-id")
+        dataset = canonicalize_dataset_name(args.dataset)
+        method = {
+            "global_schur": "s0",
+            "gmm_exp100": "g100",
+            "gmm_exp150": "g150",
+        }.get(args.method_label, args.method_label.lower())
+        if not args._output_explicit:
+            args.output = str(
+                final_eval_dir(
+                    repo_root,
+                    args.protocol_id,
+                    dataset,
+                    method,
+                    resume=bool(args.resume),
+                )
+            )
+        if not args._log_dir_explicit:
+            args.log_dir = str(
+                experiment_log_dir(
+                    repo_root,
+                    args.protocol_id,
+                    "final_eval",
+                    dataset=dataset,
+                    method=method,
+                    resume=bool(args.resume),
+                )
+            )
+            structured_log = True
+    else:
+        if not args._output_explicit:
+            args.output = "results/final_eval_history_topk"
+        if not args._log_dir_explicit:
+            args.log_dir = "logs/"
+    logger, log_path = setup_logger(
+        args.log_dir,
+        "final_eval",
+        args.version,
+        append_script_name=not structured_log,
+    )
     args._log_path = log_path
     save_args_json(args, log_path)
     run_final_evaluation(args, logger)

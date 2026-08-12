@@ -23,6 +23,8 @@ def test_runtime_paths_are_portable_and_repository_relative() -> None:
     ).resolve()
     args = pipeline.parse_args(
         [
+            "--protocol-id",
+            "deterministic-three-strategy_v1_20260813_64392499",
             "--python-executable",
             sys.executable,
             "--training-mode-decisions",

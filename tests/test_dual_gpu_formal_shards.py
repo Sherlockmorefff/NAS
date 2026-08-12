@@ -196,8 +196,16 @@ def test_gpu_uuid_and_worker_assignment_are_enforced(monkeypatch) -> None:
         pipeline.verify_search_gpu_matches_acceptance("0", acceptance, expected_gpu_uuid="GPU-ONE", worker_id=0)
 
 
-def test_old_single_gpu_cli_remains_compatible() -> None:
-    args = pipeline.parse_args(["run-search-queue", "--gpu-id", "0"])
+def test_single_gpu_cli_requires_protocol_identity() -> None:
+    args = pipeline.parse_args(
+        [
+            "--protocol-id",
+            "deterministic-three-strategy_v1_20260813_64392499",
+            "run-search-queue",
+            "--gpu-id",
+            "0",
+        ]
+    )
     assert args.gpu_id == "0"
     assert args.task_manifest is None
     assert args.worker_id is None

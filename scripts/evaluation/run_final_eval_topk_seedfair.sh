@@ -6,8 +6,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 usage() {
-  echo "Usage: $0 --final-base-seed N [--run-dir DIR] [--top-k N] [--n-replicates N]"
+  echo "Usage: $0 --final-base-seed N --protocol-id ID [--run-dir DIR] [--top-k N]"
   echo "          [--dataset NAME] [--data-root DIR] [--search-run-tag TAG]"
+  echo "          [--search-protocol-id ID] [--legacy-root DIR]"
   echo "          [--eval-epochs N] [--patience N] [--python PATH] [--train] [--resume]"
   echo
   echo "Without --train, all 15 histories are preflighted and no GNN training starts."
@@ -26,6 +27,9 @@ RESUME=0
 DATASET="cora"
 DATA_ROOT=""
 SEARCH_RUN_TAG=""
+PROTOCOL_ID=""
+SEARCH_PROTOCOL_ID=""
+LEGACY_ROOT="legacy_artifacts/pre_20260813"
 PYTHON_OVERRIDE=""
 
 while (($#)); do
@@ -64,6 +68,18 @@ while (($#)); do
       ;;
     --search-run-tag)
       SEARCH_RUN_TAG="$2"
+      shift 2
+      ;;
+    --protocol-id)
+      PROTOCOL_ID="$2"
+      shift 2
+      ;;
+    --search-protocol-id)
+      SEARCH_PROTOCOL_ID="$2"
+      shift 2
+      ;;
+    --legacy-root)
+      LEGACY_ROOT="$2"
       shift 2
       ;;
     --python)
@@ -117,8 +133,8 @@ if [[ -z "$DATA_ROOT" ]]; then
     DATA_ROOT="/tmp/gnn_datasets"
   fi
 fi
-if [[ "$DATASET" != "cora" && -z "$SEARCH_RUN_TAG" ]]; then
-  echo "--search-run-tag is required for non-Cora isolated histories" >&2
+if [[ "$DATASET" != "cora" && -z "$SEARCH_RUN_TAG" && -z "$SEARCH_PROTOCOL_ID" ]]; then
+  echo "--search-protocol-id or legacy --search-run-tag is required for non-Cora histories" >&2
   exit 2
 fi
 
@@ -165,13 +181,21 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
 fi
 
 if [[ -z "$RUN_DIR" ]]; then
-  RUN_DIR="results/final_eval_topk_seedfair_${DATASET}_$(date +%Y%m%d_%H%M%S)"
+  if [[ -z "$PROTOCOL_ID" ]]; then
+    echo "--protocol-id is required unless the legacy --run-dir override is explicit" >&2
+    exit 2
+  fi
+  RUN_DIR="results/final_eval/$PROTOCOL_ID/$DATASET"
 elif [[ -d "$RUN_DIR" ]]; then
   RESUME=1
 fi
 
 RUN_NAME="$(basename "$RUN_DIR")"
-LOG_DIR="${LOG_DIR:-logs/final_eval_topk_seedfair/$RUN_NAME}"
+if [[ -n "$PROTOCOL_ID" ]]; then
+  LOG_DIR="${LOG_DIR:-logs/$PROTOCOL_ID/final_eval/$DATASET}"
+else
+  LOG_DIR="${LOG_DIR:-logs/final_eval_topk_seedfair/$RUN_NAME}"
+fi
 STATUS_FILE="$RUN_DIR/subtask_exit_codes.tsv"
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 if [[ ! -f "$STATUS_FILE" ]]; then
@@ -181,16 +205,28 @@ fi
 history_path() {
   local method_label="$1"
   local search_seed="$2"
+  local method_key=""
+  case "$method_label" in
+    global_schur) method_key="s0" ;;
+    gmm_exp100) method_key="g100" ;;
+    gmm_exp150) method_key="g150" ;;
+    *) return 2 ;;
+  esac
+  if [[ -n "$SEARCH_PROTOCOL_ID" ]]; then
+    printf "results/search/%s/%s/%s/search_seed%s/history_final.json" \
+      "$SEARCH_PROTOCOL_ID" "$DATASET" "$method_key" "$search_seed"
+    return
+  fi
   if [[ -z "$SEARCH_RUN_TAG" && "$DATASET" == "cora" ]]; then
     case "$method_label" in
       global_schur)
-        printf "results/formal_seedfair_full300_schur_global4_seed%s_pool768/history_final.json" "$search_seed"
+        printf "%s/results/formal_seedfair_full300_schur_global4_seed%s_pool768/history_final.json" "$LEGACY_ROOT" "$search_seed"
         ;;
       gmm_exp100)
-        printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed%s_pool768/history_final.json" "$search_seed"
+        printf "%s/results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp100_global4_seed%s_pool768/history_final.json" "$LEGACY_ROOT" "$search_seed"
         ;;
       gmm_exp150)
-        printf "results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed%s_pool768/history_final.json" "$search_seed"
+        printf "%s/results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed%s_pool768/history_final.json" "$LEGACY_ROOT" "$search_seed"
         ;;
       *)
         return 2
@@ -198,8 +234,8 @@ history_path() {
     esac
     return
   fi
-  printf "results/%s/%s/%s/search_seed%s/history_final.json" \
-    "$SEARCH_RUN_TAG" "$DATASET" "$method_label" "$search_seed"
+  printf "%s/results/%s/%s/%s/search_seed%s/history_final.json" \
+    "$LEGACY_ROOT" "$SEARCH_RUN_TAG" "$DATASET" "$method_label" "$search_seed"
 }
 
 record_status() {
@@ -237,7 +273,10 @@ run_task() {
     --log_dir "$LOG_DIR"
     --version "${stage}_${method_label}_seed${search_seed}"
   )
-  if [[ -z "$SEARCH_RUN_TAG" && "$DATASET" == "cora" ]]; then
+  if [[ -n "$PROTOCOL_ID" ]]; then
+    command+=(--protocol-id "$PROTOCOL_ID")
+  fi
+  if [[ -z "$SEARCH_RUN_TAG" && -z "$SEARCH_PROTOCOL_ID" && "$DATASET" == "cora" ]]; then
     command+=(--cora_root "$DATA_ROOT")
   else
     command+=(--data_root "$DATA_ROOT")
@@ -293,7 +332,12 @@ fi
 TRAIN_FAILED=0
 for method_label in "${METHODS[@]}"; do
   for search_seed in 0 1 2 3 4; do
-    task_output="$RUN_DIR/runs/${method_label}_seed${search_seed}"
+    case "$method_label" in
+      global_schur) method_dir="s0" ;;
+      gmm_exp100) method_dir="g100" ;;
+      gmm_exp150) method_dir="g150" ;;
+    esac
+    task_output="$RUN_DIR/${method_dir}/search_seed${search_seed}"
     run_task train "$method_label" "$search_seed" "$task_output" || TRAIN_FAILED=1
   done
 done

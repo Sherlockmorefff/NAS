@@ -14,7 +14,14 @@ import math
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import Any
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from experiment_paths import posthoc_dir, validate_protocol_id
 
 
 HP_MODE_SEARCH_DIM = {
@@ -232,13 +239,21 @@ GMM_FIELDS = [
 ]
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect NAS + HPO result summaries")
-    parser.add_argument("--results_root", type=str, default="results")
-    parser.add_argument("--output", type=str, default="results_analysis_bundle")
+    parser.add_argument("--results_root", type=str, default=None)
+    parser.add_argument(
+        "--legacy-root",
+        type=str,
+        default=None,
+        help="explicit legacy root; reads its results/ child without modifying it",
+    )
+    parser.add_argument("--protocol-id", default=None)
+    parser.add_argument("--analysis-name", default="collect-experiment-results")
+    parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--include_history_glob", type=str, default="history_final.json")
     parser.add_argument("--verbose", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def utc_now() -> str:
@@ -421,8 +436,15 @@ def scan_result_dirs(results_root: Path) -> tuple[list[Path], list[Path]]:
     if results_root.exists():
         for pattern in patterns:
             dirs.extend(path for path in results_root.glob(pattern) if path.is_dir())
+        dirs.extend(path.parent for path in results_root.rglob("history_final.json"))
+        dirs.extend(path.parent for path in results_root.rglob("final_results*.json"))
     unique_dirs = sorted({path.resolve(): path for path in dirs}.values(), key=lambda p: p.as_posix())
-    final_dirs = [path for path in unique_dirs if path.name.startswith("final_eval")]
+    final_dirs = [
+        path
+        for path in unique_dirs
+        if path.name.startswith("final_eval")
+        or any(path.glob("final_results*.json"))
+    ]
     return unique_dirs, final_dirs
 
 
@@ -1187,9 +1209,29 @@ def write_analysis_notes(
 
 def main() -> None:
     args = parse_args()
-    project_root = Path.cwd()
-    results_root = Path(args.results_root)
-    output_dir = Path(args.output)
+    project_root = Path(__file__).resolve().parents[1]
+    if args.results_root is not None and args.legacy_root is not None:
+        raise ValueError("--results_root and --legacy-root are mutually exclusive")
+    if args.protocol_id is not None:
+        validate_protocol_id(args.protocol_id)
+    if args.results_root is not None:
+        results_root = Path(args.results_root)
+    elif args.legacy_root is not None:
+        results_root = Path(args.legacy_root) / "results"
+    elif args.protocol_id is not None:
+        results_root = project_root / "results" / "search" / args.protocol_id
+    else:
+        results_root = project_root / "results"
+    if args.output is not None:
+        output_dir = Path(args.output)
+    elif args.protocol_id is not None:
+        output_dir = posthoc_dir(
+            project_root,
+            args.protocol_id,
+            args.analysis_name,
+        )
+    else:
+        output_dir = project_root / "results_analysis_bundle"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     warnings: list[str] = []

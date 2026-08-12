@@ -183,7 +183,8 @@ def build_formal_manifest(
     training_mode_decisions: str | os.PathLike[str],
     method_config: str | os.PathLike[str],
     python_executable: str,
-    run_tag: str,
+    protocol_id: str | None = None,
+    run_tag: str | None = None,
     artifact_root: str | os.PathLike[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     root = Path(repo_root).resolve()
@@ -222,6 +223,7 @@ def build_formal_manifest(
                         checkpoint=str(checkpoint),
                         data_root=str(data_root),
                         run_tag=run_tag,
+                        protocol_id=protocol_id,
                         dataset=dataset,
                         method_key=method_key,
                         search_seed=int(search_seed),
@@ -244,11 +246,15 @@ def build_formal_manifest(
                         raise FileExistsError(
                             f"formal {role} path already exists for {task_id}: {path}"
                         )
+                identity_argv = (
+                    ["--protocol-id", protocol_id]
+                    if protocol_id is not None
+                    else ["--run-tag", str(run_tag)]
+                )
                 wrapper_argv = [
                     str(python_executable),
                     str(root / "cross_dataset_runner.py"),
-                    "--run-tag",
-                    run_tag,
+                    *identity_argv,
                     "--dataset",
                     dataset,
                     "--method",
@@ -362,7 +368,8 @@ def build_formal_manifest(
         ),
         "formal_search_seeds": list(cross_dataset_runner.FORMAL_SEARCH_SEEDS),
         "task_count": len(tasks),
-        "run_tag": run_tag,
+        "protocol_id": protocol_id,
+        "legacy_run_tag": run_tag,
         "source_id": frozen_source_id,
         "configuration_fingerprint": config_fingerprint,
         "candidate_pool_fingerprints": pool_fingerprints,
@@ -702,7 +709,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--training-mode-decisions", required=True)
     parser.add_argument("--method-config", default=str(cross_dataset_runner.DEFAULT_METHOD_CONFIG))
     parser.add_argument("--python", default=sys.executable)
-    parser.add_argument("--run-tag", required=True)
+    parser.add_argument("--protocol-id", required=True)
     parser.add_argument("--artifact-root", default=None)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-csv", required=True)
@@ -722,7 +729,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         training_mode_decisions=args.training_mode_decisions,
         method_config=args.method_config,
         python_executable=args.python,
-        run_tag=args.run_tag,
+        protocol_id=args.protocol_id,
         artifact_root=args.artifact_root,
     )
     digest = write_formal_manifest(
