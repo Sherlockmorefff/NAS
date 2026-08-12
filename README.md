@@ -20,6 +20,9 @@ in [docs/repository_layout.md](docs/repository_layout.md). Formal Python entry
 points such as `bo_phase4.py`, `cross_dataset_runner.py`, and `final_eval.py`
 remain at the repository root.
 
+Experiment artifact classification and retention rules are documented in
+[docs/experiment_artifact_guide.md](docs/experiment_artifact_guide.md).
+
 Maintained shell launchers are organized under `scripts/`:
 
     scripts/analysis/run_collect_results.sh --help
@@ -29,6 +32,19 @@ Maintained shell launchers are organized under `scripts/`:
 The historical paths remain compatible wrappers, so existing commands using
 `analyse/run_collect_results.sh`, `analyse/run_diagnostics_suite.sh`, or the
 root `run_final_eval_topk_seedfair.sh` continue to work.
+
+Validation and preflight implementations live under `scripts/validation/`;
+their former root commands remain compatibility modules. Repository artifact
+inventories can be generated without reading result contents:
+
+    python scripts/validation/resource_preflight.py --help
+    python scripts/maintenance/inventory_repository.py \
+      --repo-root "$PWD" \
+      --output-dir artifacts/indexes/repository_inventory_<timestamp>
+
+Only `tests/` is part of the default maintained pytest collection. Historical
+programs under `legacy/` and vendored third-party tests are retained for
+reproduction but are not implicitly collected.
 
 About
 -----

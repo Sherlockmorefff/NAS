@@ -83,9 +83,11 @@ forwards all arguments unchanged. Both forms resolve paths relative to the
 repository rather than the caller's working directory. See
 `docs/repository_layout.md` for the launcher and artifact policy.
 
-Flickr requires both the historical static-pool evidence and
-`flickr_continuous_extreme_preflight.py`. The latter deterministically searches
-the real continuous decoder domain without labels, excludes all five formal
+Flickr requires both the historical static-pool evidence and canonical
+`scripts/validation/flickr_continuous_extreme_preflight.py`. The historical
+root path `flickr_continuous_extreme_preflight.py` remains a compatibility
+module. The implementation deterministically searches the real continuous
+decoder domain without labels, excludes all five formal
 768-point pools, covers joint hidden/layer/GAT/parameter/activation extrema,
 then runs a forward/backward probe and one real 150-epoch, patience-40
 full-batch evaluation for the most dangerous valid candidate. Its outputs are

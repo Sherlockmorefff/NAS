@@ -2,8 +2,8 @@
 
 This document describes the current repository layout. It is a compatibility
 guide, not a declaration that every root-level Python file should be moved into
-a package. The stable Python entry points remain at the repository root during
-the first organization phase.
+a package. Stable formal entry points and compatibility modules remain at the
+repository root.
 
 ## Stable root entry points
 
@@ -22,13 +22,9 @@ working:
   task matrices, source snapshots, and launch-gate verification.
 - `first_formal_top10_test30.py`: historical first-formal Top-10/test30
   evaluation workflow.
-- `validate_dataset_loading.py`, `gpu_dataset_smoke.py`,
-  `resource_preflight.py`, `method_path_smoke.py`, and the Flickr preflight
-  programs: explicit validation entry points.
-
-Moving these implementations requires a separate compatibility change with
-root-level wrappers and updates to imports, tests, documentation, source-gate
-discovery, and recorded subprocess paths.
+Validation commands retain stable root compatibility modules, but their
+implementations now live under `scripts/validation/`; they are not formal
+search entry points.
 
 ## Core library modules
 
@@ -54,9 +50,11 @@ checkpoint I/O, history datasets, metrics, and standalone predictor tools.
 ## Orchestration and preflight
 
 Cross-dataset orchestration is split across the stable root entry points listed
-above. Formal matrix construction, source freeze/verification, deterministic
-queue execution, dataset loading checks, GPU smokes, and resource preflights
-remain separate so validation can stop before a costly search or evaluation.
+above. Formal matrix construction, source freeze/verification, and deterministic
+queue execution remain at the root. Dataset loading checks, GPU smokes, cost
+estimates, method-path smokes, and resource preflights live under
+`scripts/validation/` so validation can stop before a costly search or
+evaluation. Their historical root paths remain import- and CLI-compatible.
 
 ## Analysis
 
@@ -70,11 +68,22 @@ Maintained shell entry points are grouped by purpose:
 
 ```text
 scripts/
+├── __init__.py
 ├── analysis/
 │   ├── run_collect_results.sh
 │   └── run_diagnostics_suite.sh
-└── evaluation/
-    └── run_final_eval_topk_seedfair.sh
+├── evaluation/
+│   └── run_final_eval_topk_seedfair.sh
+├── maintenance/
+│   └── inventory_repository.py
+└── validation/
+    ├── cross_dataset_cost_estimate.py
+    ├── flickr_continuous_extreme_preflight.py
+    ├── flickr_failed_candidate_resource_smoke.py
+    ├── gpu_dataset_smoke.py
+    ├── method_path_smoke.py
+    ├── resource_preflight.py
+    └── validate_dataset_loading.py
 ```
 
 Each launcher resolves the repository from its own file location and can be
@@ -100,29 +109,67 @@ scripts/analysis/run_diagnostics_suite.sh --help
 scripts/evaluation/run_final_eval_topk_seedfair.sh --help
 ```
 
+New validation instructions should likewise use canonical paths, for example:
+
+```bash
+python scripts/validation/validate_dataset_loading.py --help
+python scripts/validation/resource_preflight.py --help
+python scripts/validation/cross_dataset_cost_estimate.py --help
+```
+
+The seven former root commands remain compatibility modules. They forward the
+same arguments and preserve imports, including historically imported helper
+functions, so source manifests and exact argv records do not need rewriting.
+GPU/data validation is never run implicitly by these wrappers.
+
 ## Configuration, tests, and documentation
 
 - `configs/` contains machine-readable experiment definitions. In particular,
   `configs/cross_dataset_methods.json` is the formal S0/G100/G150 method source.
-- `tests/` contains CPU-safe unit, mock, provenance, launch-gate, initialization,
-  surrogate, final-evaluation, and launcher tests. Tests must not rely on a GPU
-  or download Cora during local validation.
+- `tests/` contains the currently maintained CPU-safe unit, mock, provenance,
+  launch-gate, initialization, surrogate, final-evaluation, and launcher tests.
+  `pytest.ini` makes this the default collection root. Tests must not rely on a
+  GPU or download Cora during local validation.
 - `docs/` contains experiment protocols, initialization specifications,
   reproducibility notes, and this layout policy.
 
+Default pytest collection deliberately excludes `legacy/`, vendored Theano
+tests, and `software/enas/` historical tests. This defines the maintained test
+boundary; it is not a claim that excluded tests pass under the current
+environment.
+
 ## Legacy and historical code
 
-The original D-VAE/ENAS workflow and staged Cora experiments remain in their
-historical locations. This includes `train.py`, `train_joint.py`,
-`generate_mini_data.py`, `bo_phase2.py`, `bo_phase3.py`, `bo_phase4_tpe.py`,
-`eval_joint.py`, `bayesian_optimization/`, and `software/enas/`. Experimental
-geometric-acquisition files also remain at the root for now.
+`legacy/geometric_acquisition/` contains the archived differentiable-decoder,
+Jacobian, and geometric acquisition prototype. It has no formal dependency,
+has no root wrapper, and is excluded from the current source freeze and tests.
+Its README records the incompatible historical API and limited import-only
+support status.
+
+`legacy/phased_cora_pipeline/` contains the historical mini-data, joint
+training/evaluation, Phase2, Phase3, and TPE implementations. The corresponding
+root filenames are lightweight wrappers, so commands such as
+`python bo_phase2.py --help` and checkpoint module paths remain stable. These
+implementations are included in the current source freeze because those root
+wrappers call them.
+
+The original D-VAE/BN and vendored ENAS stack remains in `train.py`,
+`bayesian_optimization/`, and `software/enas/`. The compatibility-sensitive
+`models.py`, `util.py`, and `nas_space.py` modules remain at the root.
 
 Lack of a repository-internal import is not sufficient evidence that a file is
 unused: it may be a direct CLI, subprocess target, frozen-source member, or
 historical reproduction dependency. Historical code should be assessed for
-reproduction value before it is deleted or moved into a future `legacy/`
-directory.
+reproduction value before it is deleted or moved into `legacy/`.
+
+## Formal source-freeze boundary
+
+The current source gate discovers root Python entry points, `analyse/`,
+`configs/`, `surrogate/`, and all maintained `scripts/` Python/shell files. It
+also includes `legacy/phased_cora_pipeline/` because root compatibility wrappers
+execute those implementations. `legacy/geometric_acquisition/` remains outside
+the formal gate. This new layout produces a new source ID; historical manifests
+and source IDs are not edited and continue to verify their historical paths.
 
 ## Results, logs, data, and checkpoints
 
@@ -145,6 +192,13 @@ Ignored files are not automatically safe to remove. Git ignore rules only
 control discovery and staging; they do not classify scientific value or
 reproducibility requirements. Python and pytest caches may be regenerable, but
 must still be handled explicitly rather than inferred from broad ignore rules.
+
+`scripts/maintenance/inventory_repository.py` creates a metadata-only JSON,
+CSV, and Markdown inventory under an explicit output directory. It does not
+open artifact contents or follow symlinks. Machine-specific snapshots under
+`artifacts/indexes/repository_inventory_*/` stay local and ignored. See
+[the experiment artifact guide](experiment_artifact_guide.md) for
+classification and retention guidance.
 
 ## Suggested layout for future runs
 
