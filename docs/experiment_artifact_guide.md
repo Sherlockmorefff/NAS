@@ -44,33 +44,33 @@ machine-specific paths and live size/time observations.
 
 ## Current historical roots
 
-`results/`, `results-1-LHS/`, `results-wgmm1/`, all `results_analysis_bundle*`
-directories, `logs/`, `logs-LHS/`, and `logs-wgmm1/` remain in their historical
-locations. `data/`, `Cora/`, and `raw/` retain existing loader semantics.
-Moving them would risk breaking saved exact argv, history references, resume
-identity, checkpoint provenance, and analysis commands, while also copying
-several gigabytes without scientific benefit.
+Preserved pre-2026-08-13 results, analysis bundles, and `logs*` trees are under
+`legacy_artifacts/pre_20260813/`, retaining their original top-level names and
+contents. Saved exact argv and provenance strings are deliberately not
+rewritten. Tools read the archive only after an explicit `--legacy-root` or
+input path. `data/`, `Cora/`, and `raw/` retain existing loader semantics.
 
-## Future layout
+## New formal layout
 
-New CLI work may later opt into:
+Current formal workflow entry points use:
 
 ```text
 results/
-├── search/<run-tag>/
-├── final_eval/<run-tag>/
-└── posthoc/<run-tag>/
+├── search/<protocol-id>/<dataset>/<method>/search_seed<N>/
+├── final_eval/<protocol-id>/<dataset>/<method>/
+└── posthoc/<protocol-id>/<analysis-name>/
 
-logs/<run-tag>/
+logs/<protocol-id>/{search,final_eval,posthoc}/
 
 artifacts/
 ├── archives/
-└── indexes/
+├── indexes/
+└── reference/
 ```
 
-That convention is documentation only until a separate compatibility change
-updates CLI defaults. Manifest, provenance, history, and resume state should
-remain beside the run they describe. `artifacts/` is for additional archives
-and indexes, not a destination for removing original metadata. Old result paths
-must remain readable by final evaluation, resume, audits, and reproduction
-tools.
+Protocol IDs are validated, non-empty outputs are protected, and explicit
+legacy paths retain priority. Manifest, provenance, history, and resume state
+remain beside the run they describe. `artifacts/reference/` contains reusable
+frozen inputs; it is not a destination for removing run-owned metadata. Old
+result paths remain readable by final evaluation, audits, and reproduction
+tools through the explicit legacy archive.

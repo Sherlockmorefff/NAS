@@ -55,13 +55,13 @@ Build a single formal command without executing it:
 
 ```bash
 conda run -n nas python cross_dataset_runner.py \
-  --run-tag cross_dataset_v1 \
+  --protocol-id cross-dataset_v1_20260813_<SOURCE_ID_FIRST8> \
   --dataset citeseer \
   --method G100 \
   --search-seed 5 \
-  --checkpoint /absolute/path/joint_model_pipeline_global4_best.pth \
-  --data-root /absolute/path/datasets \
-  --expected-source-manifest /absolute/path/source_manifest.json \
+  --checkpoint checkpoints/joint_model_pipeline_global4_best.pth \
+  --data-root <DATASET_ROOT> \
+  --expected-source-manifest <SOURCE_MANIFEST.json> \
   --frozen-source-id <SOURCE_ID> \
   --dry-run
 ```
@@ -72,9 +72,16 @@ Both modes verify source membership and bytes; a mismatch is never accepted by
 updating the expected hash. Runs are isolated under:
 
 ```text
-results/<run-tag>/<dataset>/<method>/search_seed<N>/
-logs/<run-tag>/<dataset>/<method>/search_seed<N>/
+results/search/<protocol-id>/<dataset>/<s0|g100|g150>/search_seed<N>/
+logs/<protocol-id>/search/<dataset>/<s0|g100|g150>/search_seed<N>/
 ```
+
+The ID must match
+`<experiment>_v<version>_<YYYYMMDD>_<source-id-first8>`. Paths and protocol IDs
+are storage identity only: they do not enter candidate fingerprints, search or
+evaluation seeds, or method budgets. Non-empty destinations are rejected by
+default. An explicit legacy `--run-tag` remains parseable for historical path
+reproduction, but cannot start a new formal `--execute`/`--dry-run` workflow.
 
 The maintained Top-k seed-fair evaluation launcher is
 `scripts/evaluation/run_final_eval_topk_seedfair.sh`. The historical root

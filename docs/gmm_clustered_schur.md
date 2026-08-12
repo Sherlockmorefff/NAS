@@ -214,7 +214,7 @@ below are repository-relative.
 
 ```bash
 conda run -n nas python bo_phase4.py \
-  --checkpoint results-wgmm1/joint_search/vae_checkpoint.pth \
+  --checkpoint checkpoints/joint_model_pipeline_global4_best.pth \
   --cora_root data/Cora \
   --hp_mode global4 \
   --initial_selection_strategy gmm_schur_lowfid \
@@ -244,6 +244,11 @@ conda run -n nas python bo_phase4.py \
   --online_candidate_strategy qlogei \
   --seed <SEARCH_SEED> \
   --version k6_lf_seed<SEARCH_SEED>_<TIMESTAMP> \
-  --log_dir logs/k6_lf \
-  --output results/k6_lf_seed<SEARCH_SEED>_<TIMESTAMP>
+  --log_dir logs/<PROTOCOL_ID>/search/cora/g150/search_seed<SEARCH_SEED> \
+  --output results/search/<PROTOCOL_ID>/cora/g150/search_seed<SEARCH_SEED>
 ```
+
+For current formal orchestration, prefer `cross_dataset_runner.py` with
+`--protocol-id`; the direct Phase4 command above is an explicit low-level
+example. Historical result paths now live below
+`legacy_artifacts/pre_20260813/` and remain readable by explicit path.

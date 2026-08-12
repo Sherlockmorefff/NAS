@@ -173,11 +173,28 @@ and source IDs are not edited and continue to verify their historical paths.
 
 ## Results, logs, data, and checkpoints
 
-Existing `results/`, `results-1-LHS/`, `results-wgmm1/`, analysis bundles, and
-all `logs*` directories are historical experiment products and are not being
-migrated. `data/`, `Cora/`, and `raw/` retain their current dataset-root
-semantics. Checkpoints currently live beside the training runs that produced
-them, including the joint-search directories under historical result roots.
+Pre-2026-08-13 outputs have been archived locally without rewriting them:
+
+```text
+legacy_artifacts/pre_20260813/
+├── results/
+├── results-1-LHS/
+├── results-wgmm1/
+├── results_analysis_bundle-wgmm1/
+├── results_analysis_bundle_after_diagnostics_results-wgmm1/
+├── logs/
+├── logs-LHS/
+└── logs-wgmm1/
+```
+
+Historical analysis must name this archive explicitly; for example,
+`analyse/collect_experiment_results.py --legacy-root
+legacy_artifacts/pre_20260813 --output <OUTPUT>`. The current reusable joint
+checkpoint is `checkpoints/joint_model_pipeline_global4_best.pth`. Dataset
+manifests and accepted training decisions are under
+`artifacts/reference/cross_dataset_v1_preflight/`. These extracted bytes were
+SHA-256 checked before and after their same-filesystem moves. `data/`, `Cora/`,
+and `raw/` retain their existing dataset-root semantics.
 
 The following files are experiment state, not ordinary disposable caches:
 
@@ -200,28 +217,34 @@ open artifact contents or follow symlinks. Machine-specific snapshots under
 [the experiment artifact guide](experiment_artifact_guide.md) for
 classification and retention guidance.
 
-## Suggested layout for future runs
+## Active protocol layout for new runs
 
-No current CLI default is changed by this policy. After a separate CLI and
-compatibility change, new runs may use:
+New formal orchestration requires a protocol ID of the form
+`<experiment>_v<version>_<YYYYMMDD>_<source-id-first8>` and uses:
 
 ```text
 results/
-├── search/<run-tag>/
-├── final_eval/<run-tag>/
-└── posthoc/<run-tag>/
+├── search/<protocol-id>/<dataset>/<method>/search_seed<N>/
+├── final_eval/<protocol-id>/<dataset>/<method>/
+└── posthoc/<protocol-id>/<analysis-name>/
 
-logs/
-└── <run-tag>/
+logs/<protocol-id>/
+├── search/
+├── final_eval/
+└── posthoc/
 
 artifacts/
 ├── archives/
-└── indexes/
+├── indexes/
+└── reference/
 ```
 
-Manifest, provenance, history, and resume state should continue to coexist with
-the run that owns them. `artifacts/` is only for additional archives and
-cross-run indexes; it must not become a reason to remove original run metadata.
-The proposed layout becomes active only after a later change updates CLI output
-options, tests, and documentation. Existing result paths must remain supported
-for final evaluation, resume, audit, and historical reproduction.
+`experiment_paths.py` validates IDs and components, prevents path traversal,
+and refuses non-empty destinations unless the caller explicitly enters an
+existing resume path. It does not contribute to seeds, budgets, fingerprints,
+or cache identity. Explicit output options retain priority for legacy
+reproduction. Manifest, provenance, history, GP/optimizer/RNG resume state,
+SQLite, and run-owned checkpoints remain beside the run that owns them;
+`artifacts/` is only for reusable reference inputs, extra archives, and
+cross-run indexes. Existing result paths remain supported through explicit
+legacy paths and compatibility launchers.

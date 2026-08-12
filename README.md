@@ -22,6 +22,10 @@ remain at the repository root.
 
 Experiment artifact classification and retention rules are documented in
 [docs/experiment_artifact_guide.md](docs/experiment_artifact_guide.md).
+New formal runs use a fixed `protocol_id` and write only below
+`results/{search,final_eval,posthoc}/<protocol_id>/` and
+`logs/<protocol_id>/`. Pre-2026-08-13 outputs are local historical inputs below
+`legacy_artifacts/pre_20260813/`; ignored artifacts are not disposable caches.
 
 Maintained shell launchers are organized under `scripts/`:
 
