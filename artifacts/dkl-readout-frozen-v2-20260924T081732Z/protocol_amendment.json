@@ -1,0 +1,48 @@
+{
+  "parent_run_id": "dkl-readout-frozen-v1-20260924T072004Z",
+  "parent_protocol_sha256": "84b45b7a0bb682b0144cea7ecd13e7a2104621c121ccc64aac8326f88b0cad4b",
+  "supplement_prompt_sha256": "db69122e74b7df6d278060b00aafe46d13460418011cb6c9696e321c30025b1d",
+  "science_configuration_changes": [],
+  "changes": [
+    {
+      "field": "budget.model_seconds",
+      "old": 1200,
+      "new": 1500,
+      "reason": "Explicit V2 25-minute supplement"
+    },
+    {
+      "field": "run identity and artifact output paths",
+      "old": "dkl-readout-frozen-v1-20260924T072004Z",
+      "new": "dkl-readout-frozen-v2-20260924T081732Z",
+      "reason": "Separate immutable lineage; V1 remains blocked"
+    },
+    {
+      "field": "verification execution",
+      "old": "run full checks and precompute",
+      "new": "reuse byte-verified prior evidence/cache; targeted migration checks only",
+      "reason": "Do not spend duplicate validation budget"
+    },
+    {
+      "field": "budget import",
+      "old": "new zero ledger",
+      "new": "inherit 3.2575200367718935 seconds and182 synthetic calls exactly once",
+      "reason": "Cumulative readout cost retained"
+    },
+    {
+      "field": "scoring release gate",
+      "old": "full or partial sealed run",
+      "new": "full240/270000 only",
+      "reason": "V2 section7 explicit restriction"
+    }
+  ],
+  "no_change_to": [
+    "model equations",
+    "finite beta prior",
+    "training data/scalers/order/seeds",
+    "1500 updates and1000/500 LR schedule",
+    "diagnostic step1200",
+    "three stability windows and thresholds",
+    "scoring formulas and7flags"
+  ],
+  "formal_resume": false
+}

@@ -35,7 +35,7 @@ import torch
 configure_torch_determinism(torch)
 
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential
+from torch.nn import BatchNorm1d, LayerNorm, Linear, ModuleDict, ModuleList, Sequential
 from torch_geometric.nn import GATConv, GCN2Conv, GCNConv, GINConv, SAGEConv
 
 from evaluation_errors import InfrastructureEvaluationError, is_infrastructure_failure
@@ -81,6 +81,48 @@ OP_REG = {
     "SAGEConv": SAGEConv,
     "GINConv": GINConv,
 }
+
+COMPONENT_VARIANTS = (
+    "baseline",
+    "projected_combine",
+    "concat_linear",
+    "batch_norm",
+    "layer_norm",
+    "projected_residual",
+    "post_mlp1",
+)
+
+ACTIVATION_VARIANTS = (
+    "relu",
+    "leaky_relu",
+    "elu",
+)
+
+
+def _activation_module(activation_variant: str) -> torch.nn.Module:
+    if activation_variant == "relu":
+        return torch.nn.ReLU()
+    if activation_variant == "leaky_relu":
+        return torch.nn.LeakyReLU(negative_slope=0.01)
+    if activation_variant == "elu":
+        return torch.nn.ELU(alpha=1.0)
+    raise ValueError(
+        f"unsupported activation_variant={activation_variant!r}; "
+        f"expected one of {ACTIVATION_VARIANTS}"
+    )
+
+
+def _apply_activation(x: torch.Tensor, activation_variant: str) -> torch.Tensor:
+    if activation_variant == "relu":
+        return F.relu(x)
+    if activation_variant == "leaky_relu":
+        return F.leaky_relu(x, negative_slope=0.01)
+    if activation_variant == "elu":
+        return F.elu(x, alpha=1.0)
+    raise ValueError(
+        f"unsupported activation_variant={activation_variant!r}; "
+        f"expected one of {ACTIVATION_VARIANTS}"
+    )
 
 
 def _match_feature_dim(x: torch.Tensor, target_dim: int) -> torch.Tensor:
@@ -530,8 +572,22 @@ class DynamicGNN(torch.nn.Module):
         gat_heads_by_layer=None,
         sage_aggr_by_layer=None,
         gin_eps_by_layer=None,
+        component_variant: str = "baseline",
+        activation_variant: str = "relu",
     ):
         super().__init__()
+        if component_variant not in COMPONENT_VARIANTS:
+            raise ValueError(
+                f"unsupported component_variant={component_variant!r}; "
+                f"expected one of {COMPONENT_VARIANTS}"
+            )
+        self.component_variant = component_variant
+        if activation_variant not in ACTIVATION_VARIANTS:
+            raise ValueError(
+                f"unsupported activation_variant={activation_variant!r}; "
+                f"expected one of {ACTIVATION_VARIANTS}"
+            )
+        self.activation_variant = activation_variant
         self.ops = config["operations"]
         self.dropout = dropout
         self.hidden_dim = hidden_dim
@@ -586,7 +642,7 @@ class DynamicGNN(torch.nn.Module):
                 self.layer_input_dims.append(in_dim)
                 mlp = Sequential(
                     Linear(in_dim, hidden_dim),
-                    ReLU(),
+                    _activation_module(self.activation_variant),
                     Linear(hidden_dim, hidden_dim),
                 )
                 self.layers.append(
@@ -645,10 +701,99 @@ class DynamicGNN(torch.nn.Module):
         end_in_dim = node_out_dim.get(end_preds[0], hidden_dim) if end_preds else hidden_dim
         self.clf = Linear(end_in_dim, out_ch)
         self._node_out_dim = node_out_dim
+        self.combine_projections = ModuleDict()
+        if self.component_variant == "projected_combine":
+            combine_nodes = list(range(1, self.n_nodes))
+            for node_idx in combine_nodes:
+                preds = self._predecessors.get(node_idx, [node_idx - 1])
+                target_dim = (
+                    end_in_dim
+                    if node_idx == end_node_idx
+                    else node_out_dim.get(preds[0], in_ch)
+                )
+                for pred in preds:
+                    pred_dim = node_out_dim.get(pred, in_ch)
+                    if pred_dim != target_dim:
+                        self.combine_projections[f"n{node_idx}_p{pred}"] = Linear(
+                            pred_dim, target_dim, bias=False
+                        )
+        self.concat_projections = ModuleDict()
+        self._concat_predecessor_dims: dict[int, list[int]] = {}
+        if self.component_variant == "concat_linear":
+            for node_idx in range(1, self.n_nodes):
+                preds = self._predecessors.get(node_idx, [node_idx - 1])
+                predecessor_dims = [node_out_dim.get(pred, in_ch) for pred in preds]
+                if len(predecessor_dims) < 2 or len(set(predecessor_dims)) == 1:
+                    continue
+                target_dim = (
+                    end_in_dim
+                    if node_idx == end_node_idx
+                    else node_out_dim.get(preds[0], in_ch)
+                )
+                self.concat_projections[f"n{node_idx}"] = Linear(
+                    sum(predecessor_dims), target_dim
+                )
+                self._concat_predecessor_dims[node_idx] = predecessor_dims
+        self.batch_norms = ModuleDict()
+        if self.component_variant == "batch_norm":
+            for i, op in enumerate(self.ops):
+                if op != "Identity":
+                    self.batch_norms[str(i)] = BatchNorm1d(hidden_dim)
+        self.layer_norms = ModuleDict()
+        if self.component_variant == "layer_norm":
+            for i, op in enumerate(self.ops):
+                if op != "Identity":
+                    self.layer_norms[str(i)] = LayerNorm(hidden_dim)
+        self.residual_projections = ModuleDict()
+        if self.component_variant == "projected_residual":
+            for i, op in enumerate(self.ops):
+                if op != "Identity":
+                    input_dim = int(self.layer_input_dims[i] or hidden_dim)
+                    self.residual_projections[str(i)] = Linear(
+                        input_dim, hidden_dim, bias=False
+                    )
+        self.post_mlp = (
+            Linear(end_in_dim, end_in_dim)
+            if self.component_variant == "post_mlp1"
+            else None
+        )
+
+    def _combine(self, node_idx, preds, node_states, fallback):
+        concat_key = f"n{node_idx}"
+        if self.component_variant == "concat_linear" and concat_key in self.concat_projections:
+            expected_dims = self._concat_predecessor_dims[node_idx]
+            features = [
+                _match_feature_dim(node_states.get(pred, fallback), expected_dim)
+                for pred, expected_dim in zip(preds, expected_dims)
+            ]
+            return self.concat_projections[concat_key](torch.cat(features, dim=1))
+
+        if self.component_variant != "projected_combine":
+            aggregate = None
+            for pred in preds:
+                pred_feat = node_states.get(pred, fallback)
+                if aggregate is None:
+                    aggregate = pred_feat
+                else:
+                    if aggregate.shape[1] != pred_feat.shape[1]:
+                        min_dim = min(aggregate.shape[1], pred_feat.shape[1])
+                        aggregate = aggregate[:, :min_dim]
+                        pred_feat = pred_feat[:, :min_dim]
+                    aggregate = aggregate + pred_feat
+            return fallback if aggregate is None else aggregate
+
+        aggregate = None
+        for pred in preds:
+            pred_feat = node_states.get(pred, fallback)
+            key = f"n{node_idx}_p{pred}"
+            if key in self.combine_projections:
+                pred_feat = self.combine_projections[key](pred_feat)
+            aggregate = pred_feat if aggregate is None else aggregate + pred_feat
+        return fallback if aggregate is None else aggregate
 
     def forward(self, x, edge_index):
         if self.has_gcnii and self.input_proj is not None:
-            x_0 = F.relu(self.input_proj(x))
+            x_0 = _apply_activation(self.input_proj(x), self.activation_variant)
         else:
             x_0 = None
 
@@ -658,30 +803,24 @@ class DynamicGNN(torch.nn.Module):
             node_idx = i + 1
             preds = self._predecessors.get(node_idx, [node_idx - 1])
 
-            agg = None
-            for pred in preds:
-                pred_feat = node_states.get(pred, x)
-                if agg is None:
-                    agg = pred_feat
-                else:
-                    if agg.shape[1] != pred_feat.shape[1]:
-                        min_dim = min(agg.shape[1], pred_feat.shape[1])
-                        agg = agg[:, :min_dim]
-                        pred_feat = pred_feat[:, :min_dim]
-                    agg = agg + pred_feat
-
-            if agg is None:
-                agg = x
+            agg = self._combine(node_idx, preds, node_states, x)
 
             if op == "Identity" or layer is None:
                 out = agg
             elif op == "GCNII":
                 expected_input_dim = int(self.layer_input_dims[i] or self.hidden_dim)
                 if agg.shape[1] == self.in_ch and self.input_proj is not None:
-                    agg = F.relu(self.input_proj(agg))
+                    agg = _apply_activation(self.input_proj(agg), self.activation_variant)
                 agg = _match_feature_dim(agg, expected_input_dim)
+                layer_out = layer(agg, x_0, edge_index)
+                if self.component_variant == "batch_norm":
+                    layer_out = self.batch_norms[str(i)](layer_out)
+                elif self.component_variant == "layer_norm":
+                    layer_out = self.layer_norms[str(i)](layer_out)
+                elif self.component_variant == "projected_residual":
+                    layer_out = layer_out + self.residual_projections[str(i)](agg)
                 out = F.dropout(
-                    F.relu(layer(agg, x_0, edge_index)),
+                    _apply_activation(layer_out, self.activation_variant),
                     self.dropout,
                     self.training,
                 )
@@ -690,8 +829,15 @@ class DynamicGNN(torch.nn.Module):
                 if expected_input_dim is None:
                     raise RuntimeError(f"missing input dimension for layer {i} ({op})")
                 agg = _match_feature_dim(agg, expected_input_dim)
+                layer_out = layer(agg, edge_index)
+                if self.component_variant == "batch_norm":
+                    layer_out = self.batch_norms[str(i)](layer_out)
+                elif self.component_variant == "layer_norm":
+                    layer_out = self.layer_norms[str(i)](layer_out)
+                elif self.component_variant == "projected_residual":
+                    layer_out = layer_out + self.residual_projections[str(i)](agg)
                 out = F.dropout(
-                    F.relu(layer(agg, edge_index)),
+                    _apply_activation(layer_out, self.activation_variant),
                     self.dropout,
                     self.training,
                 )
@@ -700,22 +846,14 @@ class DynamicGNN(torch.nn.Module):
 
         end_node_idx = self.n_nodes - 1
         end_preds = self._predecessors.get(end_node_idx, [self.n_nodes - 2])
-        agg_end = None
-        for pred in end_preds:
-            feat = node_states.get(pred, list(node_states.values())[-1])
-            if agg_end is None:
-                agg_end = feat
-            else:
-                if agg_end.shape[1] != feat.shape[1]:
-                    min_dim = min(agg_end.shape[1], feat.shape[1])
-                    agg_end = agg_end[:, :min_dim]
-                    feat = feat[:, :min_dim]
-                agg_end = agg_end + feat
-
-        if agg_end is None:
-            agg_end = list(node_states.values())[-1]
+        fallback = list(node_states.values())[-1]
+        agg_end = self._combine(end_node_idx, end_preds, node_states, fallback)
 
         agg_end = _match_feature_dim(agg_end, self.clf.in_features)
+        if self.post_mlp is not None:
+            agg_end = _apply_activation(
+                self.post_mlp(agg_end), self.activation_variant
+            )
 
         return self.clf(agg_end)
 
@@ -744,6 +882,9 @@ def train_and_eval_arch(
     track_test: bool = False,
     return_metadata: bool = False,
     return_reproducibility_metadata: bool = False,
+    component_variant: str = "baseline",
+    activation_variant: str = "relu",
+    return_trajectory: bool = False,
 ) -> tuple:
     assert_strict_torch_determinism(torch)
     if device is None:
@@ -769,6 +910,8 @@ def train_and_eval_arch(
                 gat_heads_by_layer=gat_heads_by_layer,
                 sage_aggr_by_layer=sage_aggr_by_layer,
                 gin_eps_by_layer=gin_eps_by_layer,
+                component_variant=component_variant,
+                activation_variant=activation_variant,
             ).to(device)
         except (RuntimeError, ValueError, TypeError, KeyError, MemoryError) as exc:
             _raise_if_infrastructure_failure(
@@ -883,12 +1026,21 @@ def train_and_eval_arch(
             _empty_cuda_cache_if_oom(exc)
             _warn_dynamic_gnn_failure("eval", exc)
             metadata = _training_metadata(best_epoch, epochs_ran)
+            metadata["failure"] = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+            }
             if return_reproducibility_metadata:
                 metadata.update(
                     {
                         "trajectory_hash": _canonical_trajectory_hash(trajectory),
                         "model_final_state_hash": _model_state_hash(gnn),
                     }
+                )
+            if return_trajectory:
+                metadata["trajectory"] = trajectory
+                metadata["parameter_count"] = sum(
+                    parameter.numel() for parameter in gnn.parameters()
                 )
             return _invalid_eval_result(track_test, return_metadata, metadata)
 
@@ -899,6 +1051,11 @@ def train_and_eval_arch(
                     "trajectory_hash": _canonical_trajectory_hash(trajectory),
                     "model_final_state_hash": _model_state_hash(gnn),
                 }
+            )
+        if return_trajectory:
+            metadata["trajectory"] = trajectory
+            metadata["parameter_count"] = sum(
+                parameter.numel() for parameter in gnn.parameters()
             )
         result = (best_val, True, best_test) if track_test else (best_val, True)
         return result + (metadata,) if return_metadata else result
@@ -931,6 +1088,10 @@ def eval_z_search(
     return_hp: bool = False,
     decoder_seed: int | None = None,
     candidate_eval_seed: int | None = None,
+    component_variant: str = "baseline",
+    decoder_policy: str = "historical_modal3",
+    architecture_config: dict[str, Any] | None = None,
+    return_diagnostics: bool = False,
 ) -> tuple | dict[str, Any]:
     """Decode z_search, train the architecture, and return validation score.
 
@@ -942,7 +1103,27 @@ def eval_z_search(
     hp_mode = validate_hp_mode(hp_mode)
     z_flat = _tensor_to_1d_cpu(z_search)
     z_arch = z_search[:arch_nz]
-    config = _decode_arch(vae, z_arch, device, n_trials, decoder_seed=decoder_seed)
+    from architecture_diagnostics import (
+        architecture_fingerprint,
+        cycle_distances,
+        encode_architecture_mu,
+        normalize_architecture_config,
+        validate_decoder_policy,
+    )
+
+    decoder_policy = validate_decoder_policy(decoder_policy)
+    config = (
+        normalize_architecture_config(architecture_config)
+        if architecture_config is not None
+        else _decode_arch(
+            vae,
+            z_arch,
+            device,
+            n_trials,
+            decoder_seed=decoder_seed,
+            decoder_policy=decoder_policy,
+        )
+    )
 
     try:
         hp = decode_hp_by_mode(
@@ -979,18 +1160,38 @@ def eval_z_search(
         }
         val_acc, is_valid = 0.0, False
         if return_hp:
-            return {
+            record = {
                 "val_acc": val_acc,
                 "valid": is_valid,
                 "config": config,
+                "operations": [] if config is None else list(config.get("operations", [])),
+                "edges": [] if config is None else list(config.get("edges", [])),
                 "z_arch": z_flat[:arch_nz].tolist(),
                 "z_search": z_flat.tolist(),
                 "hp": hp,
                 "condition_mask_vector": hp["condition_mask_vector"],
                 "decoder_seed": decoder_seed,
                 "candidate_eval_seed": candidate_eval_seed,
+                "decoder_policy": decoder_policy,
                 **_training_metadata(),
             }
+            if return_diagnostics and config is not None:
+                mu_arch = encode_architecture_mu(vae, config)
+                cycle_l2, cycle_normalized = cycle_distances(
+                    record["z_arch"], mu_arch
+                )
+                record.update(
+                    {
+                        "architecture_fingerprint": architecture_fingerprint(config),
+                        "mu_arch": mu_arch,
+                        "cycle_distance_l2": cycle_l2,
+                        "cycle_distance_normalized": cycle_normalized,
+                        "seed": candidate_eval_seed,
+                        "raw_hp_vector": z_flat[arch_nz:].tolist(),
+                        "realized_hp": hp,
+                    }
+                )
+            return record
         if return_layerwise:
             return (
                 val_acc,
@@ -1043,6 +1244,7 @@ def eval_z_search(
         track_test=False,
         return_metadata=return_hp,
         return_reproducibility_metadata=return_hp,
+        component_variant=component_variant,
     )
     if return_hp:
         val_acc, is_valid, training_metadata = train_result
@@ -1050,7 +1252,7 @@ def eval_z_search(
         val_acc, is_valid = train_result
 
     if return_hp:
-        return {
+        record = {
             "val_acc": float(val_acc),
             "valid": bool(is_valid),
             "config": config,
@@ -1075,8 +1277,26 @@ def eval_z_search(
             "search_dim": int(arch_nz + hp_dim_from_mode(hp_mode)),
             "decoder_seed": decoder_seed,
             "candidate_eval_seed": candidate_eval_seed,
+            "decoder_policy": decoder_policy,
             **training_metadata,
         }
+        if return_diagnostics and config is not None:
+            mu_arch = encode_architecture_mu(vae, config)
+            cycle_l2, cycle_normalized = cycle_distances(
+                record["z_arch"], mu_arch
+            )
+            record.update(
+                {
+                    "architecture_fingerprint": architecture_fingerprint(config),
+                    "mu_arch": mu_arch,
+                    "cycle_distance_l2": cycle_l2,
+                    "cycle_distance_normalized": cycle_normalized,
+                    "seed": candidate_eval_seed,
+                    "raw_hp_vector": z_flat[arch_nz:].tolist(),
+                    "realized_hp": hp,
+                }
+            )
+        return record
 
     if return_layerwise:
         return (
@@ -1115,14 +1335,22 @@ def _decode_arch(
     device,
     n_trials: int = 3,
     decoder_seed: int | None = None,
+    decoder_policy: str = "historical_modal3",
 ):
     from collections import Counter
+    from architecture_diagnostics import validate_decoder_policy
+
+    decoder_policy = validate_decoder_policy(decoder_policy)
 
     results = []
     rng_context = isolated_rng(decoder_seed, device) if decoder_seed is not None else nullcontext()
     with rng_context, torch.no_grad():
-        for _ in range(n_trials):
-            graphs = vae.arch_vae.decode(z_arch.unsqueeze(0).to(device), stochastic=True)
+        trials = 1 if decoder_policy == "deterministic_greedy" else n_trials
+        stochastic = decoder_policy == "historical_modal3"
+        for _ in range(trials):
+            graphs = vae.arch_vae.decode(
+                z_arch.unsqueeze(0).to(device), stochastic=stochastic
+            )
             g = graphs[0]
             ops = [
                 vae.op_mapping.get(g.vs[i]["type"], "Identity")

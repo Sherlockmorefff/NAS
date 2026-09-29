@@ -1,0 +1,14 @@
+{
+  "files": {
+    "protocol.json": "18a7e4974eb2bc54fff0a86bbb5ab056d0dd48fd65fada751eadf4232d96ba67",
+    "code_manifest.json": "a827b3c6f72d44bcbb72c9b27c7caaf51adbf33e201105ffcb1056e307c0e45c",
+    "environment_frozen.json": "a285c354cf8cc734d1598e5b45739202cf44e36ef15ce8c51df761d43f52d27f",
+    "source_manifest.json": "37b75ce7871b6bbd4f89dd43924165bf73fe3c97a8f55e282603e738e471d27e",
+    "worklist.json": "d6f7f5a395f43b53f79dad878790f3bb97960323cfc0004562bbc3e7d0f70c79",
+    "verification/preflight_summary.json": "142ed744a132938c0ba373cf6652c4547c7cfb3817a8f1e82cd3110d946e4946"
+  },
+  "status": "FROZEN",
+  "frozen_at_utc": "2026-09-23T05:35:08.267415+00:00",
+  "new_training_started": false,
+  "new_scoring_exposed": false
+}

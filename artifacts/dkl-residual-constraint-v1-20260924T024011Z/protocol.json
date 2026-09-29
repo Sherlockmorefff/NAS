@@ -1,0 +1,384 @@
+{
+  "task_id": "dkl-residual-constraint-v1-20260924T024011Z",
+  "frozen_at_utc": "2026-09-24T02:37:27.424914+00:00",
+  "scope": "A historical cause diagnostic then gated B developmental constrained residual ablation",
+  "pool": {
+    "candidates": 179,
+    "architectures": 96,
+    "features_file_sha256": "4aedd1482cdc36c055c4016a25fe4a8158c305321673e16e868b994ab830c797",
+    "candidate_identity_file_sha256": "c66c2aa70c4cf2d5fe7d6462bd822a35c4fdd64e950b326cfce8fcf013cab46e",
+    "sorted_A_ids_semantic_sha256": "d48d42b0823d2d114cd43fe015f569e58eb1f840dbe7ff542c5871de6268e1e2",
+    "recipe_semantic_sha256": "40bb99cbc3e33dcc417869a97d969b8e8e1c4ca7c6a5fad66c29ed85edea5978"
+  },
+  "recipe": {
+    "dataset": "Cora",
+    "split": "public",
+    "features": "NormalizeFeatures",
+    "hp_mode": "global4",
+    "normalization": "none",
+    "batch": "full_batch",
+    "max_epochs": 300,
+    "patience": 80,
+    "training_seeds": [
+      0,
+      1,
+      2
+    ]
+  },
+  "folds": {
+    "count": 5,
+    "query_counts_expected": [
+      38,
+      36,
+      36,
+      34,
+      35
+    ],
+    "reuse": "exact original frozen groups; no fallback"
+  },
+  "selection": {
+    "sample_seeds": [
+      20260922,
+      20260923
+    ],
+    "model_seeds": [
+      0,
+      1,
+      2
+    ],
+    "n": [
+      20,
+      50
+    ],
+    "algorithm": "reuse frozen original subsets and ordering; no resampling",
+    "no_label_or_SE_filter": true,
+    "fresh_initialization_for_each_n": true
+  },
+  "work_order": {
+    "context_order": [
+      "sample_seed",
+      "model_seed",
+      "fold",
+      "n"
+    ],
+    "n_order": [
+      20,
+      50
+    ],
+    "raw": "once per subset, before common training when model_seed=0",
+    "mapped_branches": [
+      "R_FROZEN",
+      "R_REG",
+      "R_DKL_C",
+      "R_DKL_U"
+    ],
+    "serial": true
+  },
+  "matrix": {
+    "common_initializations": 60,
+    "mapped_endpoints": 240,
+    "raw_endpoints": 20,
+    "total_endpoints": 260,
+    "common_updates": 78000,
+    "branch_updates": 300000,
+    "raw_updates": 26000,
+    "formal_optimizer_updates": 404000
+  },
+  "device": "cpu",
+  "dtype": "float64",
+  "threads": 1,
+  "deterministic_algorithms": true,
+  "input": {
+    "z_dimensions": 12,
+    "hp": [
+      "log10(lr)",
+      "dropout",
+      "log2(hidden_dim)",
+      "log10(l2)"
+    ],
+    "VAE": "reuse existing frozen codes only, no forward or weight loading",
+    "standardization": "only actual selected20/50, ddof0, fixed thereafter",
+    "x_scale_floor": 1e-06,
+    "y_scale_floor": 1e-08
+  },
+  "mapping": {
+    "type": "RESIDUAL16",
+    "formula": "x+W2*ReLU(W1*x+b1)",
+    "W1": [
+      16,
+      8
+    ],
+    "W1_bias": true,
+    "W2": [
+      8,
+      16
+    ],
+    "W2_bias": false,
+    "head": [
+      16,
+      1
+    ],
+    "head_bias": true,
+    "mapping_parameters": 264,
+    "head_parameters": 17,
+    "initialization": "construct float64 CPU W1,W2,head in order with default Linear initialization; zero b1,W2; project W1 once",
+    "constraint": {
+      "c": 0.5,
+      "cap": 0.7071067811865476,
+      "method": "exact singular value clipping after every mapping Adam update",
+      "tolerance": 1e-10,
+      "moments": "unchanged",
+      "restore": "check bounded only, never reproject"
+    },
+    "no_other_layers": true
+  },
+  "C_loss": "pure mean((head(h(x))-y_std)^2); no embedding norm or residual penalty",
+  "shared": [
+    {
+      "mode": "regression",
+      "updates": 1000
+    },
+    {
+      "mode": "gp",
+      "updates": 300
+    }
+  ],
+  "branches": {
+    "R_FROZEN": [
+      {
+        "mode": "gp",
+        "updates": 1000
+      }
+    ],
+    "R_REG": [
+      {
+        "mode": "regression",
+        "updates": 1000
+      },
+      {
+        "mode": "gp",
+        "updates": 1000
+      }
+    ],
+    "R_DKL_C": [
+      {
+        "mode": "joint",
+        "updates": 1000,
+        "constraint_mode": "bounded"
+      }
+    ],
+    "R_DKL_U": [
+      {
+        "mode": "joint",
+        "updates": 1000,
+        "constraint_mode": "unbounded"
+      }
+    ],
+    "RAW16": [
+      {
+        "mode": "gp",
+        "updates": 300
+      },
+      {
+        "mode": "gp",
+        "updates": 1000
+      }
+    ]
+  },
+  "GP": {
+    "type": "ExactGP",
+    "mean": "ConstantMean",
+    "kernel": "ScaleKernel(MaternKernel(nu=2.5,ard_num_dims=None))",
+    "known_noise": "SE^2 / selected_y_scale^2; stored SE already estimates three-seed mean",
+    "extra_noise_initial": 0.01,
+    "extra_noise_lower": 1e-06,
+    "lengthscale_initial": 1.0,
+    "lengthscale_lower": 0.0001,
+    "outputscale_initial": 1.0,
+    "outputscale_lower": 1e-08,
+    "mean_initial": 0.0,
+    "loss": "-ExactMarginalLogLikelihood(gp(x),y); already divided by n once",
+    "priors": [],
+    "added_losses": [],
+    "jitter": 1e-08,
+    "cholesky_max_tries": 1,
+    "max_cholesky_size": 10000,
+    "min_fixed_noise": 0,
+    "embedding_standardization": "none",
+    "raw16": "standardized16 input directly; constant parameter initialization",
+    "fast_pred_var": false
+  },
+  "optimizer": {
+    "type": "Adam",
+    "mapping_lr": 0.001,
+    "head_lr": 0.001,
+    "gp_lr": 0.01,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.0,
+    "new_per_block": true,
+    "schedule": "first80percent base LR, final20percent 0.1base",
+    "gradient_clip_global_norm": 5.0,
+    "clip_scope": "all optimized groups jointly",
+    "log_preclip_norm": true
+  },
+  "diagnostics": {
+    "interval": 100,
+    "also_endpoint": true,
+    "sample_inside_current_block": true,
+    "record": [
+      "objective",
+      "preclip_gradient_norm",
+      "representation_scale",
+      "GP_parameters",
+      "constraint_distance",
+      "kernel_change",
+      "elapsed_seconds"
+    ],
+    "checkpoint_interval": 100,
+    "only_endpoint_for_science": true,
+    "final_blocks": "0,100,...1000; postupdate NLL/prediction/kernel; REG interim regression no GP science",
+    "stability": {
+      "windows": [
+        700,
+        800,
+        900,
+        1000
+      ],
+      "nll_relative": 0.001,
+      "TT_and_combined_K_relative": 0.01,
+      "train_query_mean_max_raw": 0.001,
+      "latent_model_sd_max_raw": 0.001
+    },
+    "K_R_separate": true
+  },
+  "budget": {
+    "cumulative_fit_predict_seconds": 1200,
+    "clock": "time.monotonic/perf_counter",
+    "includes": [
+      "formal training/projection",
+      "A/B new model forward/predict/diagnostics",
+      "all synthetic/real model verification",
+      "failures/repairs"
+    ],
+    "excludes": [
+      "pure statistics of saved values",
+      "IO",
+      "implementation",
+      "packaging"
+    ],
+    "estimate": "first retained n20/n50 contexts; best .8x expected 1x worst 1.25x remaining estimated cost"
+  },
+  "prediction": {
+    "seal_all_before_scoring": true,
+    "include_query_y_or_SE": false,
+    "rank": "GP mean raw accuracy descending, candidate_id lexicographic tie",
+    "select": 5,
+    "architecture_diversity_filter": false,
+    "mean_clipping": false,
+    "latent_variance_negative_tolerance_standardized": -1e-08,
+    "small_negative": "preserve raw; clamp to zero only when sqrt needed",
+    "score_after_uniform_seal": true
+  },
+  "metrics": {
+    "primary": "regret5=max(query_y)-max(selected5_y)",
+    "paired_improvement": "regret5_baseline-regret5_DKL; positive favors DKL",
+    "baselines": [
+      "R_REG",
+      "R_FROZEN",
+      "RAW16",
+      "exact uniform random5 from same query fold"
+    ],
+    "random_best": "sum_{i=5..m} y_sorted[i-1]*comb(i-1,4)/comb(m,5)",
+    "secondary": [
+      "top1_regret",
+      "MAE",
+      "RMSE",
+      "Spearman",
+      "90pct_coverage",
+      "95pct_coverage",
+      "interval_width",
+      "NLPD"
+    ],
+    "variance_observed": "y_scale^2*(max(raw_latent_std,0)+extra_variance_std)+query_SE^2",
+    "extra_noise_is": "variance, not standard deviation",
+    "accuracy_difference_report_unit": "percentage points (raw*100)",
+    "NLPD_unit": "accuracy units",
+    "constant_spearman": "undefined with reason",
+    "main": "R_REG regret5 minus R_DKL_C",
+    "mechanism": "R_DKL_U regret5 minus R_DKL_C",
+    "gain5": "100*max(0,best_selected-best_training)",
+    "break_best": "best_selected-best_training>1e-11",
+    "headroom": "100*max(0,best_query-best_training)",
+    "random_gain": "expectation of max(0,order_stat-best_training)",
+    "IS90": "100*(width+20*(lower-y)Ibelow+20*(y-upper)Iabove)"
+  },
+  "aggregation": {
+    "separate_n": true,
+    "order": "mean model_seeds within fold/sample; mean sample_seeds within fold; equal mean5folds",
+    "raw_counted_once_per_fold_sample": true,
+    "statistics": "descriptive only; no naive t-test/bootstrap/significance",
+    "pairing": "same fold/sample/n/model seed; RAW16 reference reused, not independently replicated"
+  },
+  "classification": {
+    "tol_pp": 1e-09,
+    "selection_signal": "mean Delta_REG>tol; >=4/5 positive folds; C better than RAW and exactrandom by tol",
+    "otherwise": "any positive REG fold -> mixed; else no benefit",
+    "mechanism": "mean Delta_U>tol and >=4/5positive folds",
+    "followup_candidate": "selection_signal and gain vs REG/RAW/random not worse (tol_pp); break probability not worse (1e-12); both sample-seed Delta_REG>0 and >=2/3 model-seed Delta_REG>0",
+    "incomplete": "not_run or incomplete; no classification"
+  },
+  "failure": "source missing BLOCKED; invalid math/leak INVALID; budget PARTIAL_BUDGET; numeric failure stop; no score-exposed B retraining",
+  "not_authorized": [
+    "B labels",
+    "test accuracy",
+    "GNN training",
+    "VAE forward/training",
+    "Fuzzy training",
+    "real search",
+    "stage3",
+    "GPU",
+    "commit/push"
+  ],
+  "next_stage_authorized": false,
+  "authoritative_specification": {
+    "path": "PROMPT.md",
+    "sha256": "f721d82cfec8a2788e35cc9341fd5ce708dad9f33a4c6dd58ba1de71a12a8164",
+    "all_sections_normative": true
+  },
+  "source_protocol_sha256": "cea701e4aaa64974b8d80053ddfb3cd8af421ff86dda38014284b02d0c67aee0",
+  "length_protocol_sha256": "18a7e4974eb2bc54fff0a86bbb5ab056d0dd48fd65fada751eadf4232d96ba67",
+  "historical_diagnostics": {
+    "states": [
+      "RAW_X",
+      "COMMON_REG",
+      "COMMON_GP",
+      "OLD_DKL_1000",
+      "OLD_DKL_4000",
+      "OLD_RAW16"
+    ],
+    "shape": "||D_b/s_b-D_a/s_a||F / max(||D_a/s_a||F,1e-12)",
+    "s_h": "median strictly positive off-diagonal TT distance; constant -> null",
+    "E1": "100*mean absolute query versus nearest selected train y difference",
+    "E5": "100*mean query mean5 absolute y differences",
+    "no_scoring_before_unlabelled_seal": true,
+    "COMMON_REG_GP_same_mapping_required": true,
+    "rho_auxiliary": "rho>0.99 and absolute truth difference>5 pp; never a gate"
+  },
+  "gate": {
+    "tol_pp": 1e-09,
+    "states": [
+      "COMMON_REG",
+      "OLD_DKL_1000"
+    ],
+    "n": [
+      20,
+      50
+    ],
+    "mapping_support": "fivefold mean(E1mapped-E1raw)>tol and at least4 positive folds",
+    "route": "any of four comparisons passes -> full B; none -> DIAGNOSTIC_ONLY_COMPLETE"
+  }
+}

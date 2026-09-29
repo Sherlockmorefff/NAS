@@ -1,0 +1,448 @@
+{
+  "run_id": "gp-block-optcheck-v1-20260927T062149Z",
+  "version": "gp-block-optcheck-v1",
+  "prompt_sha256": "8644766c36f2da5d5c574d675d7984f628d74dfb24203143ad777cccbc0787a0",
+  "parent_run_id": "gp-block-distance-v1-20260924T125944Z",
+  "parent_package_sha256": "e86d367e5c36a234d9b8b04d990b0aaae70f755f3aa4f58ef94c61c94d0e25ff",
+  "scientific_question": "Training-only nested GP optimization adequacy and repeatable architecture increment in Top5 selection; developmental A evidence",
+  "methods": [
+    "A_REFIT",
+    "B_REFIT",
+    "C_REFIT"
+  ],
+  "parent_methods": [
+    "RAW16_ISO",
+    "HP4_ISO",
+    "RAW16_BLOCK2"
+  ],
+  "matrix": {
+    "subsets": 10,
+    "sample_seeds": [
+      20260922,
+      20260923
+    ],
+    "folds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "n_train": 50,
+    "query_counts": [
+      38,
+      36,
+      36,
+      34,
+      35
+    ],
+    "trajectories": 70,
+    "selected_models": 30,
+    "parent_models": 30,
+    "historical_models": 90,
+    "scoring_units": 150,
+    "new_prediction_rows": 1074,
+    "scoring_candidate_rows": 5370,
+    "head_masks": 30,
+    "model_seed": null,
+    "execution_rng_seed": 0,
+    "order": "sample_seed ascending, fold ascending, A_REFIT then B_REFIT then C_REFIT"
+  },
+  "input": {
+    "canonical_columns": 16,
+    "architecture_columns": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "hp_columns": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "hp_transform": [
+      "log10(lr)",
+      "dropout",
+      "log2(hidden_dim)",
+      "log10(l2)"
+    ],
+    "additional_transform": null,
+    "block_dimension_normalization": false,
+    "training_allowed_keys": [
+      "ids",
+      "architectures",
+      "x_standardized16",
+      "y_standardized",
+      "known_variance_standardized"
+    ],
+    "query_allowed_keys": [
+      "ids",
+      "architectures",
+      "x_standardized16"
+    ],
+    "scaler": {
+      "scope": "current T only; reuse verified parent snapshot",
+      "ddof": 0,
+      "x_floor": 1e-06,
+      "y_floor": 1e-08,
+      "comparison_atol": 1e-12,
+      "comparison_rtol": 1e-10
+    },
+    "known_variance": "SE_T**2/y_scale_T**2; SE already includes three-seed mean uncertainty"
+  },
+  "model": {
+    "formula_version": "dense_matern52_nested_closed_boundary_v1",
+    "kernel": "signal_variance*(1+sqrt(5*s)+5*s/3)*exp(-sqrt(5*s))",
+    "distance": {
+      "A_REFIT": "exp(-2*u)*(D_A+D_H)",
+      "B_REFIT": "exp(-2*u)*D_H",
+      "C_REFIT": "expm1(a)*D_A+exp(-2*u_H)*D_H"
+    },
+    "trainable_scalars": {
+      "A_REFIT": 4,
+      "B_REFIT": 4,
+      "C_REFIT": 5
+    },
+    "coordinates": {
+      "A_REFIT": [
+        "m",
+        "log_signal_variance",
+        "log_extra_noise_variance",
+        "log_lengthscale"
+      ],
+      "B_REFIT": [
+        "m",
+        "log_signal_variance",
+        "log_extra_noise_variance",
+        "log_lengthscale"
+      ],
+      "C_REFIT": [
+        "m",
+        "log_signal_variance",
+        "log_extra_noise_variance",
+        "a",
+        "log_lengthscale_H"
+      ]
+    },
+    "bounds": {
+      "m": [
+        null,
+        null
+      ],
+      "log_signal_variance": [
+        -18.420680743952367,
+        null
+      ],
+      "log_extra_noise_variance": [
+        -13.815510557964274,
+        null
+      ],
+      "log_lengthscale": [
+        -9.210340371976182,
+        null
+      ],
+      "log_lengthscale_H": [
+        -9.210340371976182,
+        null
+      ],
+      "a": [
+        0.0,
+        18.420680753952364
+      ]
+    },
+    "nested_maps": {
+      "A_to_C": "copy m,signal,extra; u_H=u_A; a=log1p(exp(-2*u_A))",
+      "B_to_C": "copy m,signal,extra; u_H=u_B; a=0 exactly",
+      "parent_C": "copy m,signal,extra; a=log1p(1/ell_A**2); u_H=log(ell_H)"
+    },
+    "boundary": "a=0 is exact HP-only; lengthscale_A JSON null with architecture_disabled=true",
+    "objective": "(0.5*v.T@solve(K_y,v)+0.5*logdet(K_y)+0.5*n*log(2*pi))/n; n=50 exactly once",
+    "K_y": "K_TT+diag(known_variance+extra_noise_variance)",
+    "gradient": "analytic; Cholesky solve against identity allowed; no generic inverse",
+    "dk_ds": "-(5/6)*signal_variance*(1+sqrt(5*s))*exp(-sqrt(5*s)); same finite value at s=0",
+    "neural_parameters": 0,
+    "priors_or_penalties": null,
+    "third_lengthscale": false
+  },
+  "numerics": {
+    "dtype": "float64",
+    "device": "cpu",
+    "threads": 1,
+    "deterministic": true,
+    "jitter": 0.0,
+    "cholesky_failure": "stop; no adaptive jitter",
+    "equivalence_atol": 1e-10,
+    "equivalence_rtol": 1e-08,
+    "gradient_atol": 1e-06,
+    "gradient_rtol": 0.0001,
+    "latent_roundoff_lower": -1e-08
+  },
+  "optimizer": {
+    "algorithm": "scipy.optimize.minimize L-BFGS-B",
+    "jac": true,
+    "ftol": 1e-12,
+    "gtol": 1e-06,
+    "maxcor": 10,
+    "maxls": 20,
+    "gradient_clipping": null,
+    "workers": null,
+    "fresh_Hessian_history_per_start": true,
+    "hard_wrapper_before_every_fg_request": true,
+    "A_REFIT": {
+      "starts": [
+        "PARENT",
+        "COMMON_INITIAL"
+      ],
+      "max_fg_calls_each": 300,
+      "max_accepted_iterations_each": 250
+    },
+    "B_REFIT": {
+      "starts": [
+        "PARENT",
+        "COMMON_INITIAL"
+      ],
+      "max_fg_calls_each": 300,
+      "max_accepted_iterations_each": 250
+    },
+    "C_REFIT": {
+      "starts": [
+        "PARENT",
+        "A_SELECTED_EMBEDDING",
+        "B_SELECTED_BOUNDARY"
+      ],
+      "max_fg_calls_each": 200,
+      "max_accepted_iterations_each": 150
+    },
+    "common_initial": {
+      "constant_mean": 0.0,
+      "outputscale": 1.0,
+      "extra_noise_variance_standardized": 0.01,
+      "lengthscale": 1.0
+    },
+    "unused_allowance_transfer": false,
+    "merge_identical_starts": false,
+    "finite_solver_stop": [
+      "normal convergence",
+      "iteration limit",
+      "request hard limit",
+      "finite line-search abnormal termination"
+    ],
+    "failure": "nonfinite, incorrect gradient, covariance anomaly, untrustworthy counts: stop and retain all cost"
+  },
+  "selection": {
+    "pool": "initial feasible plus optimizer accepted iterates only",
+    "criterion": "current T negative MLL only",
+    "tie_tolerance_nat_per_observation": 1e-10,
+    "tie_order": "fixed start order then smaller accepted iteration",
+    "retain_known_feasible_starts": true,
+    "record_numerical_minimum_gap": true,
+    "line_search_trials_excluded": true,
+    "probes_excluded": true,
+    "query_inputs_or_labels_used": false
+  },
+  "budget": {
+    "model_seconds": 600.0,
+    "carryover_seconds": 0.0,
+    "formal_optimization_fg_limit": 18000,
+    "formal_optimization_fg_limit_per_method": 6000,
+    "synthetic_fg_limit_all_attempts": 300,
+    "local_probe_limit": 260,
+    "automatic_resume": false,
+    "timing": {
+      "n_train": 50,
+      "n_query": 38,
+      "warmup_fg_each_method": 5,
+      "segments": 3,
+      "fg_per_segment": 10,
+      "total_timing_fg": 105,
+      "estimator": "maximum segment mean per method"
+    },
+    "admission_formula": "already_used + 1.5*(6000*(t_A+t_B+t_C)+remaining_non_solver_numeric_seconds) + 20",
+    "counting": "every joint f/g request incl failed/repeated/trial; accepted iterations separate; factorization count separate",
+    "model_scopes": [
+      "numeric preparation",
+      "kernels",
+      "NLL/gradient",
+      "solver wall including callback",
+      "prediction",
+      "independent gradient/probes",
+      "restoration verification"
+    ],
+    "nested_timing": "no double charging",
+    "excluded_scopes": [
+      "byte hashing/copy",
+      "SSH wait",
+      "code writing",
+      "raw validation log tracing",
+      "statistics on sealed arrays"
+    ]
+  },
+  "diagnostics": {
+    "parent_readonly_reproduction": 30,
+    "selected_state_independent_restore": 30,
+    "stationarity": {
+      "projected_gradient_inf_max": 1e-05,
+      "boundary_tolerance": "1e-12*max(1,abs(bound))",
+      "lower_bound": "only negative gradient violates",
+      "upper_bound": "only positive gradient violates"
+    },
+    "probes": {
+      "coordinate_delta": 0.001,
+      "directions": [
+        -1,
+        1
+      ],
+      "clip_to_finite_bounds": true,
+      "skip_zero_displacement": true,
+      "max_improvement_nat": 1e-06,
+      "max_calls": 260,
+      "may_enter_selection": false
+    },
+    "dominance_tolerance_nat": 1e-06,
+    "adequacy": "all10 known-feasible dominance; each method at least8/10 both stationarity and probes",
+    "trajectory_endpoint_predictions": false,
+    "final_model_predictions": 30,
+    "start_comparison": "training NLL and parameter difference only; no claim of uncomputed prediction differences",
+    "old_Adam_stability": "historical comparison only; no stopping use"
+  },
+  "case_audit": {
+    "anchor_candidate_id": "93ddd76173ade24158c0d0aeee42abc9bff3a0c79f263d3e7656f359e9bffe02",
+    "rule": "anchor union top5 unique candidate IDs by mean parent C candidate NLPD across both sample seeds; ties IDlex",
+    "after_protocol_freeze": true,
+    "max_log_search_wall_seconds": 900,
+    "validation_fields_only": true,
+    "block_only_confirmed_source_error": true,
+    "may_change_design": false,
+    "all_cases_remain_in_scoring": true
+  },
+  "prediction": {
+    "full_latent_covariance": true,
+    "raw_mean": "y_center+y_scale*mean_std",
+    "raw_covariance": "y_scale**2*cov_std",
+    "model_variance_raw": "y_scale**2*(max(latent_diagonal_std,0)+extra_variance_std)",
+    "observed_variance_raw": "model_variance_raw+SE_Q**2 exactly once in postseal scorer"
+  },
+  "scoring": {
+    "aggregation": "historical seed metrics within subset, two samples within fold, five folds equal",
+    "tol_pp": 1e-09,
+    "primary_comparison": "C_REFIT vs B_REFIT",
+    "required_comparisons": [
+      "C_REFIT vs A_REFIT",
+      "each REFIT vs own OLD",
+      "C_REFIT vs HEAD",
+      "C_REFIT vs H_TREND",
+      "C_REFIT vs H_CONST",
+      "C_REFIT vs exact random5"
+    ],
+    "regions": [
+      "all_Q",
+      "original_HEAD_pred20_each_seed",
+      "true_top20",
+      "true_bottom20",
+      "champions"
+    ],
+    "top5_rule": "descending mean then candidate_id",
+    "probability_units": "original accuracy proportion",
+    "pp_multiplier": 100,
+    "flags": {
+      "ARCHITECTURE_INCREMENT_SIGNAL": {
+        "comparison": "C_REFIT vs B_REFIT",
+        "regret_improvement_min_pp": 0.2,
+        "positive_folds_min": 4,
+        "both_samples_positive": true,
+        "gain_change_min_pp": -0.02,
+        "tol_pp": 1e-09
+      },
+      "BLOCK_SCALE_SIGNAL": {
+        "comparison": "C_REFIT vs A_REFIT",
+        "regret_improvement_min_pp": 0.2,
+        "positive_folds_min": 4,
+        "both_samples_positive": true,
+        "gain_change_min_pp": -0.02,
+        "tol_pp": 1e-09
+      },
+      "HISTORICAL_SELECTION_RETAINED": {
+        "baselines": [
+          "HEAD",
+          "H_TREND"
+        ],
+        "regret_increase_max_pp": 0.1,
+        "gain_fall_max_pp": 0.02
+      },
+      "PROBABILITY_NO_LARGE_DEGRADATION": {
+        "baselines_separately": [
+          "A_REFIT",
+          "A_OLD"
+        ],
+        "both_required": true,
+        "nlpd_increase_max_nat": 0.1,
+        "IS90_increase_max_pp": 1.0,
+        "total_90cov_fall_max": 0.05,
+        "champion_90cov_fall_max": 0.05
+      },
+      "DEVELOPMENT_CANDIDATE_FOR_CONFIRMATION_DESIGN": "complete valid matrix AND no confirmed source error AND OPTIMIZATION_ADEQUATE AND ARCHITECTURE_INCREMENT_SIGNAL AND BLOCK_SCALE_SIGNAL AND HISTORICAL_SELECTION_RETAINED AND both probability flags; unresolved logs remain explicit limitation"
+    }
+  },
+  "permissions": {
+    "history_A_queries_previously_used": true,
+    "case_audit_historical_A_labels_after_freeze": true,
+    "fit_query_labels_SE_history_metrics_or_case_report": false,
+    "postseal_scoring_A": true,
+    "algorithmic_whitelist_not_OS_access_control": true
+  },
+  "execution_order": [
+    "source/config",
+    "synthetic/preflight/admission",
+    "freeze",
+    "readonly case audit",
+    "one formal run",
+    "full seal",
+    "A scoring",
+    "independent audit",
+    "package"
+  ],
+  "failure_states": [
+    "COMPLETE_VALID",
+    "BLOCKED_SOURCE_MISMATCH",
+    "BLOCKED_DATA_INCONSISTENCY",
+    "BLOCKED_DEPENDENCY",
+    "BLOCKED_PREFLIGHT",
+    "BLOCKED_BUDGET_ADMISSION",
+    "STOPPED_BUDGET_PARTIAL",
+    "FAILED_FORMAL_NUMERICS",
+    "FAILED_AUDIT",
+    "INTERRUPTED_UNVERIFIED"
+  ],
+  "not_authorized": [
+    "B pool/test",
+    "GNN/VAE calls",
+    "new candidates",
+    "neural mapping/head",
+    "joint DKL",
+    "new TREND/SEMI/OOF",
+    "tau",
+    "priors/regularizers",
+    "ARD",
+    "sum/product kernels",
+    "ranking losses",
+    "ensembles",
+    "EI/KG/BO",
+    "mean/interval clipping",
+    "case deletion",
+    "parameter scans",
+    "extra restarts",
+    "automatic next stage",
+    "push/merge/mainline edits"
+  ],
+  "interpretation": "A-reused developmental experiment; no independent confirmation, global optimum, causal architecture importance or BO authorization"
+}

@@ -89,8 +89,17 @@ class StableQLogExpectedImprovement(qLogExpectedImprovement):
             return super().forward(X)
 
 
-def _expected_dim(arch_nz: int, hp_mode: str) -> int:
-    return int(arch_nz) + int(hp_dim_from_mode(validate_hp_mode(hp_mode)))
+def _expected_dim(
+    arch_nz: int,
+    hp_mode: str,
+    *,
+    include_normalization: bool = False,
+) -> int:
+    return (
+        int(arch_nz)
+        + int(hp_dim_from_mode(validate_hp_mode(hp_mode)))
+        + int(bool(include_normalization))
+    )
 
 
 def _as_float_tensor(value: Any) -> tuple[torch.Tensor, bool, np.dtype[Any] | None]:
@@ -118,11 +127,14 @@ def normalize_search_vector(
     arch_nz: int,
     hp_mode: str,
     z_bound: float,
+    include_normalization: bool = False,
 ) -> Any:
     """Map raw ``[z_arch, hp]`` vectors into the fixed unit search domain."""
 
     tensor, was_tensor, dtype = _as_float_tensor(z_search)
-    expected = _expected_dim(arch_nz, hp_mode)
+    expected = _expected_dim(
+        arch_nz, hp_mode, include_normalization=include_normalization
+    )
     if tensor.ndim == 0 or tensor.shape[-1] != expected:
         got = None if tensor.ndim == 0 else tensor.shape[-1]
         raise ValueError(f"z_search last dimension must be {expected} for hp_mode={hp_mode}, got {got}")
@@ -131,8 +143,15 @@ def normalize_search_vector(
     if not torch.isfinite(tensor).all():
         raise ValueError("z_search contains NaN or infinite values")
     arch = tensor[..., : int(arch_nz)].clamp(-float(z_bound), float(z_bound))
-    hp = tensor[..., int(arch_nz) :].clamp(0.0, 1.0)
-    normalized = torch.cat(((arch + float(z_bound)) / (2.0 * float(z_bound)), hp), dim=-1)
+    hp_end = expected - int(bool(include_normalization))
+    hp = tensor[..., int(arch_nz) : hp_end].clamp(0.0, 1.0)
+    pieces = [(arch + float(z_bound)) / (2.0 * float(z_bound)), hp]
+    if include_normalization:
+        normalization = tensor[..., -1:]
+        if not torch.logical_or(normalization == 0.0, normalization == 1.0).all():
+            raise ValueError("normalization search coordinate must be exactly 0 or 1")
+        pieces.append(normalization)
+    normalized = torch.cat(pieces, dim=-1)
     return _restore_type(normalized, was_tensor, dtype)
 
 
@@ -142,11 +161,14 @@ def denormalize_search_vector(
     arch_nz: int,
     hp_mode: str,
     z_bound: float,
+    include_normalization: bool = False,
 ) -> Any:
     """Map fixed-domain normalized vectors back into raw search coordinates."""
 
     tensor, was_tensor, dtype = _as_float_tensor(z_normalized)
-    expected = _expected_dim(arch_nz, hp_mode)
+    expected = _expected_dim(
+        arch_nz, hp_mode, include_normalization=include_normalization
+    )
     if tensor.ndim == 0 or tensor.shape[-1] != expected:
         got = None if tensor.ndim == 0 else tensor.shape[-1]
         raise ValueError(f"normalized vector last dimension must be {expected}, got {got}")
@@ -154,9 +176,19 @@ def denormalize_search_vector(
         raise ValueError(f"z_bound must be positive and finite, got {z_bound}")
     if not torch.isfinite(tensor).all():
         raise ValueError("normalized vector contains NaN or infinite values")
+    if include_normalization:
+        normalization = tensor[..., -1:]
+        if not torch.logical_or(normalization == 0.0, normalization == 1.0).all():
+            raise ValueError("normalization search coordinate must be exactly 0 or 1")
+    else:
+        normalization = None
     clipped = tensor.clamp(0.0, 1.0)
     arch = clipped[..., : int(arch_nz)] * (2.0 * float(z_bound)) - float(z_bound)
-    raw = torch.cat((arch, clipped[..., int(arch_nz) :]), dim=-1)
+    hp_end = expected - int(bool(include_normalization))
+    pieces = [arch, clipped[..., int(arch_nz) : hp_end]]
+    if normalization is not None:
+        pieces.append(normalization)
+    raw = torch.cat(pieces, dim=-1)
     return _restore_type(raw, was_tensor, dtype)
 
 
@@ -207,6 +239,7 @@ class AccuracyGPPredictor:
         arch_nz: int,
         hp_mode: str,
         z_bound: float,
+        include_normalization: bool = False,
         use_conditional_kernel: bool = False,
         y_mean: float = 0.0,
         y_std: float = 1.0,
@@ -215,7 +248,12 @@ class AccuracyGPPredictor:
     ) -> None:
         self.arch_nz = int(arch_nz)
         self.hp_mode = validate_hp_mode(hp_mode)
-        self.search_dim = _expected_dim(self.arch_nz, self.hp_mode)
+        self.include_normalization = bool(include_normalization)
+        self.search_dim = _expected_dim(
+            self.arch_nz,
+            self.hp_mode,
+            include_normalization=self.include_normalization,
+        )
         self.z_bound = float(z_bound)
         if not math.isfinite(self.z_bound) or self.z_bound <= 0.0:
             raise ValueError("z_bound must be positive and finite")
@@ -458,6 +496,7 @@ class AccuracyGPPredictor:
         arch_nz: int,
         hp_mode: str,
         z_bound: float,
+        include_normalization: bool = False,
         use_conditional_kernel: bool = False,
         condition_masks: Any = None,
         metadata: dict[str, Any] | None = None,
@@ -481,6 +520,7 @@ class AccuracyGPPredictor:
             arch_nz=arch_nz,
             hp_mode=hp_mode,
             z_bound=z_bound,
+            include_normalization=include_normalization,
             use_conditional_kernel=use_conditional_kernel,
             y_mean=y_mean,
             y_std=y_std,
@@ -488,7 +528,11 @@ class AccuracyGPPredictor:
             device=device,
         )
         predictor.train_X_norm = normalize_search_vector(
-            raw, arch_nz=arch_nz, hp_mode=hp_mode, z_bound=z_bound
+            raw,
+            arch_nz=arch_nz,
+            hp_mode=hp_mode,
+            z_bound=z_bound,
+            include_normalization=include_normalization,
         ).to(dtype=torch.double, device=predictor.device)
         predictor.train_Y_norm = (targets.to(predictor.device) - y_mean) / y_std
         predictor.train_observation_counts = torch.ones(
@@ -535,7 +579,11 @@ class AccuracyGPPredictor:
         if raw.ndim == 1:
             raw = raw.unsqueeze(0)
         normalized = normalize_search_vector(
-            raw, arch_nz=self.arch_nz, hp_mode=self.hp_mode, z_bound=self.z_bound
+            raw,
+            arch_nz=self.arch_nz,
+            hp_mode=self.hp_mode,
+            z_bound=self.z_bound,
+            include_normalization=self.include_normalization,
         )
         return normalized.to(device=self.device, dtype=torch.double)
 
@@ -912,6 +960,7 @@ class AccuracyGPPredictor:
             "arch_nz": self.arch_nz,
             "hp_mode": self.hp_mode,
             "search_dim": self.search_dim,
+            "include_normalization": self.include_normalization,
             "z_bound": self.z_bound,
             "x_transform": X_TRANSFORM_VERSION,
             "y_mean": self.y_mean,
@@ -992,27 +1041,36 @@ class AccuracyGPPredictor:
         for key, wanted in actual_expected.items():
             if wanted is None:
                 continue
-            actual = payload.get(key)
+            actual = (
+                bool(payload.get("include_normalization", False))
+                if key == "include_normalization"
+                else payload.get(key)
+            )
             same = math.isclose(float(actual), float(wanted), rel_tol=0.0, abs_tol=1e-9) if key == "z_bound" and actual is not None else actual == wanted
             if not same:
                 raise ValueError(f"GP checkpoint metadata mismatch for {key}: expected {wanted!r}, got {actual!r}")
         structural_keys = {
             "format_version", "model_type", "kernel_type", "use_conditional_kernel",
             "condition_mask_dim", "train_X_norm", "train_Y_norm", "train_condition_masks",
-            "train_observation_counts", "model_state_dict", "arch_nz", "hp_mode", "search_dim", "z_bound",
+            "train_observation_counts", "model_state_dict", "arch_nz", "hp_mode", "search_dim",
+            "include_normalization", "z_bound",
             "x_transform", "y_mean", "y_std", "offline_train_size", "holdout_X_raw",
             "holdout_Y", "holdout_condition_masks",
         }
         predictor = cls(
             arch_nz=int(payload["arch_nz"]), hp_mode=str(payload["hp_mode"]),
             z_bound=float(payload["z_bound"]),
+            include_normalization=bool(payload.get("include_normalization", False)),
             use_conditional_kernel=bool(payload["use_conditional_kernel"]),
             y_mean=float(payload["y_mean"]), y_std=float(payload["y_std"]),
             metadata={key: value for key, value in payload.items() if key not in structural_keys},
             device=device,
         )
         if int(payload["search_dim"]) != predictor.search_dim:
-            raise ValueError("GP checkpoint search_dim is inconsistent with arch_nz and hp_mode")
+            raise ValueError(
+                "GP checkpoint search_dim is inconsistent with arch_nz, hp_mode, "
+                "and include_normalization"
+            )
         predictor.train_X_norm = torch.as_tensor(payload["train_X_norm"], dtype=torch.double, device=device)
         predictor.train_Y_norm = torch.as_tensor(payload["train_Y_norm"], dtype=torch.double, device=device)
         if payload.get("train_observation_counts") is None:

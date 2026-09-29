@@ -1,0 +1,7 @@
+{
+  "pid": 3082945,
+  "launched_at_utc": "2026-09-24T10:15:45.093380+00:00",
+  "sole_model_executor": true,
+  "command": "code/run_oof.py --root /home/fangxy/D-VAE-worktrees/dkl-oof-calibration-v1-20260924T095621Z/artifacts/dkl-oof-calibration-v1-20260924T095621Z",
+  "automatic_resume": false
+}

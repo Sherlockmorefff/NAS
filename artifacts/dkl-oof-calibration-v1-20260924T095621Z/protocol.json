@@ -1,0 +1,179 @@
+{
+  "run_id": "dkl-oof-calibration-v1-20260924T095621Z",
+  "version": "oof-calibration-v1",
+  "frozen_at_utc": "2026-09-24T10:01:09.458644+00:00",
+  "normative_prompt": "PROMPT.md",
+  "normative_prompt_sha256": "3745ad2138ec64d7087b8b6c0ee3f953069bdc41a797b8ac7cf1af749428ce8a",
+  "parent_run_id": "dkl-readout-frozen-v2-20260924T081732Z",
+  "parent_package_sha256": "d875ca5769e273de10083529d0542a3cf85e71d70ce8283cca957f37896ccedf",
+  "budget": {
+    "model_seconds": 1500,
+    "synthetic_optimizer_calls_limit_all_attempts": 300,
+    "carryover_seconds": 0,
+    "expected_formula": "used + fit_est + setup_est + pred_est",
+    "conservative_formula": "used + 1.5*(fit_est+setup_est) + max(30,2*pred_est)",
+    "formal_steps_by_class": {
+      "COMMON_MSE": 90000,
+      "COMMON_GP": 27000,
+      "GP_CONST": 135000,
+      "GP_TREND": 135000
+    },
+    "timing": {
+      "n_fit": 34,
+      "n_holdout": 17,
+      "warmup_steps": 5,
+      "segments": 3,
+      "steps_per_segment": 20,
+      "estimator": "max segment mean",
+      "total_timing_optimizer_calls": 260
+    },
+    "automatic_resume": false
+  },
+  "steps": {
+    "COMMON_MSE": 1000,
+    "COMMON_GP": 300,
+    "GP_CONST": 1500,
+    "GP_TREND": 1500
+  },
+  "matrix": {
+    "outer_contexts": 30,
+    "inner_pipelines": 90,
+    "inner_prediction_sets": 270,
+    "oof_rows": 4500,
+    "formal_updates": 387000,
+    "tau_scalars": 60,
+    "outer_refs": 90,
+    "outer_derivatives": 60,
+    "outer_outputs": 150
+  },
+  "numerics": {
+    "device": "cpu",
+    "dtype": "float64",
+    "threads": 1,
+    "deterministic": true,
+    "jitter": 1e-08,
+    "cholesky_max_tries": 1,
+    "max_cholesky_size": 10000,
+    "min_fixed_noise": 0,
+    "fast_pred_var": false,
+    "length_lower": 0.0001,
+    "output_lower": 1e-08,
+    "extra_noise_lower": 1e-06,
+    "latent_roundoff_lower": -1e-08
+  },
+  "optimizer": {
+    "type": "Adam",
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "global_clip": 5,
+    "MSE_lr": [
+      0.001,
+      800,
+      0.0001,
+      200
+    ],
+    "COMMON_GP_lr": [
+      0.01,
+      240,
+      0.001,
+      60
+    ],
+    "readout_lr": [
+      0.01,
+      1000,
+      0.001,
+      500
+    ]
+  },
+  "diagnostics": {
+    "COMMON_MSE": [
+      0,
+      800,
+      900,
+      1000
+    ],
+    "COMMON_GP": [
+      0,
+      240,
+      300
+    ],
+    "readout": {
+      "steps": [
+        0,
+        1000,
+        1200,
+        1300,
+        1400,
+        1500
+      ],
+      "stability_windows": [
+        [
+          1200,
+          1300
+        ],
+        [
+          1300,
+          1400
+        ],
+        [
+          1400,
+          1500
+        ]
+      ],
+      "nll_delta_limit": "1e-4*max(1,abs(start_nll))",
+      "raw_mean_delta": 0.001,
+      "raw_latent_sd_delta": 0.001,
+      "matern_and_full_kernel_relative_frobenius": 0.01,
+      "top5_stability_separate": true
+    },
+    "gp_readout_calls": 1080,
+    "common_mse_calls": 360,
+    "common_gp_calls": 270,
+    "head_train_and_holdout_calls": 90
+  },
+  "data": {
+    "inner_split": "oof-arch3-v1",
+    "n_outer": 50,
+    "fit_sizes": [
+      33,
+      34
+    ],
+    "holdout_sizes": [
+      16,
+      17
+    ],
+    "scaler": "U only ddof0; x floor1e-6 y floor1e-8",
+    "mean_SE": "SE squared once, no extra sqrt3",
+    "outer_truth_release": "all90inner pipelines +387000updates +4500OOF rows sealed then60tau +150outeroutputs sealed"
+  },
+  "calibration": {
+    "estimator": "max(0,mean((y-mu_oof)^2-v_model_oof-SE^2))",
+    "weights": "50 candidates equally percontext andmethod",
+    "unit": "raw accuracy squared",
+    "transfer": "no n adjustment",
+    "mean_changes": false,
+    "joint_covariance_changes": false
+  },
+  "scoring": {
+    "z90": 1.6448536269514722,
+    "champion_tolerance_pp": 1e-09,
+    "rank": "descending exact mean then candidate ID ascending",
+    "aggregation": "3 model seeds then2sample seeds then5folds equally",
+    "flags": "normative PROMPT sections VIII",
+    "no_significance": true
+  },
+  "not_authorized": [
+    "B/test",
+    "joint DKL",
+    "GNN/VAE calls",
+    "BO/search",
+    "SEMI training",
+    "hyperparameter changes",
+    "mean calibration",
+    "automatic next stage"
+  ]
+}

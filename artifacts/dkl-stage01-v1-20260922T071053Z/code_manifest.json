@@ -1,0 +1,15 @@
+{
+  "source_repo": "/home/fangxy/D-VAE",
+  "head": "64a44c14316f11debaf01cf8583426acfe1410e6",
+  "branch": "feature/accuracy-bottleneck-diagnostics",
+  "mainline_source_modified": false,
+  "copied_dependency": "code/source_reference/fuzzy_metric.py",
+  "files": {
+    "code/controlled_dkl.py": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+    "code/data_adapter.py": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+    "code/engineering_checks.py": "7c425cda06033f00359cdb45c055598a22a9917a37bba22660f0f81b833b2bef",
+    "code/run_stage1.py": "293316d5cc10c3e203a0b5a2f4a3da53000ebb588270d7aa98cde5a740940955",
+    "code/source_reference/fuzzy_metric.py": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+    "code/verify_artifacts.py": "91f64dfc5f5b098fdddf524a8d2c20c258d622fe282c5e5433b7b431bbfcd5de"
+  }
+}

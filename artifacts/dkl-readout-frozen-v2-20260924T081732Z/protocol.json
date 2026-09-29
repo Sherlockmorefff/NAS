@@ -1,0 +1,162 @@
+{
+  "run_id": "dkl-readout-frozen-v2-20260924T081732Z",
+  "version": "frozen-readout-v2-25min",
+  "normative_prompt_path": "PROMPT.md",
+  "normative_prompt_sha256": "db69122e74b7df6d278060b00aafe46d13460418011cb6c9696e321c30025b1d",
+  "primary_n": 50,
+  "boundary_n": 20,
+  "methods": [
+    "HEAD",
+    "GP_CONST",
+    "GP_TREND",
+    "GP_SEMI"
+  ],
+  "contexts": 60,
+  "gp_fits": 180,
+  "head_evaluations": 60,
+  "steps_per_gp": 1500,
+  "formal_updates": 270000,
+  "source": {
+    "root": "/home/fangxy/D-VAE/artifacts/dkl-residual-constraint-v1-20260924T024011Z",
+    "package_sha256": "39d9fc6474e0d9da6f0a456452a25f6b04f51c01442f6c4cf1823ba6ca0416ce",
+    "state": "saved COMMON_gp300 only",
+    "new_common_training": false
+  },
+  "features": {
+    "h0": "frozen residual16 after common MSE1000+GP300",
+    "s0": "original frozen regression head in standardized-y units",
+    "refit_scalers": false,
+    "mapper_and_head_trainable": false
+  },
+  "models": {
+    "HEAD": "s0 deterministic; uncertainty N/A",
+    "GP_CONST": "learned constant + Scale(Matern5/2 isotropic h0)",
+    "GP_TREND": "fixed s0 + Scale(Matern5/2 isotropic h0)",
+    "GP_SEMI": "fixed s0 + Scale(Matern5/2 isotropic h0) + .0625 + .25*s0*s0prime",
+    "beta_prior_mean": [
+      0,
+      1
+    ],
+    "beta_prior_covariance": [
+      [
+        0.0625,
+        0
+      ],
+      [
+        0,
+        0.25
+      ]
+    ],
+    "beta_integrated_not_optimized": true,
+    "shared_initial_gp_parameters": "exact saved source raw parameters; fresh independent Adam"
+  },
+  "optimization": {
+    "optimizer": "Adam",
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "lr_updates_1_1000": 0.01,
+    "lr_updates_1001_1500": 0.001,
+    "gradient_global_norm_clip": 5,
+    "objective": "pure negative ExactMLL normalized by n exactly once",
+    "priors_or_added_losses": false,
+    "endpoint_selection": false
+  },
+  "numerics": {
+    "device": "cpu",
+    "dtype": "float64",
+    "threads": 1,
+    "deterministic": true,
+    "jitter": 1e-08,
+    "cholesky_max_tries": 1,
+    "max_cholesky_size": 10000,
+    "min_fixed_noise": 0,
+    "fast_pred_var": false,
+    "length_lower": 0.0001,
+    "output_lower": 1e-08,
+    "extra_noise_lower": 1e-06,
+    "latent_roundoff_lower": -1e-08
+  },
+  "diagnostics": {
+    "steps": [
+      0,
+      1000,
+      1200,
+      1300,
+      1400,
+      1500
+    ],
+    "stability_windows": [
+      [
+        1200,
+        1300
+      ],
+      [
+        1300,
+        1400
+      ],
+      [
+        1400,
+        1500
+      ]
+    ],
+    "nll_delta_limit": "1e-4*max(1,abs(start_nll))",
+    "raw_mean_delta": 0.001,
+    "raw_latent_sd_delta": 0.001,
+    "matern_and_full_kernel_relative_frobenius": 0.01,
+    "top5_stability_separate": true
+  },
+  "budget": {
+    "model_seconds": 1500,
+    "synthetic_optimizer_calls_limit_all_attempts": 300,
+    "admission_formula_frozen_before_timing": "used + 1.5*sum(cell_step_seconds*45000 for all 6 cells) + max(30,2*preflight_prediction_seconds*1080/preflight_prediction_calls)",
+    "expected_formula": "used + sum(cell_step_seconds*45000) + preflight_prediction_seconds*1080/preflight_prediction_calls",
+    "admission_failure": "BLOCKED_BUDGET_ADMISSION; no matrix reduction",
+    "old_model_seconds": 819.0296507184177,
+    "old_cost_deducted": false,
+    "all_new_model_computation_charged": true,
+    "automatic_resume": false,
+    "formal_lock": "permanent exclusive directory",
+    "inherited_readout_model_seconds": 3.2575200367718935,
+    "inherited_synthetic_calls": 182
+  },
+  "scoring": {
+    "release": "V2: COMPLETE_VALID 180 GP + 60 HEAD + 270000 updates uniform seal only; isolated scorer; legal A only",
+    "ranking": "mean_raw descending then exact candidate_id ascending",
+    "select_k": 5,
+    "champion_tolerance_pp": 1e-09,
+    "z90": 1.6448536269514722,
+    "observed_variance": "yscale^2*(latent_std+extra_std)+query_SE^2; jitter excluded",
+    "aggregation": "3 model seeds then 2 sample seeds then 5 folds equally; paired first; RAW once per subset",
+    "significance_tests": false,
+    "flag_rules": "exact normative prompt sections; primary n50; n20 separate",
+    "no_next_stage": true
+  },
+  "excluded": [
+    "B_pool",
+    "test",
+    "GNN/VAE retraining",
+    "mapper/head updates",
+    "joint DKL",
+    "real search",
+    "new methods",
+    "hyperparameter sweep"
+  ],
+  "limitations": [
+    "Repeated developmental use of A",
+    "Head fitted on same selected training labels",
+    "GP hyperparameters point estimated",
+    "Finite beta prior excludes head/mapper uncertainty",
+    "Common GP300 initialization may favor constant mean",
+    "Historical comparison unequal budgets"
+  ],
+  "parent_run_id": "dkl-readout-frozen-v1-20260924T072004Z",
+  "parent_root": "/home/fangxy/D-VAE-worktrees/dkl-readout-frozen-v1-20260924T072004Z/artifacts/dkl-readout-frozen-v1-20260924T072004Z",
+  "parent_package_sha256": "198e16d26b941691d885c54727c63b1ee9b544033c91df8170d26feb4ba147a8",
+  "parent_protocol_sha256": "84b45b7a0bb682b0144cea7ecd13e7a2104621c121ccc64aac8326f88b0cad4b",
+  "parent_prompt_sha256": "0dd3fee1ff9aa33b5e4187bf7312ff1378a428c53c85417ada5da868c91fb063",
+  "protocol_amendment_path": "protocol_amendment.json"
+}

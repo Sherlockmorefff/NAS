@@ -121,6 +121,21 @@ from initialization_gmm_schur import (
     fit_fixed_pool_gmm_restarts,
     greedy_conditional_schur_select,
 )
+from layernorm_search_space import (
+    NORMALIZATION_LAYER_NORM,
+    NORMALIZATION_NONE,
+    NORMALIZATION_SPACES,
+    TRAINING_SEED_SCHEME as LAYERNORM_TRAINING_SEED_SCHEME,
+    balanced_initialization_assignment,
+    base_candidate_fingerprint,
+    compose_search_vector,
+    full_candidate_fingerprint,
+    gp_search_dim,
+    has_normalization_dimension,
+    matched_training_seed,
+    normalization_value,
+    split_search_vector,
+)
 
 
 ARCH_NZ = 12
@@ -416,6 +431,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gcnii_theta", type=float, default=0.5)
     parser.add_argument("--patience", type=int, default=20)
     parser.add_argument("--hp_mode", type=str, default="global4", choices=HP_MODE_CHOICES)
+    parser.add_argument(
+        "--normalization_space",
+        choices=NORMALIZATION_SPACES,
+        default="legacy",
+        help="optional global None/LayerNorm search choice outside the VAE",
+    )
     parser.add_argument("--z_bound", type=float, default=2.5)
 
     parser.add_argument("--num_restarts", type=int, default=8)
@@ -488,6 +509,166 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_layernorm_search_space_configuration(args: argparse.Namespace) -> None:
+    """Freeze the approved Cora None/LayerNorm pilot protocol."""
+
+    space = getattr(args, "normalization_space", "legacy")
+    if space == "legacy":
+        return
+
+    # Frozen large-budget Original-space Cora ceiling hunt.
+    # Keep this separate from the completed None/LayerNorm pilot.
+    if getattr(args, "method_label", None) == "cora_original_ceiling_hunt_v1":
+        required = {
+            "dataset": "cora",
+            "hp_mode": "global4",
+            "initial_selection_strategy": "schur",
+            "gp_init_mode": "scratch",
+            "surrogate_type": "exact_gp",
+            "online_candidate_strategy": "qlogei",
+            "gp_update_mode": "warm_refit",
+            "warm_start": "",
+            "normalization_space": "none",
+        }
+        numeric_required = {
+            "n_lhs_candidates": 4096,
+            "n_init": 128,
+            "initial_seed_evals": 128,
+            "initial_expand_evals": 0,
+            "n_iter": 372,
+            "max_total_full_evals": 500,
+            "eval_epochs": 150,
+            "patience": 40,
+            "num_restarts": 16,
+            "raw_samples": 1024,
+            "n_extra": 512,
+            "scratch_gp_min_points": 3,
+            "gp_refit_every": 5,
+            "gp_refit_steps": 20,
+            "gp_save_every": 5,
+        }
+
+        mismatches = []
+
+        for name, expected in required.items():
+            actual = getattr(args, name, None)
+            if actual != expected:
+                mismatches.append(
+                    f"{name}={actual!r} (expected {expected!r})"
+                )
+
+        for name, expected in numeric_required.items():
+            actual = getattr(args, name, None)
+            if actual is None or int(actual) != expected:
+                mismatches.append(
+                    f"{name}={actual!r} (expected {expected})"
+                )
+
+        if int(getattr(args, "seed", -1)) not in (0, 1, 2, 3, 4):
+            mismatches.append("seed must be one of 0, 1, 2, 3, 4")
+
+        if bool(getattr(args, "use_conditional_kernel", False)):
+            mismatches.append("use_conditional_kernel must remain false")
+
+        if bool(getattr(args, "adaptive_sampling", False)):
+            mismatches.append("adaptive_sampling must remain false")
+
+        if int(getattr(args, "gmm_init_trials", 0)) != 0:
+            mismatches.append("gmm_init_trials must remain 0")
+
+        if getattr(args, "gmm_init_history", None):
+            mismatches.append("gmm_init_history must remain unset")
+
+        if getattr(args, "frozen_init_history", None):
+            mismatches.append("frozen_init_history must remain unset")
+
+        if bool(getattr(args, "resume_initialization", False)):
+            mismatches.append("resume_initialization must remain false")
+
+        if mismatches:
+            raise ValueError(
+                "Cora Original ceiling-hunt configuration mismatch: "
+                + "; ".join(mismatches)
+            )
+
+        return
+    required = {
+        "dataset": "cora",
+        "hp_mode": "global4",
+        "initial_selection_strategy": "schur",
+        "gp_init_mode": "scratch",
+        "surrogate_type": "exact_gp",
+        "online_candidate_strategy": "qlogei",
+        "gp_update_mode": "warm_refit",
+        "warm_start": "",
+    }
+    mismatches = [
+        f"{name}={getattr(args, name, None)!r} (expected {expected!r})"
+        for name, expected in required.items()
+        if getattr(args, name, None) != expected
+    ]
+    numeric_required = {
+        "n_init": 50,
+        "initial_seed_evals": 50,
+        "initial_expand_evals": 0,
+        "n_iter": 100,
+        "max_total_full_evals": 150,
+        "eval_epochs": 150,
+        "patience": 40,
+        "n_lhs_candidates": 768,
+        "num_restarts": 8,
+        "raw_samples": 256,
+        "n_extra": 128,
+        "scratch_gp_min_points": 3,
+        "gp_refit_every": 5,
+        "gp_refit_steps": 20,
+        "gp_save_every": 5,
+    }
+    mismatches.extend(
+        f"{name}={getattr(args, name, None)!r} (expected {expected})"
+        for name, expected in numeric_required.items()
+        if getattr(args, name, None) is None
+        or int(getattr(args, name)) != expected
+    )
+    if int(getattr(args, "seed", -1)) not in (0, 1, 2, 3, 4, 10, 11, 12):
+        mismatches.append("seed must be one of 0, 1, 2, 3, 4, 10, 11, 12")
+    float_required = {
+        "sigma_arch": 0.8,
+        "z_bound": 2.5,
+        "log_lr_min": -4.0,
+        "log_lr_max": -1.5,
+        "dropout_min": 0.1,
+        "dropout_max": 0.6,
+        "gcnii_alpha": 0.1,
+        "gcnii_theta": 0.5,
+    }
+    mismatches.extend(
+        f"{name}={getattr(args, name, None)!r} (expected {expected})"
+        for name, expected in float_required.items()
+        if getattr(args, name, None) is None
+        or not math.isclose(
+            float(getattr(args, name)), expected, rel_tol=0.0, abs_tol=1e-12
+        )
+    )
+    if bool(getattr(args, "use_conditional_kernel", False)):
+        mismatches.append("use_conditional_kernel must remain false")
+    if bool(getattr(args, "adaptive_sampling", False)):
+        mismatches.append("adaptive_sampling must remain false")
+    if int(getattr(args, "gmm_init_trials", 0)) != 0:
+        mismatches.append("gmm_init_trials must remain 0")
+    if getattr(args, "gmm_init_history", None):
+        mismatches.append("gmm_init_history must remain unset")
+    if getattr(args, "frozen_init_history", None):
+        mismatches.append("frozen_init_history must remain unset")
+    if bool(getattr(args, "resume_initialization", False)):
+        mismatches.append("resume_initialization must remain false")
+    if mismatches:
+        raise ValueError(
+            "LayerNorm search-space pilot configuration mismatch: "
+            + "; ".join(mismatches)
+        )
+
+
 def _torch_load(path: str, map_location):
     try:
         return torch.load(path, map_location=map_location, weights_only=True)
@@ -556,17 +737,36 @@ def _canonical_candidate_identity(
     hp_mode: str,
     z_bound: float,
     candidate_fingerprint: str | None = None,
+    normalization_space: str = "legacy",
 ) -> tuple[np.ndarray, str]:
     """Canonicalize a candidate and validate any caller-provided fingerprint."""
 
-    clipped = clip_z_search_by_mode(z_search, hp_mode, ARCH_NZ, z_bound)
-    expected_fingerprint = make_candidate_fingerprint(clipped)
+    base, normalization = split_search_vector(
+        z_search,
+        arch_nz=ARCH_NZ,
+        hp_mode=hp_mode,
+        normalization_space=normalization_space,
+    )
+    clipped_base = clip_z_search_by_mode(base, hp_mode, ARCH_NZ, z_bound)
+    clipped = compose_search_vector(
+        clipped_base,
+        normalization,
+        arch_nz=ARCH_NZ,
+        hp_mode=hp_mode,
+        normalization_space=normalization_space,
+    )
+    base_fingerprint = base_candidate_fingerprint(clipped_base)
+    expected_fingerprint = (
+        make_candidate_fingerprint(clipped_base)
+        if normalization_space == "legacy"
+        else full_candidate_fingerprint(base_fingerprint, normalization)
+    )
     if candidate_fingerprint is not None:
         if not isinstance(candidate_fingerprint, str) or not candidate_fingerprint.strip():
             raise ValueError("candidate_fingerprint must be a non-empty string")
         if candidate_fingerprint != expected_fingerprint:
             raise ValueError(
-                "candidate_fingerprint does not match canonical clipped float32 z_search: "
+                "candidate_fingerprint does not match canonical base vector and normalization: "
                 f"expected {expected_fingerprint}, got {candidate_fingerprint}"
             )
     return clipped, expected_fingerprint
@@ -781,12 +981,29 @@ def eval_candidate(
         hp_mode=args.hp_mode,
         z_bound=args.z_bound,
         candidate_fingerprint=candidate_fingerprint,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
     z_tensor = torch.tensor(z_np, dtype=torch.float32)
-    decoder_seed = stable_seed(int(args.seed), "decoder", z_tensor[:ARCH_NZ])
-    expected_evaluation_seed = candidate_evaluation_seed(
-        int(args.seed), expected_fingerprint, evaluation_fidelity,
+    base_z, normalization = split_search_vector(
+        z_np,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
+    base_fingerprint = base_candidate_fingerprint(base_z)
+    decoder_seed = stable_seed(
+        int(args.seed), "decoder", torch.tensor(base_z[:ARCH_NZ])
+    )
+    if getattr(args, "normalization_space", "legacy") == "legacy":
+        expected_evaluation_seed = candidate_evaluation_seed(
+            int(args.seed), expected_fingerprint, evaluation_fidelity,
+        )
+        seed_scheme = CANDIDATE_EVALUATION_SEED_SCHEME
+    else:
+        if evaluation_fidelity != "full":
+            raise ValueError("LayerNorm search-space pilot only supports full fidelity")
+        expected_evaluation_seed = matched_training_seed(base_fingerprint, 0)
+        seed_scheme = LAYERNORM_TRAINING_SEED_SCHEME
     candidate_eval_seed = (
         expected_evaluation_seed
         if evaluation_seed is None
@@ -799,7 +1016,7 @@ def eval_candidate(
     try:
         result = eval_z_search(
             vae,
-            z_tensor.to(device),
+            torch.tensor(base_z, dtype=torch.float32, device=device),
             data,
             in_ch,
             out_ch,
@@ -826,6 +1043,11 @@ def eval_candidate(
             return_hp=True,
             decoder_seed=decoder_seed,
             candidate_eval_seed=candidate_eval_seed,
+            component_variant=(
+                "layer_norm"
+                if normalization == NORMALIZATION_LAYER_NORM
+                else "baseline"
+            ),
         )
     except InfrastructureEvaluationError as exc:
         enriched = exc.with_context(
@@ -855,7 +1077,11 @@ def eval_candidate(
             "evaluation_stage": evaluation_stage,
             "evaluation_fidelity": evaluation_fidelity,
             "candidate_fingerprint": expected_fingerprint,
-            "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+            "base_candidate_fingerprint": base_fingerprint,
+            "full_candidate_fingerprint": expected_fingerprint,
+            "normalization": normalization,
+            "normalization_value": normalization_value(normalization),
+            "candidate_evaluation_seed_scheme": seed_scheme,
             "architecture_fingerprint": _decoded_architecture_fingerprint(
                 result.get("config")
             ),
@@ -945,6 +1171,26 @@ def _null_gp_record_fields(train_size_before: int = 0, train_size_after: int = 0
     }
 
 
+def _normalization_lengthscale(
+    predictor: AccuracyGPPredictor | None,
+) -> float | None:
+    if (
+        predictor is None
+        or not getattr(predictor, "include_normalization", False)
+        or predictor.model is None
+    ):
+        return None
+    kernel = predictor.model.covar_module
+    base_kernel = getattr(kernel, "base_kernel", kernel)
+    lengthscale = getattr(base_kernel, "lengthscale", None)
+    if lengthscale is None:
+        return None
+    values = torch.as_tensor(lengthscale).detach().cpu().reshape(-1)
+    if values.numel() < predictor.search_dim:
+        return None
+    return float(values[predictor.search_dim - 1].item())
+
+
 def history_record(
     step: int,
     record_type: str,
@@ -963,13 +1209,26 @@ def history_record(
         hp_mode=args.hp_mode,
         z_bound=args.z_bound,
         candidate_fingerprint=result.get("candidate_fingerprint"),
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
-    expected_eval_seed = candidate_evaluation_seed(
-        search_seed, expected_fingerprint, evaluation_fidelity,
+    base_z, normalization = split_search_vector(
+        canonical_z,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
+    base_fingerprint = base_candidate_fingerprint(base_z)
+    if getattr(args, "normalization_space", "legacy") == "legacy":
+        expected_eval_seed = candidate_evaluation_seed(
+            search_seed, expected_fingerprint, evaluation_fidelity,
+        )
+        expected_seed_scheme = CANDIDATE_EVALUATION_SEED_SCHEME
+    else:
+        expected_eval_seed = matched_training_seed(base_fingerprint, 0)
+        expected_seed_scheme = LAYERNORM_TRAINING_SEED_SCHEME
     decoder_seed_value = result.get("decoder_seed")
     if decoder_seed_value is None:
-        decoder_seed_value = stable_seed(search_seed, "decoder", canonical_z[:ARCH_NZ])
+        decoder_seed_value = stable_seed(search_seed, "decoder", base_z[:ARCH_NZ])
     decoder_seed = int(decoder_seed_value)
     candidate_eval_seed_value = result.get("candidate_eval_seed")
     if candidate_eval_seed_value is None:
@@ -986,10 +1245,10 @@ def history_record(
         field="evaluation_seed",
     )
     scheme = result.get("candidate_evaluation_seed_scheme")
-    if scheme is not None and scheme != CANDIDATE_EVALUATION_SEED_SCHEME:
+    if scheme is not None and scheme != expected_seed_scheme:
         raise ValueError(
             "candidate_evaluation_seed_scheme mismatch: "
-            f"expected {CANDIDATE_EVALUATION_SEED_SCHEME!r}, got {scheme!r}"
+            f"expected {expected_seed_scheme!r}, got {scheme!r}"
         )
     epochs_ran = int(result.get("epochs_ran") or 0)
     stopped_epoch = int(result.get("stopped_epoch") or epochs_ran)
@@ -1007,9 +1266,11 @@ def history_record(
         "step": int(step),
         "type": record_type,
         "hp_mode": args.hp_mode,
-        "search_dim": ARCH_NZ + hp_dim_from_mode(args.hp_mode),
+        "search_dim": _search_dim(args),
+        "base_search_dim": ARCH_NZ + hp_dim_from_mode(args.hp_mode),
         "z_search": canonical_z.tolist(),
-        "z_arch": canonical_z[:ARCH_NZ].tolist(),
+        "z_base": base_z.tolist(),
+        "z_arch": base_z[:ARCH_NZ].tolist(),
         "val_acc": float(result.get("val_acc", 0.0)),
         "value": float(result.get("val_acc", 0.0)),
         "valid": bool(result.get("valid", False)),
@@ -1035,13 +1296,18 @@ def history_record(
         "candidate_eval_seed": candidate_eval_seed,
         "evaluation_seed": evaluation_seed,
         "candidate_fingerprint": expected_fingerprint,
+        "base_candidate_fingerprint": base_fingerprint,
+        "full_candidate_fingerprint": expected_fingerprint,
+        "normalization_space": getattr(args, "normalization_space", "legacy"),
+        "normalization": normalization,
+        "normalization_value": normalization_value(normalization),
         "dataset_context": result.get(
             "dataset_context", _dataset_context(args)
         ),
         "evaluation_cache_key": result.get("evaluation_cache_key"),
         "evaluation_stage": result.get("evaluation_stage"),
         "evaluation_fidelity": evaluation_fidelity,
-        "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+        "candidate_evaluation_seed_scheme": expected_seed_scheme,
         "initialization_strategy": result.get(
             "initialization_strategy", getattr(args, "initial_selection_strategy", "schur")
         ),
@@ -1210,13 +1476,98 @@ def initial_points(args: argparse.Namespace, logger) -> list[torch.Tensor]:
     return init[: int(args.n_init)]
 
 
+def search_initial_points(
+    args: argparse.Namespace,
+    logger,
+) -> list[torch.Tensor]:
+    """Return S0 points with the approved deterministic normalization assignment."""
+
+    base_points = initial_points(args, logger)
+    space = getattr(args, "normalization_space", "legacy")
+    if space in ("legacy", "none"):
+        return [
+            torch.tensor(
+                compose_search_vector(
+                    point.numpy(),
+                    NORMALIZATION_NONE,
+                    arch_nz=ARCH_NZ,
+                    hp_mode=args.hp_mode,
+                    normalization_space=space,
+                ),
+                dtype=torch.float32,
+            )
+            for point in base_points
+        ]
+    fingerprints = [
+        base_candidate_fingerprint(point.numpy()) for point in base_points
+    ]
+    assignment = balanced_initialization_assignment(
+        fingerprints,
+        search_seed=int(args.seed),
+    )
+    points = []
+    for point, fingerprint in zip(base_points, fingerprints):
+        points.append(
+            torch.tensor(
+                compose_search_vector(
+                    point.numpy(),
+                    assignment[fingerprint],
+                    arch_nz=ARCH_NZ,
+                    hp_mode=args.hp_mode,
+                    normalization_space=space,
+                ),
+                dtype=torch.float32,
+            )
+        )
+    counts = {
+        value: sum(assignment[fingerprint] == value for fingerprint in fingerprints)
+        for value in (NORMALIZATION_NONE, NORMALIZATION_LAYER_NORM)
+    }
+    if counts != {NORMALIZATION_NONE: 25, NORMALIZATION_LAYER_NORM: 25}:
+        raise RuntimeError(f"expanded initialization is not strictly 25/25: {counts}")
+    return points
+
+
 def _search_dim(args: argparse.Namespace) -> int:
-    return ARCH_NZ + hp_dim_from_mode(args.hp_mode)
+    return gp_search_dim(
+        ARCH_NZ,
+        args.hp_mode,
+        getattr(args, "normalization_space", "legacy"),
+    )
+
+
+def _probe_pool(args: argparse.Namespace, seed: int) -> torch.Tensor:
+    expanded = has_normalization_dimension(
+        getattr(args, "normalization_space", "legacy")
+    )
+    count = int(args.probe_pool_size)
+    base_dim = _search_dim(args) - int(expanded)
+    unit = torch.tensor(
+        _sample_unit_lhs(count, base_dim, int(seed)),
+        dtype=torch.float32,
+    )
+    if expanded:
+        states = torch.tensor(
+            [[float(index % 2)] for index in range(count)], dtype=torch.float32
+        )
+        unit = torch.cat((unit, states), dim=1)
+    return denormalize_search_vector(
+        unit,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        include_normalization=expanded,
+    ).float()
 
 
 def _mask_from_ops(ops: list[str], args: argparse.Namespace) -> list[float]:
     hp_mask = condition_mask_vector_from_ops(ops, args.hp_mode)
-    return [1.0] * ARCH_NZ + [float(v) for v in hp_mask]
+    mask = [1.0] * ARCH_NZ + [float(v) for v in hp_mask]
+    if has_normalization_dimension(
+        getattr(args, "normalization_space", "legacy")
+    ):
+        mask.append(1.0)
+    return mask
 
 
 def _mask_for_candidate(
@@ -1263,10 +1614,13 @@ def optimize_acq(
     vae: JointSpaceVAE,
     device: torch.device,
     generator: torch.Generator,
-) -> tuple[torch.Tensor, float, list[float]]:
+) -> tuple[torch.Tensor, float, list[float], dict[str, Any] | None]:
     """Select a candidate strictly by qLogExpectedImprovement."""
 
     search_dim = _search_dim(args)
+    expanded = has_normalization_dimension(
+        getattr(args, "normalization_space", "legacy")
+    )
     logei = predictor.make_logei(best_f)
     bounds = predictor.normalized_bounds
 
@@ -1274,23 +1628,56 @@ def optimize_acq(
     if not predictor.use_conditional_kernel:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cand, _ = optimize_acqf(
-                logei, bounds=bounds, q=1,
-                num_restarts=int(args.num_restarts), raw_samples=int(args.raw_samples),
-            )
-            candidate_norms.append(cand.squeeze(0).detach().cpu().float())
+            states = (0, 1) if expanded else (None,)
+            for state in states:
+                kwargs = {}
+                if state is not None:
+                    kwargs["fixed_features"] = {search_dim - 1: float(state)}
+                cand, _ = optimize_acqf(
+                    logei,
+                    bounds=bounds,
+                    q=1,
+                    num_restarts=int(args.num_restarts),
+                    raw_samples=int(args.raw_samples),
+                    **kwargs,
+                )
+                candidate_norms.append(cand.squeeze(0).detach().cpu().float())
 
     n_random = int(args.n_extra)
     if predictor.use_conditional_kernel:
         n_random = max(n_random, int(args.raw_samples) + int(args.num_restarts))
     if n_random > 0:
-        candidate_norms.extend(torch.rand(n_random, search_dim, generator=generator))
+        random_dim = search_dim - int(expanded)
+        candidate_norms.extend(
+            torch.rand(n_random, random_dim, generator=generator)
+        )
     if not candidate_norms:
         raise RuntimeError("acquisition produced no candidates")
 
-    cand_norm = torch.stack(candidate_norms).float()
+    if expanded:
+        base_norm = torch.stack(
+            [candidate[: search_dim - 1] for candidate in candidate_norms]
+        ).float()
+        candidate_count = base_norm.shape[0]
+        cand_norm = torch.cat(
+            (
+                torch.cat(
+                    (base_norm, torch.zeros(candidate_count, 1)), dim=1
+                ),
+                torch.cat(
+                    (base_norm, torch.ones(candidate_count, 1)), dim=1
+                ),
+            ),
+            dim=0,
+        )
+    else:
+        cand_norm = torch.stack(candidate_norms).float()
     clipped_raw = denormalize_search_vector(
-        cand_norm, arch_nz=ARCH_NZ, hp_mode=args.hp_mode, z_bound=args.z_bound
+        cand_norm,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        include_normalization=expanded,
     ).float()
 
     with torch.no_grad():
@@ -1308,7 +1695,34 @@ def optimize_acq(
         if predictor.use_conditional_kernel
         else _mask_for_candidate(vae, clipped_raw[best_idx], args, device, logger)
     )
-    return clipped_raw[best_idx].float(), float(logei_scores[best_idx].item()), best_mask
+    diagnostics = None
+    if expanded:
+        half = clipped_raw.shape[0] // 2
+        counterpart_idx = best_idx + half if best_idx < half else best_idx - half
+        none_idx = best_idx if best_idx < half else counterpart_idx
+        layernorm_idx = best_idx + half if best_idx < half else best_idx
+        posterior = predictor.predict_batch(
+            torch.stack((clipped_raw[none_idx], clipped_raw[layernorm_idx]))
+        )
+        diagnostics = {
+            "base_pair_compared": True,
+            "selected_normalization": (
+                NORMALIZATION_NONE if best_idx < half else NORMALIZATION_LAYER_NORM
+            ),
+            "none_logei": float(logei_scores[none_idx].item()),
+            "layernorm_logei": float(logei_scores[layernorm_idx].item()),
+            "none_posterior_mean": float(posterior[0]["mean"]),
+            "layernorm_posterior_mean": float(posterior[1]["mean"]),
+            "posterior_mean_difference": float(
+                posterior[1]["mean"] - posterior[0]["mean"]
+            ),
+        }
+    return (
+        clipped_raw[best_idx].float(),
+        float(logei_scores[best_idx].item()),
+        best_mask,
+        diagnostics,
+    )
 
 
 def sample_random_online_candidate(
@@ -1328,15 +1742,36 @@ def sample_random_online_candidate(
     selection_seed = int(selection_seed)
     generator = torch.Generator(device="cpu")
     generator.manual_seed(selection_seed)
-    normalized = torch.rand(_search_dim(args), generator=generator, dtype=torch.float32)
+    expanded = has_normalization_dimension(
+        getattr(args, "normalization_space", "legacy")
+    )
+    base_dim = _search_dim(args) - int(expanded)
+    normalized = torch.rand(base_dim, generator=generator, dtype=torch.float32)
+    if expanded:
+        state = torch.randint(0, 2, (1,), generator=generator).float()
+        normalized = torch.cat((normalized, state))
     raw = denormalize_search_vector(
         normalized,
         arch_nz=ARCH_NZ,
         hp_mode=args.hp_mode,
         z_bound=args.z_bound,
+        include_normalization=expanded,
     ).reshape(-1)
-    clipped = clip_z_search_by_mode(
-        raw, args.hp_mode, ARCH_NZ, args.z_bound,
+    base_raw, normalization = split_search_vector(
+        raw,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
+    )
+    clipped_base = clip_z_search_by_mode(
+        base_raw, args.hp_mode, ARCH_NZ, args.z_bound,
+    )
+    clipped = compose_search_vector(
+        clipped_base,
+        normalization,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
     z_search = torch.tensor(clipped, dtype=torch.float32)
     condition_mask = _mask_for_candidate(vae, z_search, args, device, logger)
@@ -1426,10 +1861,13 @@ def propose_unique_online_candidate(
     strategy: str,
     hp_mode: str,
     z_bound: float,
+    normalization_space: str = "legacy",
     evaluated_full_fingerprints: set[str],
     max_attempts: int,
     proposal_fn: Callable[
-        [int, int], tuple[torch.Tensor, float | None, list[float]]
+        [int, int],
+        tuple[torch.Tensor, float | None, list[float]]
+        | tuple[torch.Tensor, float | None, list[float], dict[str, Any] | None],
     ],
     audit_path: str | None = None,
 ) -> tuple[
@@ -1455,13 +1893,17 @@ def propose_unique_online_candidate(
         selection_seed = online_candidate_proposal_seed(
             int(search_seed), int(online_full_step), retry_id, strategy,
         )
-        z_raw, acquisition_value, condition_mask = proposal_fn(
-            retry_id, selection_seed,
-        )
+        proposal = proposal_fn(retry_id, selection_seed)
+        if len(proposal) == 3:
+            z_raw, acquisition_value, condition_mask = proposal
+            proposal_diagnostics = None
+        else:
+            z_raw, acquisition_value, condition_mask, proposal_diagnostics = proposal
         canonical_z, fingerprint = _canonical_candidate_identity(
             z_raw,
             hp_mode=hp_mode,
             z_bound=z_bound,
+            normalization_space=normalization_space,
         )
         duplicate = fingerprint in evaluated_full_fingerprints
         attempt = {
@@ -1473,6 +1915,7 @@ def propose_unique_online_candidate(
             "acquisition_value": (
                 None if acquisition_value is None else float(acquisition_value)
             ),
+            "normalization_diagnostics": proposal_diagnostics,
             "condition_mask": [float(value) for value in condition_mask],
             "duplicate_full_fidelity": bool(duplicate),
             "accepted": not duplicate,
@@ -1588,8 +2031,16 @@ def _append_eval(
         candidate_fingerprint=(
             None if record_metadata is None else record_metadata.get("candidate_fingerprint")
         ),
+        normalization_space=getattr(args, "normalization_space", "legacy"),
     )
     z_search = torch.tensor(canonical_z, dtype=torch.float32)
+    base_z, normalization = split_search_vector(
+        canonical_z,
+        arch_nz=ARCH_NZ,
+        hp_mode=args.hp_mode,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
+    )
+    base_fingerprint = base_candidate_fingerprint(base_z)
     online_candidate_strategy = (
         getattr(args, "online_candidate_strategy", "qlogei")
         if update_online
@@ -1609,9 +2060,14 @@ def _append_eval(
     )
     evaluation_stage = str(metadata.get("evaluation_stage", default_stage))
     evaluation_fidelity = str(metadata.get("evaluation_fidelity", "full"))
-    expected_evaluation_seed = candidate_evaluation_seed(
-        int(args.seed), expected_fingerprint, evaluation_fidelity,
-    )
+    if getattr(args, "normalization_space", "legacy") == "legacy":
+        expected_evaluation_seed = candidate_evaluation_seed(
+            int(args.seed), expected_fingerprint, evaluation_fidelity,
+        )
+        expected_seed_scheme = CANDIDATE_EVALUATION_SEED_SCHEME
+    else:
+        expected_evaluation_seed = matched_training_seed(base_fingerprint, 0)
+        expected_seed_scheme = LAYERNORM_TRAINING_SEED_SCHEME
     if "evaluation_seed" in metadata:
         _validated_explicit_seed(
             metadata["evaluation_seed"],
@@ -1625,20 +2081,24 @@ def _append_eval(
             field="candidate_eval_seed",
         )
     supplied_scheme = metadata.get("candidate_evaluation_seed_scheme")
-    if supplied_scheme is not None and supplied_scheme != CANDIDATE_EVALUATION_SEED_SCHEME:
+    if supplied_scheme is not None and supplied_scheme != expected_seed_scheme:
         raise ValueError(
             "candidate_evaluation_seed_scheme mismatch: "
-            f"expected {CANDIDATE_EVALUATION_SEED_SCHEME!r}, got {supplied_scheme!r}"
+            f"expected {expected_seed_scheme!r}, got {supplied_scheme!r}"
         )
     metadata.update(
         {
             "search_seed": int(args.seed),
             "candidate_fingerprint": expected_fingerprint,
+            "base_candidate_fingerprint": base_fingerprint,
+            "full_candidate_fingerprint": expected_fingerprint,
+            "normalization": normalization,
+            "normalization_value": normalization_value(normalization),
             "evaluation_stage": evaluation_stage,
             "evaluation_fidelity": evaluation_fidelity,
             "evaluation_seed": expected_evaluation_seed,
             "candidate_eval_seed": expected_evaluation_seed,
-            "candidate_evaluation_seed_scheme": CANDIDATE_EVALUATION_SEED_SCHEME,
+            "candidate_evaluation_seed_scheme": expected_seed_scheme,
             "initialization_strategy": metadata.get(
                 "initialization_strategy",
                 getattr(args, "initial_selection_strategy", "schur"),
@@ -1656,10 +2116,10 @@ def _append_eval(
             pre_search_seed, "decoder", z_search[:ARCH_NZ],
         )
         pre_candidate_eval_seed = candidate_evaluation_seed(
-            pre_search_seed,
-            fingerprint,
-            evaluation_fidelity,
+            pre_search_seed, fingerprint, evaluation_fidelity,
         )
+        if getattr(args, "normalization_space", "legacy") != "legacy":
+            pre_candidate_eval_seed = matched_training_seed(base_fingerprint, 0)
         pre_seed_derivation = SEED_DERIVATION
     if update_online and predictor is None:
         raise RuntimeError("online GP update requested before a GP predictor exists")
@@ -1727,6 +2187,8 @@ def _append_eval(
         "gp_update_performed": False,
         "gp_update_skipped_reason": "",
         "gp_update_seconds": 0.0,
+        "normalization_lengthscale_before": _normalization_lengthscale(predictor),
+        "normalization_lengthscale_after": None,
         "eval_seconds": None,
         "total_step_seconds": float(time.monotonic() - step_started),
         **metadata,
@@ -1776,6 +2238,10 @@ def _append_eval(
             "gp_update_performed": False,
             "gp_update_skipped_reason": gp_update_skipped_reason,
             "gp_update_seconds": 0.0,
+            "normalization_lengthscale_before": _normalization_lengthscale(
+                predictor
+            ),
+            "normalization_lengthscale_after": None,
             "eval_seconds": float(eval_seconds),
             "total_step_seconds": float(time.monotonic() - step_started),
             "online_candidate_strategy": online_candidate_strategy,
@@ -1865,6 +2331,7 @@ def _append_eval(
             "gp_update_performed": True,
             "gp_update_seconds": float(update_seconds),
             "total_step_seconds": float(time.monotonic() - step_started),
+            "normalization_lengthscale_after": _normalization_lengthscale(predictor),
         }
         prediction_row.update(update_fields)
         history_row.update(update_fields)
@@ -2478,17 +2945,30 @@ def run_gmm_init(
 
 
 def _scratch_random_candidate(args: argparse.Namespace, seed: int) -> torch.Tensor:
+    expanded = has_normalization_dimension(
+        getattr(args, "normalization_space", "legacy")
+    )
+    base_dim = _search_dim(args) - int(expanded)
     unit = torch.tensor(
-        _sample_unit_lhs(1, _search_dim(args), int(seed)),
+        _sample_unit_lhs(1, base_dim, int(seed)),
         dtype=torch.float32,
     )
+    if expanded:
+        state = float(stable_seed(int(seed), "scratch_normalization") % 2)
+        unit = torch.cat((unit, torch.tensor([[state]], dtype=torch.float32)), dim=1)
     raw = denormalize_search_vector(
         unit,
         arch_nz=ARCH_NZ,
         hp_mode=args.hp_mode,
         z_bound=args.z_bound,
+        include_normalization=expanded,
     ).reshape(-1)
-    clipped = clip_z_search_by_mode(raw, args.hp_mode, ARCH_NZ, args.z_bound)
+    clipped, _fingerprint = _canonical_candidate_identity(
+        raw,
+        hp_mode=args.hp_mode,
+        z_bound=args.z_bound,
+        normalization_space=getattr(args, "normalization_space", "legacy"),
+    )
     return torch.tensor(clipped, dtype=torch.float32)
 
 
@@ -2584,6 +3064,7 @@ def _fit_scratch_predictor(
         "seed": int(args.seed),
         "surrogate_type": getattr(args, "surrogate_type", "exact_gp"),
         "seed_derivation": SEED_DERIVATION,
+        "normalization_space": getattr(args, "normalization_space", "legacy"),
         **candidate_evaluation_seed_provenance(),
     }
     if getattr(args, "initial_selection_strategy", "schur") != "schur":
@@ -2627,6 +3108,9 @@ def _fit_scratch_predictor(
             arch_nz=ARCH_NZ,
             hp_mode=args.hp_mode,
             z_bound=args.z_bound,
+            include_normalization=has_normalization_dimension(
+                getattr(args, "normalization_space", "legacy")
+            ),
             use_conditional_kernel=bool(args.use_conditional_kernel),
             condition_masks=init_masks if args.use_conditional_kernel else None,
             metadata=metadata,
@@ -4830,6 +5314,9 @@ def run_wgmm_bo(
                 "arch_nz": ARCH_NZ,
                 "hp_mode": args.hp_mode,
                 "search_dim": _search_dim(args),
+                "include_normalization": has_normalization_dimension(
+                    getattr(args, "normalization_space", "legacy")
+                ),
                 "initialization_config_fingerprint": config_fingerprint,
                 "dataset_context": _dataset_context(args),
             },
@@ -4938,13 +5425,7 @@ def run_wgmm_bo(
         len(history) - len(online_history), int(args.n_iter),
     )
     probe_seed = args.probe_pool_seed if args.probe_pool_seed is not None else int(args.seed) + 104729
-    probe_norm = torch.tensor(
-        _sample_unit_lhs(int(args.probe_pool_size), _search_dim(args), int(probe_seed)),
-        dtype=torch.float32,
-    )
-    probe_raw = denormalize_search_vector(
-        probe_norm, arch_nz=ARCH_NZ, hp_mode=args.hp_mode, z_bound=args.z_bound,
-    ).float()
+    probe_raw = _probe_pool(args, int(probe_seed))
     probe_masks = (
         _candidate_masks(vae, probe_raw, args, device, logger)
         if predictor.use_conditional_kernel else None
@@ -5024,6 +5505,7 @@ def run_wgmm_bo(
             strategy=args.online_candidate_strategy,
             hp_mode=args.hp_mode,
             z_bound=float(args.z_bound),
+            normalization_space=getattr(args, "normalization_space", "legacy"),
             evaluated_full_fingerprints=evaluated_full_fingerprints,
             max_attempts=int(getattr(args, "max_online_proposal_attempts", 32)),
             proposal_fn=proposal_fn,
@@ -5235,7 +5717,7 @@ def run_bo(
     logger.info(f"  hp_mode={args.hp_mode}")
     logger.info(f"  hp_dim={hp_dim_from_mode(args.hp_mode)}")
     logger.info(f"  hp_names={hp_names_from_mode(args.hp_mode)}")
-    logger.info(f"  ARCH_NZ={ARCH_NZ} SEARCH_DIM={ARCH_NZ + hp_dim_from_mode(args.hp_mode)}")
+    logger.info(f"  ARCH_NZ={ARCH_NZ} SEARCH_DIM={_search_dim(args)}")
     logger.info(f"  z_bound={args.z_bound}")
     logger.info(f"  LR: 10^[{args.log_lr_min},{args.log_lr_max}] Dropout: [{args.dropout_min},{args.dropout_max}]")
 
@@ -5268,7 +5750,7 @@ def run_bo(
         logger.info("  replayed initial sample count=%d", replayed_initial_samples)
     else:
         step = 0
-        for z in tqdm(initial_points(args, logger), desc="LHS init"):
+        for z in tqdm(search_initial_points(args, logger), desc="LHS init"):
             condition_mask = _mask_for_candidate(vae, z, args, device, logger)
             best_before = max(Y_obs) if Y_obs else None
             if predictor is None:
@@ -5430,7 +5912,7 @@ def run_bo(
     best_acc = max(Y_obs)
     logger.info(
         f"\n[Step 3] BO: n_iter={args.n_iter} "
-        f"SEARCH_DIM={ARCH_NZ + hp_dim_from_mode(args.hp_mode)}"
+        f"SEARCH_DIM={_search_dim(args)}"
     )
 
     monitor = GPConvergenceMonitor(
@@ -5449,13 +5931,7 @@ def run_bo(
         max_wall_time_hours=args.max_wall_time_hours,
     )
     probe_seed = args.probe_pool_seed if args.probe_pool_seed is not None else int(args.seed) + 104729
-    probe_norm = torch.tensor(
-        _sample_unit_lhs(int(args.probe_pool_size), _search_dim(args), int(probe_seed)),
-        dtype=torch.float32,
-    )
-    probe_raw = denormalize_search_vector(
-        probe_norm, arch_nz=ARCH_NZ, hp_mode=args.hp_mode, z_bound=args.z_bound
-    ).float()
+    probe_raw = _probe_pool(args, int(probe_seed))
     probe_masks = (
         _candidate_masks(vae, probe_raw, args, device, logger)
         if predictor.use_conditional_kernel else None
@@ -5539,6 +6015,7 @@ def run_bo(
             strategy=args.online_candidate_strategy,
             hp_mode=args.hp_mode,
             z_bound=float(args.z_bound),
+            normalization_space=getattr(args, "normalization_space", "legacy"),
             evaluated_full_fingerprints=evaluated_full_fingerprints,
             max_attempts=int(getattr(args, "max_online_proposal_attempts", 32)),
             proposal_fn=proposal_fn,
@@ -5655,7 +6132,7 @@ def run_bo(
     logger.info("=" * 66)
     logger.info(f"  Best val_acc  : {max(Y_obs):.4f}")
     logger.info(f"  GNN config    : {best_cfg}")
-    logger.info(f"  SEARCH_DIM    : {ARCH_NZ + hp_dim_from_mode(args.hp_mode)}")
+    logger.info(f"  SEARCH_DIM    : {_search_dim(args)}")
     logger.info("=" * 66)
 
     predictor.save(os.path.join(args.output, "accuracy_gp_online_final.pt"))
@@ -5882,8 +6359,9 @@ def main() -> None:
         if dataset_request.canonical_name == "ogbn-arxiv"
         else None
     )
+    validate_layernorm_search_space_configuration(args)
     hp_dim = hp_dim_from_mode(args.hp_mode)
-    search_dim = ARCH_NZ + hp_dim
+    search_dim = _search_dim(args)
     os.makedirs(args.output, exist_ok=True)
     provenance, provenance_created = persist_run_provenance(
         args.output,
@@ -6076,6 +6554,9 @@ def main() -> None:
             "arch_nz": ARCH_NZ,
             "hp_mode": args.hp_mode,
             "search_dim": search_dim,
+            "include_normalization": has_normalization_dimension(
+                getattr(args, "normalization_space", "legacy")
+            ),
             "z_bound": float(args.z_bound),
             "dataset": _dataset_gp_name(args),
             "eval_epochs": int(args.eval_epochs),

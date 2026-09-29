@@ -1,0 +1,19 @@
+{
+  "files": {
+    "code/length_core.py": "19e17e855e739e2f27b02a26bdc388fd8f6a802c1f7c4bda04c6f3853cb42260",
+    "code/length_diagnostics.py": "322ac12a62bb69d9e807e85f8db2d0121f74ea080c3a02ec9e9b7875f31d5ade",
+    "code/preflight_length.py": "95ec6e42fc1c80b968055fae9ff8d91a1234f5e802bd74f0d88f1591877d3ff7",
+    "code/prepare_length.py": "c15de9496c085be03d5ccad09e16f60619223eb46b1880a19b8c8c894076826c",
+    "code/recompute_stability.py": "90b3a89603a5f850b68b968dec07eaccdb51af6201624d7171af698c50447c2b",
+    "code/run_length.py": "c9e977bc7d40a18422cc173f7da9dcb15efca63bc48894a7c455b89e32088b08",
+    "code/score_length.py": "a1379576e297d6cbdcb999c0fdf971329dfb21f59900d0f07953ec62789f98ab",
+    "code/score_stage2.py": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+    "code/source_reference/fuzzy_metric.py": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+    "code/stage01_core.py": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+    "code/stage2_core.py": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+    "code/test_length_core.py": "0cb5380d29d28378160604b724cf06da10c7f5d55dbee1b6ff66d77e9169212e",
+    "code/test_length_diagnostics.py": "ca4e9e17d805cd7ecec5a85af04ba6fbb739033af124f17416756078473f4e75",
+    "code/test_length_score.py": "eaad133cdaa26b17e547e5a71a8be43cc30587ec842e53e3be8edc21a9c6578b"
+  },
+  "source_head": "64a44c14316f11debaf01cf8583426acfe1410e6"
+}

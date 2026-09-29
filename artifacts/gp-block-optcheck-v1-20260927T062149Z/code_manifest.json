@@ -1,0 +1,17 @@
+{
+  "files": {
+    "audit/audit_cases.py": "1f4f0f70f8fc3318e1ddc9aa4a1a2dd07aecafd53021a1d16e7cdc328c56406d",
+    "audit/package_evidence.py": "0c9d3767eba21577f749cebe2a68bae1447487e05f14e60875452ebb2e1c1565",
+    "audit/preserve_workspace.py": "8468bebad96ef2a0accf460fee307055136e8daa272c9e8019bc865c21ff71e8",
+    "code/audit_optcheck.py": "d9819efd34534000f95123c6a65084bda8f3bd5830991722e635ca29e660dbfa",
+    "code/nested_core.py": "b974db39f32c001c970ba3d5dfcb1eb0cf7fee6436108c6a7ed142ad1230b865",
+    "code/optcheck_data.py": "7610f19ceee83092186743a7b513256a46da9a60244cd451f9d684c7a2630331",
+    "code/preflight_nested.py": "e2a9b02a3dd7a94e5acd2ea8ce23fe68abccae61bc08b9cad1c9bd7b9fccde80",
+    "code/prepare_optcheck_source.py": "7b1321966a5cc70c1173938ad05be7ce28d9aa575366e76c2b2e5ace401d508a",
+    "code/run_optcheck.py": "c07e55c95876d69a0b21ac87332595bd5d65314186605191cfceabda1e7ad8eb",
+    "code/score_oof.py": "89225f803f1b50e568c197c9d2c706f2bbbbe73864ac7df424cd5f50a3d5c88c",
+    "code/score_optcheck.py": "014fee80a6a2023e5dec532a84013602092dec9d1bc7ec008608232ea003f8fb",
+    "code/score_stage2.py": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2"
+  },
+  "frozen_at_utc": "2026-09-27T07:33:50.661060+00:00"
+}

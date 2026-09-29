@@ -1,0 +1,21 @@
+{
+  "files": {
+    "code/final_checks_readout.py": "f4e19522270d9e344377c1fa968eeb474ffef7d30dff49f73f1f62720d6e0058",
+    "code/migrate_readout_v2.py": "81329c7c77f44bf4843e16c17cfa01f5f7c0bb0662b10035bd1a4ffe78c55b0b",
+    "code/preflight_readout.py": "674635d445abbf401b8d196c8587075e65a4cc8d22e9b6e98ba9658f82e3f06e",
+    "code/prepare_cache_readout.py": "b9fa5bfa28d55aa848ce74f666ecd0881432671b1326bc85fb42baa48a1e4533",
+    "code/prepare_readout.py": "374405d1ad8302d4804f4af0958a9898954a4ae2fcefe3fe8868a5411b8ccc1d",
+    "code/readout_core.py": "7f57e05b67ef67e15a7c7a2684393c0478ed6d64eb9496b3fb2a2887025d66cc",
+    "code/readout_data.py": "288cc0b16bf3ae9b59c44e3b3961e133f22636f6ddb15cb4e6be8f2e7421c79d",
+    "code/readout_diagnostics.py": "201ade5d5ab5cf3506284f302d395c3fc6c1b489ec5cc5639638e79323a7e911",
+    "code/residual_core.py": "74718985db39150c6ec5e307ae004ac354c15ff7d534f2ab986d8a4d13ceb084",
+    "code/run_readout.py": "7a8831cbbd190b13410961a120d39498b0ae35719f5083c90038e033bd301aeb",
+    "code/score_readout.py": "9d9d29bd07000a5447666e1f4b92e2aa22fe6ff8b198063f83c046f2fcd7937a",
+    "code/score_stage2.py": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+    "code/source_reference/fuzzy_metric.py": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+    "code/stage01_core.py": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+    "code/stage2_core.py": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+    "code/test_readout_scoring.py": "b441b6a8be0daf6caf474eb5d6498ff311d79b96d77905c3bdcacd71e788b806",
+    "code/validate_v2_inputs.py": "506707bc04f14b8b8c1465373c808412dc00d264827aff0fcb2f9e037d28f411"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "files": {
+    "code/length_core.py": "19e17e855e739e2f27b02a26bdc388fd8f6a802c1f7c4bda04c6f3853cb42260",
+    "code/length_diagnostics.py": "322ac12a62bb69d9e807e85f8db2d0121f74ea080c3a02ec9e9b7875f31d5ade",
+    "code/preflight_residual.py": "b1298364049d336424ed9c19fe080ecb332c05a1b4d0fd3dc889d8000fc082ba",
+    "code/prepare_residual.py": "201c470b500b1476622a0dfae9a973fdda15cf71a4986bc1de1a235174ae7c84",
+    "code/residual_core.py": "74718985db39150c6ec5e307ae004ac354c15ff7d534f2ab986d8a4d13ceb084",
+    "code/residual_diagnostics.py": "8e1d78da5a8d03091d3ed4a058a16c9c7a04065150120395d93bd979b67611fd",
+    "code/run_historical_diagnostics.py": "8ceaf198edd9c954312e69730e96b1a4f595ac9d4369ed693a08bc53550b2828",
+    "code/run_residual.py": "f90ae1a7a59343610661535dfabb9517d98445d2cbb2aa313b27d1cf7dc6d823",
+    "code/score_residual.py": "1fa7995fbb021204f1082c74433ba11ac5e35198514ba3288e594c26b1f35cde",
+    "code/score_stage2.py": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+    "code/source_reference/fuzzy_metric.py": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+    "code/stage01_core.py": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+    "code/stage01_data.py": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+    "code/stage2_core.py": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+    "code/stage2_data.py": "0789e037db578982e89d409ecd8a234824630de76977898b577bfee9cfb07a5e",
+    "code/test_residual_scoring.py": "a6d63dd4acb15d8f4a8f0f877534105e90863c878ec17f53d01201ba55c15bc1"
+  }
+}

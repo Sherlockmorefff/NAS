@@ -1,0 +1,185 @@
+{
+  "task_id": "dkl-stage01-v1-20260922T071053Z",
+  "frozen_at_utc": "2026-09-22T07:11:45.143532+00:00",
+  "scope": "stage0 then stage1 only; independent controlled engineering verification",
+  "device": "cpu",
+  "dtype": "float64",
+  "threads": 1,
+  "deterministic_algorithms": true,
+  "selection": {
+    "pool": "legal A only",
+    "count": 20,
+    "unique_ids": true,
+    "sort": "lexicographic candidate_id",
+    "algorithm": "numpy.random.default_rng(20260922).choice(sorted_ids,20,replace=False); selected order preserved",
+    "seed": 20260922,
+    "save_manifest_before_label_release": true
+  },
+  "data_recipe": {
+    "dataset": "Cora",
+    "split": "public",
+    "features": "NormalizeFeatures",
+    "hp_mode": "global4",
+    "normalization": "none",
+    "batch": "full_batch",
+    "max_epochs": 300,
+    "patience": 80,
+    "gnn_seeds": [
+      0,
+      1,
+      2
+    ]
+  },
+  "input": {
+    "vae_dimensions": 12,
+    "vae": "verified frozen cached encoding only",
+    "hp": [
+      "log10(lr)",
+      "dropout",
+      "log2(hidden_dim)",
+      "log10(l2)"
+    ],
+    "standardize": "selected20 population mean/std ddof0 per column",
+    "x_scale_floor": 1e-06,
+    "y_scale_floor": 1e-08,
+    "statistics_fixed": true
+  },
+  "mapping": {
+    "source": "current surrogate/fuzzy_metric.py JointMetricModel",
+    "hp": "Linear(4,16),SiLU",
+    "body": "Linear(28,32),SiLU,Linear(32,32),SiLU,Linear(32,8)",
+    "head": "Linear(8,1)",
+    "dropout": false,
+    "batchnorm": false,
+    "initialization": "seeded current constructor in float64; no historical label-trained checkpoint"
+  },
+  "regression_loss": "mean((head(e)-y_std)^2)+0.001*mean(sum(e^2,axis=1))",
+  "gp": {
+    "class": "gpytorch ExactGP",
+    "mean": "ConstantMean",
+    "kernel": "ScaleKernel(MaternKernel(nu=2.5,ard_num_dims=None))",
+    "loss": "pure data negative exact marginal log likelihood divided by selected n",
+    "priors": [],
+    "added_losses": [],
+    "known_variance": "SE^2 / selected_y_std^2; verify SE against sample std ddof1/sqrt(3); never divide stored SE^2 by3",
+    "learn_extra_noise": true,
+    "extra_noise_initial": 0.01,
+    "extra_noise_lower": 1e-06,
+    "lengthscale_initial": 1.0,
+    "lengthscale_lower": 0.0001,
+    "outputscale_initial": 1.0,
+    "outputscale_lower": 1e-08,
+    "mean_initial": 0.0,
+    "jitter": 1e-08,
+    "max_cholesky_size": 10000,
+    "min_fixed_noise": 0.0,
+    "embedding_transform": "none; only raw x/y selected standardization"
+  },
+  "model_seeds": [
+    0,
+    1
+  ],
+  "replay_seeds": [
+    0
+  ],
+  "shared": {
+    "regression_updates": 100,
+    "gp_updates": 20,
+    "save_full_math_state": true
+  },
+  "branches": {
+    "frozen": [
+      {
+        "mode": "gp",
+        "updates": 20
+      }
+    ],
+    "regression": [
+      {
+        "mode": "regression",
+        "updates": 10
+      },
+      {
+        "mode": "gp",
+        "updates": 20
+      }
+    ],
+    "dkl": [
+      {
+        "mode": "joint",
+        "updates": 10
+      },
+      {
+        "mode": "gp",
+        "updates": 10
+      }
+    ]
+  },
+  "optimizer": {
+    "type": "Adam",
+    "mapping_lr": 0.001,
+    "head_lr": 0.001,
+    "gp_lr": 0.01,
+    "weight_decay": 0.0,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "reset_each_block": true,
+    "no_shared_momentum": true,
+    "schedule": "base lr first80percent steps; 0.1*base final20percent each independent block",
+    "gradient_clip": 5.0,
+    "clip_scope": "global norm across exactly all optimized parameter groups in current block",
+    "record_preclip": true
+  },
+  "stopping": "fixed endpoints only, no validation/ranking/plateau/checkpoint selection",
+  "tolerance": {
+    "atol": 1e-08,
+    "rtol": 1e-06,
+    "copy": "bitwise exact tensor content",
+    "variance_lower": -1e-08,
+    "gradient_nonzero": 0.0
+  },
+  "budget": {
+    "cumulative_real_training_seconds": 1200,
+    "includes": "seed0,seed1,seed0 full replay; all real verification updates and any retries",
+    "excludes": "read-only audit/report; synthetic probe; frozen VAE forward (none planned)"
+  },
+  "checks": [
+    "fork_tensor_kernel_prediction_exact",
+    "mutable_storage_disjoint",
+    "frozen_parameters_and_buffers",
+    "gp_only_gradient_path_and_parameter_change",
+    "numpy_independent_cholesky_nll",
+    "mock_label_access_boundary",
+    "latest_history_and_query_cache",
+    "save_restore_and_interrupted_training_resume",
+    "seed0_full_replay",
+    "finite_losses_gradients_noise_variance",
+    "fixed_update_counts_and_lrs"
+  ],
+  "adaptations_before_preflight": [
+    "Reuse exact current C source in isolated directory; float64 replaces historical float32 mapping/statistics as explicitly required.",
+    "Use explicit prior-free ExactGP instead of other BoTorch GP defaults.",
+    "Unified normalized-unit noise floor 1e-6, initial extra noise .01, lengthscale floor1e-4, outputscale floor1e-8, float64 jitter1e-8 chosen for 20-point Cholesky numerical conditioning before reading labels; these differ from historical raw-unit noise settings. No floor changes or numerical retries with different settings.",
+    "All optimizer blocks recreated, including joint-to-frozen GP tail, for explicit no-momentum-transfer interpretation."
+  ],
+  "not_authorized": [
+    "stage2",
+    "stage3",
+    "GNN/VAE/Fuzzy training",
+    "B labels",
+    "test metrics",
+    "hidden labels or SE",
+    "GPU",
+    "new datasets",
+    "commit/push"
+  ],
+  "future_undecided": [
+    "architecture-group holdout design and confirmation set",
+    "scientific endpoints and acceptance thresholds",
+    "comparable compute/search budgets and hyperparameter selection"
+  ],
+  "next_stage_authorized": false
+}

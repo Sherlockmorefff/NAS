@@ -1,0 +1,16 @@
+{
+  "status": "FROZEN",
+  "frozen_at_utc": "2026-09-22T08:25:20.223842+00:00",
+  "labels_released": false,
+  "files": {
+    "protocol.json": "cea701e4aaa64974b8d80053ddfb3cd8af421ff86dda38014284b02d0c67aee0",
+    "public_inputs.json": "b999105e50aa34ec5cb9a67fc547c78d51aae793ae7312d593f71b06992255d0",
+    "folds.json": "58c78cc48ad9b80e112543fe49b391f400d9d1721021da15c7b8e20bcdb75614",
+    "subsets.json": "a947e76330e4d664f452a6376a4151a689e341578198bc7428b6ad6f7ac5b53e",
+    "worklist.json": "de90add3ebcae40d8d0625d7d7f842875725fbb913e76d5b3e28f69d8b02b582",
+    "code_manifest.json": "9a98ad4ece8ac681a12567f2b3dad2a12b482afca94c257b2d2cb503758c7776",
+    "environment_frozen.json": "47cbbc03792e9a6d9bc6a37e08182c04932325ae1c6f6b0258181c30f48a592c"
+  },
+  "protocol_sha256": "cea701e4aaa64974b8d80053ddfb3cd8af421ff86dda38014284b02d0c67aee0",
+  "code_manifest_sha256": "9a98ad4ece8ac681a12567f2b3dad2a12b482afca94c257b2d2cb503758c7776"
+}

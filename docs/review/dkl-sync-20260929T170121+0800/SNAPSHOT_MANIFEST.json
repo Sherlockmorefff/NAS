@@ -1,0 +1,1623 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-29T17:01:21+08:00",
+  "capture_timezone": "Asia/Shanghai",
+  "source_workspace_head": "64a44c14316f11debaf01cf8583426acfe1410e6",
+  "review_base_commit": "397a12526169feddf7e8a08e707accd35881e669",
+  "review_branch": "review/dkl-sync-20260929T170121+0800",
+  "manifest_self_hash_included": false,
+  "file_count": 161,
+  "total_size_bytes": 2947453,
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 3001,
+      "sha256": "6f50ba62050276993cae70d7b5fe9efdc3cc164aecfee3acccff94018331a78a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "analyse/compare_exact_vs_dkl_prequential.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 25024,
+      "sha256": "b759e71680ee11a13e60d45548005308940381c058031214ca87e855f152db16",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "analyse/diagnose_dkl_uncertainty.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 29905,
+      "sha256": "70eeb840bf826cb516cb757e46aa4a0dfa7cd7f53b4217b9cf920a69ee5a5feb",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/admit_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 2526,
+      "sha256": "3e4f7ca620ac6326ca3b2643848d967707583ef2375511c6684711d3775a1498",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/audit_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 17763,
+      "sha256": "a8d33e5fadb2b511d7451eed61deb64d93024155171b38d71bc637a62496c00b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/calibrate_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 24413,
+      "sha256": "0ac18a5c0b7d2d2f5adae349fc1ed0cf7a70a6c62da6883bb1282baa2ec247f4",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/oof_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19021,
+      "sha256": "6630e7af4495a6cafe80faa1dd6ca33289ee75a52beb332c363884593b5737f3",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/oof_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15197,
+      "sha256": "bd51bb43b95cd6762a80903ac694cf3205d3e90b296d6fb2c00861d77edd44b5",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/preflight_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 16435,
+      "sha256": "a5031298b847273c4ca4f6df05b4cacc795da2a05b02c7dd581fc402826e2345",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/prepare_oof_source.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 6970,
+      "sha256": "bfffa678e56818470cbe5bcd46c6eeb4740367b7836840d0904e77636013edc9",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/readout_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21044,
+      "sha256": "7f57e05b67ef67e15a7c7a2684393c0478ed6d64eb9496b3fb2a2887025d66cc",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/readout_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15995,
+      "sha256": "201ade5d5ab5cf3506284f302d395c3fc6c1b489ec5cc5639638e79323a7e911",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/residual_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 25718,
+      "sha256": "74718985db39150c6ec5e307ae004ac354c15ff7d534f2ab986d8a4d13ceb084",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/run_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 11786,
+      "sha256": "99cdf339604b3951de55ae731723687b997c3dd8b8cebfae805a8176ff68992f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/score_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 38005,
+      "sha256": "89225f803f1b50e568c197c9d2c706f2bbbbe73864ac7df424cd5f50a3d5c88c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/score_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 36186,
+      "sha256": "9d9d29bd07000a5447666e1f4b92e2aa22fe6ff8b198063f83c046f2fcd7937a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/stage01_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22133,
+      "sha256": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code/verify_oof_completion.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7241,
+      "sha256": "8cc8c543fab5cce056039b1e17bc3f90ded18a09c2b6790d89194cadd48809f7",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1823,
+      "sha256": "3e4f1868d776da9533cc508f4653bcc9bd045e7e1d7a2c95810dcc604107600b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 2361,
+      "sha256": "4dc188e3a6ce815f6f0bb97baf6413072c3c6932645fc489a47c11e8029093be",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/initialization_identity.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 314,
+      "sha256": "06a72fe40c7fe7f112128e2e579a006473744a22f246beb263940fb6a376739f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/launcher.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 296,
+      "sha256": "79f4500c7956a2fc037041f7c47d675522740a8a12c2187d1571893c53833cff",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-oof-calibration-v1-20260924T095621Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 4199,
+      "sha256": "e8a44625aef6f32a2d7b5cbece3501042b144cde9aeed03db615b20994f34155",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/final_checks_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1000,
+      "sha256": "f4e19522270d9e344377c1fa968eeb474ffef7d30dff49f73f1f62720d6e0058",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/migrate_readout_v2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 10999,
+      "sha256": "81329c7c77f44bf4843e16c17cfa01f5f7c0bb0662b10035bd1a4ffe78c55b0b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/preflight_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 16660,
+      "sha256": "674635d445abbf401b8d196c8587075e65a4cc8d22e9b6e98ba9658f82e3f06e",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/prepare_cache_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7483,
+      "sha256": "b9fa5bfa28d55aa848ce74f666ecd0881432671b1326bc85fb42baa48a1e4533",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/prepare_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7714,
+      "sha256": "374405d1ad8302d4804f4af0958a9898954a4ae2fcefe3fe8868a5411b8ccc1d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/readout_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21044,
+      "sha256": "7f57e05b67ef67e15a7c7a2684393c0478ed6d64eb9496b3fb2a2887025d66cc",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/readout_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14628,
+      "sha256": "288cc0b16bf3ae9b59c44e3b3961e133f22636f6ddb15cb4e6be8f2e7421c79d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/readout_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15995,
+      "sha256": "201ade5d5ab5cf3506284f302d395c3fc6c1b489ec5cc5639638e79323a7e911",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/residual_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 25718,
+      "sha256": "74718985db39150c6ec5e307ae004ac354c15ff7d534f2ab986d8a4d13ceb084",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/run_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 12575,
+      "sha256": "7a8831cbbd190b13410961a120d39498b0ae35719f5083c90038e033bd301aeb",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/score_readout.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 36186,
+      "sha256": "9d9d29bd07000a5447666e1f4b92e2aa22fe6ff8b198063f83c046f2fcd7937a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/stage01_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22133,
+      "sha256": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/test_readout_scoring.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 13664,
+      "sha256": "b441b6a8be0daf6caf474eb5d6498ff311d79b96d77905c3bdcacd71e788b806",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code/validate_v2_inputs.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 3490,
+      "sha256": "506707bc04f14b8b8c1465373c808412dc00d264827aff0fcb2f9e037d28f411",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1721,
+      "sha256": "c10f1b81206a71dd0951317b46247f8f030b8bdd4221978e9cb05cae27ab64dc",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 74317,
+      "sha256": "c1609d93d09075c9a08591f9db670c3948cd89f641e0cfc74df47c95bfb5ac9f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 5233,
+      "sha256": "2653b680416e3faf97889aca4b0bee2399e891ce9132914a6a021e86c4207676",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-readout-frozen-v2-20260924T081732Z/protocol_amendment.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1638,
+      "sha256": "b7d36836413e0eb2070ff8951b43dab74b3917eb20b2e178a83c27a29bacdf89",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/length_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 17386,
+      "sha256": "19e17e855e739e2f27b02a26bdc388fd8f6a802c1f7c4bda04c6f3853cb42260",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/length_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 17306,
+      "sha256": "322ac12a62bb69d9e807e85f8db2d0121f74ea080c3a02ec9e9b7875f31d5ade",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/preflight_residual.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19597,
+      "sha256": "b1298364049d336424ed9c19fe080ecb332c05a1b4d0fd3dc889d8000fc082ba",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/prepare_residual.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 11954,
+      "sha256": "201c470b500b1476622a0dfae9a973fdda15cf71a4986bc1de1a235174ae7c84",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/residual_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 25718,
+      "sha256": "74718985db39150c6ec5e307ae004ac354c15ff7d534f2ab986d8a4d13ceb084",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/residual_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21400,
+      "sha256": "8e1d78da5a8d03091d3ed4a058a16c9c7a04065150120395d93bd979b67611fd",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/run_historical_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19182,
+      "sha256": "8ceaf198edd9c954312e69730e96b1a4f595ac9d4369ed693a08bc53550b2828",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/run_residual.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 18522,
+      "sha256": "f90ae1a7a59343610661535dfabb9517d98445d2cbb2aa313b27d1cf7dc6d823",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/score_residual.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 26703,
+      "sha256": "1fa7995fbb021204f1082c74433ba11ac5e35198514ba3288e594c26b1f35cde",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/stage01_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/stage01_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19195,
+      "sha256": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22133,
+      "sha256": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/stage2_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21524,
+      "sha256": "0789e037db578982e89d409ecd8a234824630de76977898b577bfee9cfb07a5e",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code/test_residual_scoring.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 10881,
+      "sha256": "a6d63dd4acb15d8f4a8f0f877534105e90863c878ec17f53d01201ba55c15bc1",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1620,
+      "sha256": "0664c0e2b6c8cb14d5ce993476677b9fde3003a178394cd5ae3af984fcc4a4ec",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 3653,
+      "sha256": "2ed6bc003b5568703df668ee4820db2c9ded131056e834dd96413cc9bed1eaec",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-residual-constraint-v1-20260924T024011Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 10964,
+      "sha256": "8a2029612f90938ce813b521dfa8ed40341ac5b74e2232727a3cf32a356fb66c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/controlled_dkl.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/data_adapter.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19195,
+      "sha256": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/engineering_checks.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21771,
+      "sha256": "7c425cda06033f00359cdb45c055598a22a9917a37bba22660f0f81b833b2bef",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/run_stage1.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15670,
+      "sha256": "293316d5cc10c3e203a0b5a2f4a3da53000ebb588270d7aa98cde5a740940955",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code/verify_artifacts.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 3951,
+      "sha256": "91f64dfc5f5b098fdddf524a8d2c20c258d622fe282c5e5433b7b431bbfcd5de",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 872,
+      "sha256": "d5ab8c0b133ea17b38aaefadedb464f703b1e0009f542a655174ff09b888b53a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage01-v1-20260922T071053Z/stage1_protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 5661,
+      "sha256": "494dfb5388a75c6b4ef6468e08b2205d4971ec981675812c9941720f83d9c628",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/length_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 17386,
+      "sha256": "19e17e855e739e2f27b02a26bdc388fd8f6a802c1f7c4bda04c6f3853cb42260",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/length_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 17306,
+      "sha256": "322ac12a62bb69d9e807e85f8db2d0121f74ea080c3a02ec9e9b7875f31d5ade",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/preflight_length.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 3946,
+      "sha256": "95ec6e42fc1c80b968055fae9ff8d91a1234f5e802bd74f0d88f1591877d3ff7",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/prepare_length.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14902,
+      "sha256": "c15de9496c085be03d5ccad09e16f60619223eb46b1880a19b8c8c894076826c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/recompute_stability.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22155,
+      "sha256": "90b3a89603a5f850b68b968dec07eaccdb51af6201624d7171af698c50447c2b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/run_length.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 18390,
+      "sha256": "c9e977bc7d40a18422cc173f7da9dcb15efca63bc48894a7c455b89e32088b08",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/score_length.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 26197,
+      "sha256": "a1379576e297d6cbdcb999c0fdf971329dfb21f59900d0f07953ec62789f98ab",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/stage01_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22133,
+      "sha256": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/test_length_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 10301,
+      "sha256": "0cb5380d29d28378160604b724cf06da10c7f5d55dbee1b6ff66d77e9169212e",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/test_length_diagnostics.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15202,
+      "sha256": "ca4e9e17d805cd7ecec5a85af04ba6fbb739033af124f17416756078473f4e75",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code/test_length_score.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 16672,
+      "sha256": "eaad133cdaa26b17e547e5a71a8be43cc30587ec842e53e3be8edc21a9c6578b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1477,
+      "sha256": "a827b3c6f72d44bcbb72c9b27c7caaf51adbf33e201105ffcb1056e307c0e45c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 740,
+      "sha256": "009655b8afdbfa574c65aaaf921a23fa2bd21348dc37c80a2bc0424f7e5e184c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-length-v1-20260922T092924Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 4015,
+      "sha256": "18a7e4974eb2bc54fff0a86bbb5ab056d0dd48fd65fada751eadf4232d96ba67",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/freeze_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 9614,
+      "sha256": "b4ffed4dada27065fde9f6471168ee4fef7fd202db9e7cae1b958adce355edbb",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/preflight_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 3021,
+      "sha256": "d5a63a28b8f9af9844d0cdd25451c30d73bd148f9f1db9ddcd14d77a6bc95874",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/run_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 18187,
+      "sha256": "7aa48c48dae1fb2b73ae30ab6a0a2afa5031b47c26f84f9e02e7e09d7294397b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/source_reference/fuzzy_metric.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/stage01_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14751,
+      "sha256": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/stage01_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 19195,
+      "sha256": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22133,
+      "sha256": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/stage2_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21524,
+      "sha256": "0789e037db578982e89d409ecd8a234824630de76977898b577bfee9cfb07a5e",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/test_scoring.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15850,
+      "sha256": "3ca635af54a6de9dfa50f3bbfe4cc05c0a8b25b91c872ec491a72fa622a8c3ad",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code/test_stage2_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 14843,
+      "sha256": "8ef1ad1ab4f5ab7cbac6ba30ad3b978585fa6b5360ede320d135523b2b75f81c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1302,
+      "sha256": "9a98ad4ece8ac681a12567f2b3dad2a12b482afca94c257b2d2cb503758c7776",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 947,
+      "sha256": "847b07baba5cdd8b3c40a7f09dab43a75ef3c7b35c10bfa3c9c06f1e5124bce5",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/dkl-stage2-v1-20260922T080157Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 8175,
+      "sha256": "cea701e4aaa64974b8d80053ddfb3cd8af421ff86dda38014284b02d0c67aee0",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/audit_block.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21900,
+      "sha256": "e64818628fe34563a87597bddad55a57f7b074337cec07233eb0c432a363b3e6",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/block_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 28220,
+      "sha256": "f54f34aa9aa56f812cf9b5681083ed69058421f8c347ee103224ed3f53b3944a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/block_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 22652,
+      "sha256": "585f79998cf0092b6470d4e60330405415c5f1926f8e21b3e18e2d0f4071df13",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/preflight_block.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21496,
+      "sha256": "26af7e80bfc23a35247242cefb637183b55d36eca94ed5bc5750d598650e916c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/prepare_block_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1306,
+      "sha256": "d2195ed04f7e4587de56d5138d77fd78ebb83bdc6d7d4a3cdc5e6bfd692e2082",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/prepare_block_source.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 8663,
+      "sha256": "cb1cdb33eb046bcb27cd59033e043d414b95decab53dcd52eea65f6c24bbaa3f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/readout_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 21044,
+      "sha256": "7f57e05b67ef67e15a7c7a2684393c0478ed6d64eb9496b3fb2a2887025d66cc",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/run_block.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 13129,
+      "sha256": "87b06599e73ea9a666833261ff6ffc1c49ef49dfccb6e1758c28773b476f834c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/score_block.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 32745,
+      "sha256": "6107b6a98f6207c2e77803f5b8fd44d29e0120acc1a125f37e5c41d5799e874f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/score_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 38005,
+      "sha256": "89225f803f1b50e568c197c9d2c706f2bbbbe73864ac7df424cd5f50a3d5c88c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1444,
+      "sha256": "802afbd71844fc01b0c560cf076f8fea03086153e4fcea230fd9c30911a93d18",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 23353,
+      "sha256": "76ab9a6cc02b201c1c34e6e065272c93a8dd5e5a07429b57838a66ac35b9c4ee",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/launcher.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 134,
+      "sha256": "ec94f551793a5210557f13e4998f3e76e45e29a62158b193e71a6522d0af2d21",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-distance-v1-20260924T125944Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 6350,
+      "sha256": "1bebddd06d35d0acfeb09369b365626649d5960ede08b1ae3d95c2321696b5f3",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/audit_optcheck.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 29944,
+      "sha256": "d9819efd34534000f95123c6a65084bda8f3bd5830991722e635ca29e660dbfa",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/nested_core.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 34184,
+      "sha256": "b974db39f32c001c970ba3d5dfcb1eb0cf7fee6436108c6a7ed142ad1230b865",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/optcheck_data.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 18566,
+      "sha256": "7610f19ceee83092186743a7b513256a46da9a60244cd451f9d684c7a2630331",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/preflight_nested.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 15694,
+      "sha256": "e2a9b02a3dd7a94e5acd2ea8ce23fe68abccae61bc08b9cad1c9bd7b9fccde80",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/prepare_optcheck_source.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 20944,
+      "sha256": "7b1321966a5cc70c1173938ad05be7ce28d9aa575366e76c2b2e5ace401d508a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/run_optcheck.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 18127,
+      "sha256": "c07e55c95876d69a0b21ac87332595bd5d65314186605191cfceabda1e7ad8eb",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/score_oof.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 38005,
+      "sha256": "89225f803f1b50e568c197c9d2c706f2bbbbe73864ac7df424cd5f50a3d5c88c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/score_optcheck.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 44122,
+      "sha256": "014fee80a6a2023e5dec532a84013602092dec9d1bc7ec008608232ea003f8fb",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code/score_stage2.py",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 33474,
+      "sha256": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/code_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 1255,
+      "sha256": "81f70d88b5df2b67c9f303ab466598656e26c0bfafc5bac4821f8af0e7e92280",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/frozen_manifest.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 37585,
+      "sha256": "94365991d6a1991a1ce2da8bcf8afd38c975d79fe6945c037803b2f3feb0251a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "artifacts/gp-block-optcheck-v1-20260927T062149Z/protocol.json",
+      "source_category": "historical_snapshot",
+      "source_reference": "server artifact/worktree snapshot; exact file copy",
+      "size_bytes": 12963,
+      "sha256": "6158723e190bdd5c940c12dca99aa3408b1aa1d8c4705d506b56e2b02b051f13",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "bo_phase4.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 272813,
+      "sha256": "3fd80c3e49e7f56311930c8451419d97d5676e40dbe53ed995de81601ac0a458",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "dataset_utils.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 31865,
+      "sha256": "8c47efed0521241cd067d4cf5a6e0283f905f1921db4066f5531d707c20648fa",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "deterministic_runtime.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 7135,
+      "sha256": "41c3be4824cee9d4e1e9eee4afb58db8b61e69726dfeda0f44146adaf613ac24",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "docs/review/dkl-sync-20260929T170121+0800/CODE_MAP.md",
+      "source_category": "new_review_document",
+      "source_reference": "generated for this review branch",
+      "size_bytes": 8840,
+      "sha256": "428c3395bb4d68a29dedc490039e6010712081a9de54835e384f00d90485e121",
+      "source_identical": null,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "docs/review/dkl-sync-20260929T170121+0800/ENVIRONMENT_AND_GAPS.md",
+      "source_category": "new_review_document",
+      "source_reference": "generated for this review branch",
+      "size_bytes": 3153,
+      "sha256": "e3fa00d58c98936a15e63a57c13af3ecbb7455b4afa1be84b22f833a7d0e2357",
+      "source_identical": null,
+      "redaction_category": "full environment export and private absolute paths omitted",
+      "reproduction_impact": "exact environment recreation requires authorized server access"
+    },
+    {
+      "path": "docs/review/dkl-sync-20260929T170121+0800/EXPERIMENT_INDEX.csv",
+      "source_category": "new_review_document",
+      "source_reference": "generated for this review branch",
+      "size_bytes": 6331,
+      "sha256": "f1b7946dc3161c232a2dd04e6692fd692a25fa83d9959e4bd98fc3e32d219ddb",
+      "source_identical": null,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "docs/review/dkl-sync-20260929T170121+0800/README.md",
+      "source_category": "new_review_document",
+      "source_reference": "generated for this review branch",
+      "size_bytes": 4971,
+      "sha256": "1c9a6e6691a57350bba3f7357cde44626902935acf1497646dbaf82ca7a8a795",
+      "source_identical": null,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "eval_utils.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 50015,
+      "sha256": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "evaluation_errors.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 1492,
+      "sha256": "40c42b17454c6cc15e305cfb7f48f6bcd35624e6e29472d2cdd034c08c905936",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "final_eval.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 70002,
+      "sha256": "090d192eca2e5c72412bb6193e1765d3d0896b4e29c572ab0c26d271d5491b0d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "hp_modes.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 7630,
+      "sha256": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "initialization_gmm_schur.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 21503,
+      "sha256": "e914da86178a53457636d237f3237e851470f8d3684da6ce3810b54490b769ce",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "initialization_wgmm_ted.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 42935,
+      "sha256": "4c9a56fb97cb657565859aca23582f27993a45cf8b72121683ea73a1cf338088",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "layernorm_search_space.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 7733,
+      "sha256": "f88645d177b291591c513288f04315b96700dc2932266bd5c36bc826283f674f",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "nas_space.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 14219,
+      "sha256": "386514dac7bbffabea45bd8a2663bf6da8b740b3fd55eef361aa2ae14350727b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "run_provenance.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 16700,
+      "sha256": "83f09b27b68453ccb7f93d63aa630d41dcc4aa745b7372530ec7b0b13f9b5015",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 50338,
+      "sha256": "ca2f8df525c9210aaad6a9ac56a4030886ce33dbea2e6fd99132bad8698f492c",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/checkpoint_io.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 1641,
+      "sha256": "0bc8883d03900660b29f5f82acf2e0637a090fc7226626d55164d6892798bd30",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/dkl_accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 29897,
+      "sha256": "0e30cf31688281645d081bc0e836305d2260f04c101f1205e7ebecbc5a864444",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/evaluate_accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 2467,
+      "sha256": "73597f55c8bcad45419d7dc8b2da30e8516cdcbd39fb11914d2aa837aac3f0fe",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/fuzzy_metric.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 7807,
+      "sha256": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/history_dataset.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 10152,
+      "sha256": "d49a69b800d87fa44246a270f90e33246cca9240b1651a203e2da8bdffdb69b9",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/metrics.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 28352,
+      "sha256": "06e4420af2e3cc33af7e793a5e376b38c5565a17a0f901451401902bdd877319",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "surrogate/train_accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 5987,
+      "sha256": "5da56dca676662f7d2abc1816b89e0c0437211d48c34991ec0c510ac572b450d",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "tests/test_accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 5081,
+      "sha256": "1657f5ed112c0b5c35d88f503c4ad98acc957310da5bd53aee67a33d03ba676b",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "tests/test_dkl_accuracy_gp.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 13450,
+      "sha256": "ca9775a3a007bbafdfd2de507b6ae9369b69339c3df58516bcdb4e3b0ba5a68a",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "tests/test_dkl_uncertainty_diagnostics.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 11386,
+      "sha256": "42a43c4aa5d9c56b02a4e45a55f35c30f0461053729ad2ef493d72016cdd6cd2",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "tests/test_exact_vs_dkl_prequential.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 7824,
+      "sha256": "7ce455893b935d3e8c9c98fd6b1bbedc37aefb70c61999a4062861dc660ef679",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    },
+    {
+      "path": "weighted_diag_gmm_init.py",
+      "source_category": "current_workspace",
+      "source_reference": "~/D-VAE current workspace; exact file copy or byte-identical baseline file",
+      "size_bytes": 24213,
+      "sha256": "8d326d7e398b7a8d8c255ec9b8eb9b802d9e71f5116bbd663be3059b1f2049f9",
+      "source_identical": true,
+      "redaction_category": null,
+      "reproduction_impact": null
+    }
+  ]
+}

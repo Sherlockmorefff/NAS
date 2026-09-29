@@ -1,0 +1,253 @@
+{
+  "run_id": "gp-block-distance-v1-20260924T125944Z",
+  "version": "block-distance-v1",
+  "frozen_at_utc": "2026-09-24T13:12:06.222736+00:00",
+  "normative_prompt": "PROMPT.md",
+  "normative_prompt_sha256": "4ee175b9dad1eb68bdf0f29caa98c8d4f287ca94c6d6580eb195a59f78765225",
+  "parent_run_id": "dkl-oof-calibration-v1-20260924T095621Z",
+  "parent_package_sha256": "30b14b5e1a179fbaf253708add07f8a7b8187b36b4224467372bab889fdd8d4d",
+  "methods": [
+    "RAW16_ISO",
+    "HP4_ISO",
+    "RAW16_BLOCK2"
+  ],
+  "budget": {
+    "model_seconds": 600,
+    "synthetic_optimizer_calls_limit_all_attempts": 300,
+    "carryover_seconds": 0,
+    "timing": {
+      "n_train": 50,
+      "n_query": 38,
+      "warmup_steps": 5,
+      "segments": 3,
+      "steps_per_segment": 20,
+      "estimator": "max segment mean",
+      "total_timing_optimizer_calls": 195
+    },
+    "formula": "used + 1.5*(18000*(t_A+t_B+t_C)+setup_est) + max(20,2*diagnostic_est)",
+    "automatic_resume": false
+  },
+  "steps": {
+    "INIT_GP": 300,
+    "FIT_GP": 1500
+  },
+  "matrix": {
+    "subsets": 10,
+    "real_fits": 30,
+    "formal_updates": 54000,
+    "INIT_GP_updates": 9000,
+    "FIT_GP_updates": 45000,
+    "updates_per_method": 18000,
+    "new_endpoints": 30,
+    "new_candidate_rows": 1074,
+    "historical_references": 90,
+    "raw_scoring_units": 120,
+    "head_masks": 30,
+    "saved_states": 90,
+    "unique_diagnostics": 240
+  },
+  "input": {
+    "A_C": "T-standardized original frozen z12 plus transformed actual HP4",
+    "B": "exact same last4 columns",
+    "x_floor": 1e-06,
+    "y_floor": 1e-08,
+    "std_correction": 0,
+    "known_noise": "SE_T^2/y_scale_T^2; mean SE already incorporates 3 seeds",
+    "query_allowed_keys": [
+      "ids",
+      "architectures",
+      "x_raw"
+    ],
+    "model_seed": null,
+    "execution_rng_seed": 0
+  },
+  "models": {
+    "kernel": "constant-mean Exact Matern nu=2.5",
+    "A": "one lengthscale all16",
+    "B": "one lengthscale last4",
+    "C": "two raw scalar lengths for z12 and HP4; one fixed unit Matern, no third trainable scale",
+    "initial": {
+      "mean": 0,
+      "lengthscale": 1,
+      "output_variance": 1,
+      "extra_noise_variance": 0.01
+    },
+    "trainable_scalars": {
+      "RAW16_ISO": 4,
+      "HP4_ISO": 4,
+      "RAW16_BLOCK2": 5
+    },
+    "block_dimension_normalization": false
+  },
+  "numerics": {
+    "device": "cpu",
+    "dtype": "float64",
+    "threads": 1,
+    "deterministic": true,
+    "jitter": 1e-08,
+    "cholesky_max_tries": 1,
+    "max_cholesky_size": 10000,
+    "min_fixed_noise": 0,
+    "fast_pred_var": false,
+    "length_lower": 0.0001,
+    "output_lower": 1e-08,
+    "extra_noise_lower": 1e-06,
+    "latent_roundoff_lower": -1e-08
+  },
+  "optimizer": {
+    "type": "Adam",
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "global_clip": 5,
+    "INIT_GP_lr": [
+      [
+        1,
+        240,
+        0.01
+      ],
+      [
+        241,
+        300,
+        0.001
+      ]
+    ],
+    "FIT_GP_lr": [
+      [
+        1,
+        1000,
+        0.01
+      ],
+      [
+        1001,
+        1500,
+        0.001
+      ]
+    ],
+    "stage_boundary": "own GP parameters inherited; fresh empty Adam",
+    "objective": "negative ExactMarginalLogLikelihood normalized once by n50"
+  },
+  "diagnostics": {
+    "INIT_GP": [
+      0,
+      240,
+      300
+    ],
+    "FIT_GP": [
+      0,
+      1000,
+      1200,
+      1300,
+      1400,
+      1500
+    ],
+    "FIT_0_alias_INIT_300": true,
+    "unique_per_fit": 8,
+    "states_total_steps": [
+      0,
+      300,
+      1800
+    ],
+    "stability_windows": [
+      [
+        1200,
+        1300
+      ],
+      [
+        1300,
+        1400
+      ],
+      [
+        1400,
+        1500
+      ]
+    ],
+    "thresholds": {
+      "relative_nll": 0.0001,
+      "max_mean_raw": 0.001,
+      "max_latent_sd_raw": 0.001,
+      "relative_TT_kernel_frobenius": 0.01
+    },
+    "expanded_model_ambiguity_nll_per_observation": 1e-06,
+    "distance_pairs_per_T": 1225,
+    "zero_distance_share": null
+  },
+  "prediction": {
+    "full_covariance": true,
+    "unclamped_latent_diagonal": true,
+    "variance": "y_scale^2*(max(latent_diagonal_std,0)+extra_variance_std)",
+    "no_query_SE_before_seal": true
+  },
+  "scoring": {
+    "aggregation": "historical 3 model seeds per subset; then 2 samples per fold; then 5 folds equally",
+    "head_masks": "3 oldHEAD individual topceil20 percent IDlex; newmethod metric eachmask thenaverage",
+    "regions": [
+      "all_Q",
+      "HEAD_pred20",
+      "true_top20",
+      "true_bottom20",
+      "champions"
+    ],
+    "TOL_PP": 1e-09,
+    "z": {
+      "50": 0.6744897501960817,
+      "80": 1.2815515655446004,
+      "90": 1.6448536269514722,
+      "95": 1.959963984540054
+    },
+    "probability": "v_observed=v_model+Q_SE^2 exactly once",
+    "flags": {
+      "BLOCK_SCALE_SELECTION_SIGNAL": {
+        "regret_improvement_min_pp": 0.2,
+        "positive_folds_min": 4,
+        "both_samples_positive": true,
+        "gain_improvement_min_pp": -0.02
+      },
+      "HISTORICAL_SELECTION_RETAINED": {
+        "baselines": [
+          "HEAD",
+          "H_TREND"
+        ],
+        "regret_increase_max_pp": 0.1,
+        "gain_fall_max_pp": 0.02
+      },
+      "ARCHITECTURE_INCREMENT_SIGNAL": "same selection rule for C versus B",
+      "PROBABILITY_NO_LARGE_DEGRADATION_C_VS_A": {
+        "nlpd_increase_max_nat": 0.1,
+        "IS90_increase_max_pp": 1,
+        "total_90cov_fall_max": 0.05,
+        "champion_90cov_fall_max": 0.05
+      },
+      "OPTIMIZATION_READY": {
+        "RAW16_ISO_stable_min": 8,
+        "RAW16_BLOCK2_stable_min": 8
+      },
+      "BLOCK_DISTANCE_CANDIDATE_FOR_PROTOCOL_REVIEW": "BLOCK_SCALE_SELECTION_SIGNAL and HISTORICAL_SELECTION_RETAINED and OPTIMIZATION_READY"
+    }
+  },
+  "failure": {
+    "source": "BLOCKED_SOURCE_MISMATCH",
+    "budget": "STOPPED_BUDGET_PARTIAL",
+    "formal": "FAILED_FORMAL",
+    "unknown_tail": "INTERRUPTED_UNVERIFIED"
+  },
+  "interpretation": "Developmental A evidence only, no independent confirmation, no DKL_PASS, no BO authorization",
+  "not_authorized": [
+    "B/test",
+    "GNN/VAE calls",
+    "neural mapping",
+    "TREND or SEMI new fits",
+    "OOF",
+    "tau calibration",
+    "ARD16",
+    "sum/product kernels",
+    "extra priors",
+    "checkpoint choice",
+    "restarts",
+    "search",
+    "automatic next stage"
+  ]
+}

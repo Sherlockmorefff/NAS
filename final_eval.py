@@ -54,6 +54,12 @@ from eval_utils import (  # noqa: E402
     train_and_eval_arch,
 )
 from hp_modes import validate_hp_mode  # noqa: E402
+from layernorm_search_space import (  # noqa: E402
+    NORMALIZATION_LAYER_NORM,
+    base_candidate_fingerprint,
+    full_candidate_fingerprint,
+    normalization_name,
+)
 from surrogate.checkpoint_io import atomic_json_dump  # noqa: E402
 
 
@@ -67,6 +73,7 @@ FINAL_EVALUATION_SEED_SCHEME = (
     "final_base_candidate_fingerprint_replicate_v1"
 )
 LEGACY_SEQUENTIAL_SEED_SCHEME = "legacy_seed_start_plus_index"
+COMMON_CONFIRMATION_SEED_SCHEME = "common_confirmation_seed_manifest_v1"
 PROGRESS_FORMAT_VERSION = 1
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -92,6 +99,7 @@ SIGNATURE_FIELDS = (
     "gat_heads_by_layer",
     "sage_aggr_by_layer",
     "gin_eps_by_layer",
+    "normalization",
 )
 IDENTITY_FIELDS = (
     "dataset",
@@ -127,6 +135,7 @@ ARCHITECTURE_HP_FIELDS = (
     "gcnii_alpha",
     "gcnii_theta",
     "hp_mode",
+    "normalization",
 )
 PER_REPLICATE_FIELDS = (
     *IDENTITY_FIELDS,
@@ -249,6 +258,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument("--final_base_seed", type=int)
     parser.add_argument("--n_replicates", type=int, default=10)
+    parser.add_argument(
+        "--common_seed_manifest",
+        default=None,
+        help="JSON object with one shared integer seeds list for matched confirmation",
+    )
     parser.add_argument("--method_label", type=str)
     parser.add_argument(
         "--protocol-id",
@@ -652,7 +666,22 @@ def validate_formal_history(
                 "candidate_fingerprint; a lowercase SHA-256 hex string is required"
             )
         if record.get("z_search") is not None:
-            recomputed = _existing_candidate_fingerprint(record["z_search"])
+            if record.get("normalization_space", "legacy") == "legacy":
+                recomputed = _existing_candidate_fingerprint(record["z_search"])
+            else:
+                base_vector = record.get("z_base")
+                if base_vector is None:
+                    raise ValueError(
+                        f"history record {index} is missing z_base for normalization search"
+                    )
+                recomputed_base = base_candidate_fingerprint(base_vector)
+                if record.get("base_candidate_fingerprint") != recomputed_base:
+                    raise ValueError(
+                        f"history record {index} base_candidate_fingerprint mismatch"
+                    )
+                recomputed = full_candidate_fingerprint(
+                    recomputed_base, record.get("normalization")
+                )
             if fingerprint != recomputed:
                 raise ValueError(
                     f"history record {index} candidate_fingerprint does not match "
@@ -895,9 +924,22 @@ def _replicate_count(args: argparse.Namespace) -> int:
     return int(args.n_replicates if _is_formal(args) else args.n_seeds)
 
 
+def _final_seed_scheme(args: argparse.Namespace) -> str:
+    if getattr(args, "common_confirmation_seeds", None) is not None:
+        return COMMON_CONFIRMATION_SEED_SCHEME
+    return (
+        FINAL_EVALUATION_SEED_SCHEME
+        if _is_formal(args)
+        else LEGACY_SEQUENTIAL_SEED_SCHEME
+    )
+
+
 def _seed_for_replicate(
     args: argparse.Namespace, candidate: dict[str, Any], replicate_id: int
 ) -> int:
+    common = getattr(args, "common_confirmation_seeds", None)
+    if common is not None:
+        return int(common[int(replicate_id)])
     if _is_formal(args):
         return final_evaluation_seed(
             args.final_base_seed,
@@ -943,9 +985,7 @@ def _common_result_fields(
         "candidate_fingerprint": candidate.get("candidate_fingerprint"),
         "final_base_seed": getattr(args, "final_base_seed", None) if formal else None,
         "final_evaluation_seed_scheme": (
-            FINAL_EVALUATION_SEED_SCHEME
-            if formal
-            else LEGACY_SEQUENTIAL_SEED_SCHEME
+            _final_seed_scheme(args)
         ),
         "operations": list(candidate["operations"]),
         "edges": [list(edge) for edge in candidate["edges"]],
@@ -962,6 +1002,9 @@ def _common_result_fields(
         "gcnii_alpha": float(args.gcnii_alpha),
         "gcnii_theta": float(args.gcnii_theta),
         "hp_mode": getattr(args, "hp_mode", None),
+        "normalization": normalization_name(
+            candidate.get("normalization", "none")
+        ),
         "deterministic_provenance": getattr(
             args, "deterministic_provenance", None
         ),
@@ -1068,6 +1111,12 @@ def evaluate_candidate(
                 track_test=True,
                 return_metadata=True,
                 return_reproducibility_metadata=True,
+                component_variant=(
+                    "layer_norm"
+                    if normalization_name(candidate.get("normalization", "none"))
+                    == NORMALIZATION_LAYER_NORM
+                    else "baseline"
+                ),
             )
             val_acc, is_valid, test_acc, metadata = _unpack_training_result(result)
         except InfrastructureEvaluationError as exc:
@@ -1252,6 +1301,22 @@ def _validate_args(args: argparse.Namespace) -> None:
         if int(getattr(args, name)) <= 0:
             raise ValueError(f"--{name} must be positive")
     args.hp_mode = validate_hp_mode(args.hp_mode)
+    args.common_confirmation_seeds = None
+    if args.common_seed_manifest is not None:
+        with open(args.common_seed_manifest, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("seeds"), list):
+            raise ValueError("common seed manifest must contain a seeds list")
+        seeds = manifest["seeds"]
+        if (
+            len(seeds) != int(args.n_replicates)
+            or len(set(seeds)) != len(seeds)
+            or any(isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds)
+        ):
+            raise ValueError(
+                "common seed manifest must contain n_replicates unique integer seeds"
+            )
+        args.common_confirmation_seeds = [int(seed) for seed in seeds]
     if _is_formal(args):
         if args.final_base_seed is None:
             raise ValueError(
@@ -1303,7 +1368,18 @@ def _formal_config(
         "metric": _final_dataset_context(args)["metric"],
         "deduplicate": bool(args.deduplicate),
         "sort_by": args.sort_by,
-        "seed_scheme": FINAL_EVALUATION_SEED_SCHEME,
+        "common_seed_manifest": (
+            None
+            if args.common_seed_manifest is None
+            else os.path.abspath(args.common_seed_manifest)
+        ),
+        "common_seed_manifest_sha256": (
+            None
+            if args.common_seed_manifest is None
+            else sha256_file(args.common_seed_manifest)
+        ),
+        "confirmation_seeds": getattr(args, "common_confirmation_seeds", None),
+        "seed_scheme": _final_seed_scheme(args),
         "gcnii_alpha": float(args.gcnii_alpha),
         "gcnii_theta": float(args.gcnii_theta),
     }
@@ -1400,7 +1476,7 @@ def _validate_resume_records(
         if (
             int(row.get("final_eval_seed", -1)) != expected_seed
             or row.get("final_evaluation_seed_scheme")
-            != FINAL_EVALUATION_SEED_SCHEME
+            != _final_seed_scheme(args)
             or mismatched_fields
         ):
             details = (
@@ -1510,9 +1586,7 @@ def run_final_evaluation(
                 replicate_id,
                 _seed_for_replicate(args, candidate, replicate_id),
                 (
-                    FINAL_EVALUATION_SEED_SCHEME
-                    if formal
-                    else LEGACY_SEQUENTIAL_SEED_SCHEME
+                    _final_seed_scheme(args)
                 ),
             )
 
@@ -1562,11 +1636,7 @@ def run_final_evaluation(
             "top_k": args.top_k,
             "n_replicates": _replicate_count(args),
             "final_base_seed": getattr(args, "final_base_seed", None),
-            "final_evaluation_seed_scheme": (
-                FINAL_EVALUATION_SEED_SCHEME
-                if formal
-                else LEGACY_SEQUENTIAL_SEED_SCHEME
-            ),
+            "final_evaluation_seed_scheme": _final_seed_scheme(args),
             "selected_manifest": selected_path,
             "seed_manifest": seed_manifest_path,
             "dataset_context": _final_dataset_context(args),
@@ -1603,7 +1673,7 @@ def run_final_evaluation(
         device,
         args.hp_mode,
         _replicate_count(args),
-        FINAL_EVALUATION_SEED_SCHEME if formal else LEGACY_SEQUENTIAL_SEED_SCHEME,
+        _final_seed_scheme(args),
     )
     try:
         if bool(getattr(args, "_legacy_history_dataset_context", False)):
@@ -1732,11 +1802,7 @@ def run_final_evaluation(
         "sort_by": args.sort_by,
         "n_replicates": _replicate_count(args),
         "final_base_seed": getattr(args, "final_base_seed", None),
-        "final_evaluation_seed_scheme": (
-            FINAL_EVALUATION_SEED_SCHEME
-            if formal
-            else LEGACY_SEQUENTIAL_SEED_SCHEME
-        ),
+        "final_evaluation_seed_scheme": _final_seed_scheme(args),
         "eval_epochs": args.eval_epochs,
         "patience": args.patience,
         "selected_by_final_validation": _short_result(selected_by_validation),

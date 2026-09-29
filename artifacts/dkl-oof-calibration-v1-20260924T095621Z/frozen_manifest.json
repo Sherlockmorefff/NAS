@@ -1,0 +1,28 @@
+{
+  "files": {
+    "protocol.json": "e8a44625aef6f32a2d7b5cbece3501042b144cde9aeed03db615b20994f34155",
+    "source_manifest.json": "e5ac891f09183d06e286d5692092f39940c02f39e068071b7af814e5e09251bd",
+    "code_manifest.json": "3e4f1868d776da9533cc508f4653bcc9bd045e7e1d7a2c95810dcc604107600b",
+    "worklist.json": "fee6669b4fd8cad263e6f5c49a116c09013db4132196a8740ef2dc70a8ec297d",
+    "inner_splits_manifest.json": "708326af297a50a5c4ffd40971f069bb91acf9a0f5e97ba26af462989be9ceb0",
+    "admission.json": "b2aa654c44a13177f15ec1fd2f4da9caf0ad067ef6e5c7b96a93ffb4e02625ac",
+    "environment.json": "f37f7493f1c0d2afe8b9da9943387cc94bf7bb422957e8dda1b5ede3da7be191",
+    "PROMPT.md": "3745ad2138ec64d7087b8b6c0ee3f953069bdc41a797b8ac7cf1af749428ce8a",
+    "verification/preflight.json": "70623123e01d5a9ae70c95acb26a84b2db16328465783009cd005e72d2f0c994",
+    "verification/data_checks.json": "976991b1b6a363eb245f2eddd37a9cde2c1ac6be445021c16317835253f45a59",
+    "verification/calibration_checks.json": "0694dadd0055577c4a5260ded715b6fef61331ffae1fccc555f8bde488e08abb",
+    "verification/scoring_checks.json": "ffa9219030f2da9854bb7c03edb7ed81792f5666315295c6e554195a8badc893",
+    "inner_splits/s20260922_f0_n50.json": "90d79aeb0bb7fe645e45af82ff4865ea7291125861e199d6c0b0007adbb37b4e",
+    "inner_splits/s20260922_f1_n50.json": "893ff8fa9b339d5dcb186389b2f3318cd529207ef33d6dd59b6721471b23a3e1",
+    "inner_splits/s20260922_f2_n50.json": "e8adba1ab2211bc56c6785ae92d614d75431fda23969aa2824ff62ca729b198a",
+    "inner_splits/s20260922_f3_n50.json": "7a704a3676565241f47afdcf64529a9ed93c0d2acbd2754d7269b6128cbbc1ab",
+    "inner_splits/s20260922_f4_n50.json": "8da1bb5ce9d9471b5433e1be0bd7b5361f8a4d0b7fc5fa0c21d7a03038bfa8e9",
+    "inner_splits/s20260923_f0_n50.json": "6171f093a53aad31277a70268b15359af1bc096832b6bbc359ce094310d8452e",
+    "inner_splits/s20260923_f1_n50.json": "edf859dc83b73d85ef5943a43f65f1282213097313ba11000bb34507fdcdb623",
+    "inner_splits/s20260923_f2_n50.json": "9edf541f27cf74643e623621eb34aa1b495265dae9b0526ba562e48a8f2bf7e0",
+    "inner_splits/s20260923_f3_n50.json": "f4e595e4656aeda6a5fa5eae203bd7d2a38fc42352fc7214264fc392e29f49d2",
+    "inner_splits/s20260923_f4_n50.json": "c4930a2facee1de381d101e6e497420bf79710bde2520d3ace8a8de998c7a097"
+  },
+  "frozen_at_utc": "2026-09-24T10:15:45.088885+00:00",
+  "no_resume": true
+}

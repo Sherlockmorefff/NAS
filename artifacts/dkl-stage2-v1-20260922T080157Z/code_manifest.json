@@ -1,0 +1,18 @@
+{
+  "files": {
+    "code/freeze_stage2.py": "b4ffed4dada27065fde9f6471168ee4fef7fd202db9e7cae1b958adce355edbb",
+    "code/preflight_stage2.py": "d5a63a28b8f9af9844d0cdd25451c30d73bd148f9f1db9ddcd14d77a6bc95874",
+    "code/run_stage2.py": "7aa48c48dae1fb2b73ae30ab6a0a2afa5031b47c26f84f9e02e7e09d7294397b",
+    "code/score_stage2.py": "dfc096bf2a1ae49ab69d20401052b8c764cc66a0703023ba5f2461d4784711b2",
+    "code/source_reference/fuzzy_metric.py": "7a49f2488cc16b336fccc2f92e4ee199db9bd4c7d99e99206d01181b677e557d",
+    "code/stage01_core.py": "f99a13a8af3d9fe8942d8167640dffcc62f3f47f5b8d4b60701bc10aea94e991",
+    "code/stage01_data.py": "6ccb567398a0eae6da3462aa84c6d01ad694887c1abc1ded37cdbf482ee9b7f7",
+    "code/stage2_core.py": "482565d32353d7ff5245777face07b2b72ec0ed7529d4225111444677382bf30",
+    "code/stage2_data.py": "0789e037db578982e89d409ecd8a234824630de76977898b577bfee9cfb07a5e",
+    "code/test_scoring.py": "3ca635af54a6de9dfa50f3bbfe4cc05c0a8b25b91c872ec491a72fa622a8c3ad",
+    "code/test_stage2_core.py": "8ef1ad1ab4f5ab7cbac6ba30ad3b978585fa6b5360ede320d135523b2b75f81c"
+  },
+  "source_head": "64a44c14316f11debaf01cf8583426acfe1410e6",
+  "source_branch": "feature/accuracy-bottleneck-diagnostics",
+  "stage01_dependency": "exact source bytes, no phase01 trained weights reused"
+}
