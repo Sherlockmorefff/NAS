@@ -1,0 +1,11 @@
+{
+  "python": "3.10.20 (main, Mar 11 2026, 17:46:40) [GCC 14.3.0]",
+  "executable": "/home/fangxy/.conda/envs/nas/bin/python",
+  "torch": "2.5.1+cu121",
+  "gpytorch": "1.15.2",
+  "numpy": "2.2.6",
+  "platform": "Linux-6.19.8-1.el9.elrepo.x86_64-x86_64-with-glibc2.34",
+  "device": "cpu",
+  "threads": 1,
+  "protocol_sha256": "494dfb5388a75c6b4ef6468e08b2205d4971ec981675812c9941720f83d9c628"
+}
