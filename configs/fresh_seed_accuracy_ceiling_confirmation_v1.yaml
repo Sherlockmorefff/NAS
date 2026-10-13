@@ -1,0 +1,261 @@
+protocol_version: fresh_seed_accuracy_ceiling_confirmation_global4_v1
+study_type: two_stage_fresh_seed_candidate_level_stable_accuracy_confirmation
+dataset: Cora
+hp_mode: global4
+track_test: false
+
+authoritative_sources:
+  A:
+    source_id: B4_GUIDED_SEARCH
+    root: results/posthoc/b4-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: afb4bcf6dcc490ef884203dfa22414bbc1e203178b54f623fdb2ebdf1bf56ee9
+    required_complete_marker: COMPLETE
+    required_classification: B4_SEARCH_NOT_CONFIRMED
+    required_test_accessed: false
+    manifest_sha256: 5ef4d5f7560d0a62ed92bd3e901c80ede3f20755661bb69acc7a6dd5970ee0ab
+    decision_sha256: 955d59f8083e8d834d1e28879ce1c628d6f35869dad107851ffacf918e1e84dd
+    frozen_protocol_sha256: 3117a80e4e81747b05406cee7a9620eee5149fac68c11cffef61f1e5d2500861
+    candidate_manifest_sha256: 5576fe06e93c2357b05ada5932d7914b9d815526adc9ae5db73596b9753d7f58
+    task_manifest_sha256: a194ade67170b03dfc02febea39243a0c836f0b0780664721a32440ea79ba8f4
+    config_statistics_sha256: 1c2200b3bb8b600550020782a395af1e343f717576c0c5d6b70023009c285ea1
+    training_audit_sha256: d6a18fa3f9504e19b1bb75efcc3472774a75e84940d0dcd01faaee7f35f9a692
+    evaluated_config_count: 254
+  B:
+    source_id: M1_M2_METRIC_GUIDED_SEARCH
+    root: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: 49e7b91956c433597f6f5e076ccaf2cf8d110b703388c9c81ad4dd5a8a141597
+    required_complete_marker: COMPLETE
+    required_classification: METRIC_SEARCH_NOT_CONFIRMED
+    required_test_accessed: false
+    manifest_sha256: b9ee3a27459f2944c7c46b9bb7d509dddc1f40b0066fdb01967a08835aa1f2f4
+    decision_sha256: 715522034617f14a4d507f7a3becc60f8cc1ffe977f291815cf3af67376b533a
+    frozen_protocol_sha256: d8c5df4fa810ca7544b1856d99ea87837c6f0fd0ca71ea6a477f53b6f09398ad
+    candidate_manifest_sha256: 721ad4510273a52d89b51fc87f36e18afeb76481a929edd9e8bf9c8e6e23d32d
+    task_manifest_sha256: 3d2e9adfc8e5147ad386be3ac86f26044a6aeafc3b5a0d05f1e75845882bb3e3
+    config_statistics_sha256: f7f4a4a5f2f8623504ad12460e8a5d5d707957fce8715cc0c6dfc9bc578ed671
+    training_audit_sha256: c7dce2507af97b9cf6457ee5da38aa2ee48ff25267045e1e1d231bb503b267d6
+    evaluated_config_count: 364
+  C:
+    source_id: B4_ARCH_DIVERSITY_PROSPECTIVE_SEARCH
+    root: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1
+    archive: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: aaa471d6e97b88c70d7f11b0ded1b3833895f1e24ed5e9489615e2d1296af1be
+    required_complete_marker: COMPLETE
+    required_classification: DIVERSITY_SEARCH_NOT_CONFIRMED
+    required_test_accessed: false
+    manifest_sha256: 8cb6ceea0cc21be85f94aa41b926491525453fd28518b8f5783afd45a19d5dc6
+    decision_sha256: a373d09426ea7665e382a3cb5e5dd7288e9109a7167d62095e7cce2ae60521df
+    frozen_protocol_sha256: 43929721b6bd2bddffd8b2df8cd0c44b407d4c7e919d0cbf3b0d8c385fad0d3b
+    candidate_manifest_sha256: b6c5134aab7444cff610c56225e85323018983a68918e3a5c5bb9b619f928b8c
+    task_manifest_sha256: e393bee0543254e4b2a1731f6df05319f7f88bf7b2cf98a524540a63f00c3b0f
+    config_statistics_sha256: af6c13a928a5cf1436ef997ad922157411af2cdff92cf13b982efff0ade22a20
+    training_audit_sha256: 3457b7a6211fe85677fd1d9969796a101e7e5b1b8ee21b57b38378c028a7972c
+    evaluated_config_count: 503
+
+source_files:
+  config_statistics: evaluation/config_3seed_statistics.csv
+  candidate_manifest: pre_search/candidate_manifest.csv
+  task_manifest: evaluation/task_manifest.json
+  training_audit: evaluation/training_audit.json
+  frozen_protocol: frozen_protocol.json
+  decision: decision.json
+  state: state.json
+  manifest: manifest.json
+
+candidate_universe:
+  membership: exact_joint_configurations_with_complete_real_seed_0_1_2_evaluations_only
+  required_historical_training_seeds: [0, 1, 2]
+  source_config_count: 1121
+  expected_unique_joint_config_count: 1121
+  deduplication_key: joint_fingerprint
+  exclude_historical_P_from_challengers: true
+  predictor_only_candidates: forbidden
+  incomplete_configurations: forbidden
+  predictions_as_labels: forbidden
+  test_results: forbidden
+  historical_score_round_decimals: 12
+  ranking:
+    - historical_score_descending
+    - joint_fingerprint_lexicographic_ascending
+  screen_candidate_count: 6
+  expected_top6_joint_fingerprints:
+    - 1cd14d582a9a13e905bead7e23b8a0846dac3391a0e4a3b480075b97021f7ef1
+    - 07811e7fb8f3c58b70ea651bfa3688d0d4666bdcf8fb862695ea41445ef518fd
+    - 9aeeb39570122b480970c38bc002ab5cbc7badad5b561642de2f8e3bb064d60c
+    - 020b3ba68414773cc9c3b743c9bbf9294eb36308af23604d63d3b26de8245599
+    - 515307ff81a6d08d8a3980c297196396130b3f9a867385fb77085830c1284d68
+    - 97743f62bfcd5816b368d533b0f2f2f443ae76b239b2d36647f4540c19a57d5f
+  top6_identity_comparison: exact_set
+  provenance_role: descriptive_only
+
+historical_P:
+  role: REFERENCE_CONFIGURATION
+  identity_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/authoritative/historical_P_reference.json
+  identity_source_sha256: d00dd5e43065dae6cac95b5b44d25e8d81da80a3f2b4875d876c6a98d6ec0f5d
+  configuration_source: results/search/high-regime-prior-model-blind-validation-global4-v1/frozen_candidate_configs.json
+  configuration_source_sha256: 3f760c890eafb34c5a6df5f096011526f49ef2f31ec2855f656487b19b5d02a1
+  joint_fingerprint: 30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2
+  architecture_fingerprint: 960efb3b97f00491c3956657cfd57958effb6096f65b1db2fa8aaae586b82207
+  hp_fingerprint: 911259943106a1edad300bc5300a3883ece8cbffba48b95e6c61b6e5eb4b679d
+  historical_seed_count: 30
+  historical_validation_mean: 0.8087333333333333
+  historical_validation_sd: 0.007583709097675123
+  historical_validation_ci95: [0.8059015298168731, 0.8115651368497935]
+  historical_statistics_role: descriptive_only
+  formal_comparison_requires_fresh_matched_seed_retraining: true
+
+evaluation_protocol:
+  compatibility_required_across_sources: true
+  frozen_evaluator_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/frozen/high_regime_evaluator.py
+  frozen_evaluator_source_sha256: b3b951993ff69f7a28b068235887443b995f6fa6e0f25ed6c532d086a81a4aab
+  frozen_training_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/frozen/eval_utils.py
+  frozen_training_source_sha256: 0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d
+  dataset_loader_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/dataset_utils.py
+  dataset_loader_source_sha256: 8c47efed0521241cd067d4cf5a6e0283f905f1921db4066f5531d707c20648fa
+  model_builder_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/models.py
+  model_builder_source_sha256: 975c9b20f064a9bda98f99db04946cac89ab84cddf8a584217926b6853dffc7e
+  hp_builder_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/hp_modes.py
+  hp_builder_source_sha256: 9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf
+  architecture_parser_source: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/source_snapshot/declared/frozen/architecture_diagnostics.py
+  architecture_parser_source_sha256: a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f
+  dataset: Cora
+  dataset_content_fingerprint: 373d00c7962dc1ab0cc86974b1542eb76a768d2878013ceee0691b3932d062c7
+  split: public
+  split_fingerprint: bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09
+  graph_transform: NormalizeFeatures
+  training_entry: eval_utils.train_and_eval_arch
+  training_mode: full_batch
+  optimizer: Adam
+  scheduler: CosineAnnealingLR
+  scheduler_T_max: max_epochs
+  scheduler_eta_min_ratio: 0.01
+  max_epochs: 300
+  patience: 80
+  validation_metric: accuracy
+  normalization: none
+  deterministic_seed_semantics: isolated_rng_per_training_seed
+  validation_only_data_view: required_before_evaluator_entry
+  track_test: false
+  maximum_system_retries: 2
+  retry_preserves_exact_config_and_seed: true
+  candidate_replacement_after_failure: forbidden
+  device_policy: frozen_two_GPU_shards
+  shard_to_gpu_uuid:
+    "0": GPU-5496be78-3b71-4978-3960-b6ed926ebe49
+    "1": GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9
+
+fresh_seed_collision_audit:
+  scan_roots:
+    - results/search
+    - results/posthoc
+  exact_pair_key: [joint_fingerprint, training_seed]
+  collisions_allowed: false
+  alter_seed_ranges_on_collision: forbidden
+
+stage1:
+  role: independent_fresh_seed_screening_only
+  candidate_count: 6
+  reference_count: 1
+  evaluated_config_count: 7
+  training_seeds: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014]
+  seed_count: 15
+  planned_GNN_runs: 105
+  matched_reference: historical_P_retrained_on_same_seeds
+  paired_difference: candidate_validation_minus_P_validation
+  ranking:
+    - mean_paired_difference_descending
+    - joint_fingerprint_lexicographic_ascending
+  challengers_advanced: 2
+  final_classification_use: forbidden
+  require_all_runs_successful: true
+
+stage2:
+  role: sole_confirmatory_dataset
+  challenger_count: 2
+  reference_count: 1
+  evaluated_config_count: 3
+  training_seeds: [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029]
+  seed_count: 30
+  planned_GNN_runs: 90
+  matched_reference: historical_P_retrained_on_same_seeds
+  paired_difference: candidate_validation_minus_P_validation
+  stage1_seed_access_for_training_protocol: forbidden
+  historical_seed_0_1_2_gate_use: forbidden
+  stage1_label_gate_use: forbidden
+  historical_P_old30_gate_use: forbidden
+  predictor_score_gate_use: forbidden
+  method_provenance_gate_use: forbidden
+  require_all_runs_successful: true
+
+inference:
+  numerical_tolerance: 1.0e-12
+  paired_bootstrap:
+    replicates: 20000
+    sampling_unit: matched_training_seed
+    master_seed: 0
+    statistic: mean_paired_difference
+    resampling: with_replacement
+  multiplicity_control:
+    method: Bonferroni
+    family_wise_alpha: 0.05
+    comparison_count: 2
+    one_sided_alpha_per_challenger: 0.025
+    lower_bound_percentile: 2.5
+  descriptive_ci95:
+    lower_percentile: 2.5
+    upper_percentile: 97.5
+    final_gate_use: forbidden
+  stable_positive_gain:
+    mean_delta_strictly_greater_than_zero: true
+    bonferroni_lower_bound_strictly_greater_than_zero: true
+  practical_gain:
+    requires_stable_positive_gain: true
+    minimum_mean_delta: 0.003
+  new_stable_best_selection:
+    - qualification_level_practical_before_small_stable
+    - stage2_mean_delta_descending
+    - joint_fingerprint_lexicographic_ascending_within_1e-12_tie
+
+budget:
+  stage1_GNN_runs: 105
+  stage2_GNN_runs: 90
+  total_GNN_runs: 195
+  stage2_may_start_only_after_complete_stage1_and_frozen_selection: true
+  cross_stage_run_reuse: forbidden
+
+method_attribution_boundary:
+  randomized_method_comparison: false
+  candidate_level_accuracy_claim_only: true
+  method_level_superiority_claim: forbidden
+  provenance_may_not_affect_selection_or_classification: true
+
+allowed_classifications:
+  - INPUT_IDENTITY_INVALID
+  - INPUT_PROTOCOL_MISMATCH
+  - CANDIDATE_RECOVERY_FAILED
+  - FRESH_SEED_COLLISION
+  - STAGE1_EVALUATION_INCOMPLETE
+  - STAGE2_EVALUATION_INCOMPLETE
+  - PRACTICAL_ACCURACY_IMPROVEMENT_CONFIRMED
+  - SMALL_STABLE_ACCURACY_GAIN
+  - NO_STABLE_ACCURACY_GAIN
+  - RUN_FAILED
+
+state_stages:
+  - IMPLEMENTATION_READY
+  - INPUTS_VALIDATED
+  - STAGE1_FROZEN
+  - STAGE1_RUNNING
+  - STAGE1_COMPLETE
+  - STAGE2_SELECTION_FROZEN
+  - STAGE2_RUNNING
+  - STAGE2_COMPLETE
+  - ANALYSIS_COMPLETE
+
+output:
+  root: results/posthoc/fresh-seed-accuracy-ceiling-confirmation-global4-v1
+  archive: results/posthoc/fresh-seed-accuracy-ceiling-confirmation-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/fresh-seed-accuracy-ceiling-confirmation-global4-v1.tar.gz.sha256
+  overwrite: forbidden

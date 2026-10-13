@@ -1,0 +1,171 @@
+{
+  "schema_version": "layernorm-collapse-diagnostic-global4-v1",
+  "experiment": "layernorm-collapse-diagnostic-global4-v1",
+  "repository_root": "/home/fangxy/D-VAE",
+  "required_host": "ismc36",
+  "result_root": "results/posthoc/layernorm-collapse-diagnostic-global4-v1",
+  "tmux_name": "layernorm_collapse_diagnostic_v1",
+  "phase_d": {
+    "result_root": "results/posthoc/expanded-model-blind-search-global4-v1",
+    "candidate_source": {
+      "path": "results/posthoc/expanded-model-blind-search-global4-v1/frozen_candidates.json",
+      "sha256": "64681b2ac5fb04a3254ac430e87bfc529e64e695fe524d6385e66cf2e5fa7dab"
+    },
+    "validation_result_source": {
+      "path": "results/posthoc/expanded-model-blind-search-global4-v1/formal/results.json",
+      "sha256": "88e7f9521805a78e1997cf676e73f626261e8d1e1d35e736f2c2865e4bbc0bb0"
+    },
+    "required_complete_paired_config_count": 192,
+    "source_seeds": [0, 1, 2],
+    "control_arm": "Control",
+    "layernorm_arm": "Intervention"
+  },
+  "selection": {
+    "collapse_definition_for_selection": {
+      "control_three_seed_mean_minimum_inclusive": 0.75,
+      "layernorm_each_seed_validation_accuracy_exact": 0.316
+    },
+    "groups": [
+      {
+        "name": "collapse",
+        "sort": ["control_mean_descending", "joint_config_fingerprint_ascending"],
+        "selected": [
+          {"joint_config_fingerprint": "c5228f953800368187c751782dd8aed6550ed27a10a47ab976526bc2b9997251", "control_mean": 0.7973333333333334, "layernorm_mean": 0.316, "delta": -0.48133333333333345},
+          {"joint_config_fingerprint": "71ae4e64946929a92ae1ef61e883959e8d1b375451d9032940a601ca72268809", "control_mean": 0.7706666666666667, "layernorm_mean": 0.316, "delta": -0.4546666666666667},
+          {"joint_config_fingerprint": "3cf27e75be02d68dc278a999f220e5d58945caac536ef83e157051e32023581c", "control_mean": 0.7653333333333334, "layernorm_mean": 0.316, "delta": -0.4493333333333334},
+          {"joint_config_fingerprint": "0e378861b724c6b3c2b6ad4055c15552db93e1c493779a9db34911b78115d10a", "control_mean": 0.7613333333333333, "layernorm_mean": 0.316, "delta": -0.4453333333333333}
+        ]
+      },
+      {
+        "name": "improved",
+        "sort": ["layernorm_minus_control_descending", "joint_config_fingerprint_ascending"],
+        "selected": [
+          {"joint_config_fingerprint": "5cde9d9d5e5fe6a52ccc77783bce0d58d92fb6e37370aa23a2a12c02936f3eaf", "control_mean": 0.318, "layernorm_mean": 0.7893333333333334, "delta": 0.47133333333333344},
+          {"joint_config_fingerprint": "0b5e55b929e8c3479f4f4905736bea1c747c77d849fc011a09521ba06c58ebe0", "control_mean": 0.44733333333333336, "layernorm_mean": 0.754, "delta": 0.30666666666666664},
+          {"joint_config_fingerprint": "1543fad7e3556ee0926aca0300e4f2eaa7c7c3497d89b91e42e5cb881d196827", "control_mean": 0.49533333333333335, "layernorm_mean": 0.7366666666666667, "delta": 0.24133333333333334},
+          {"joint_config_fingerprint": "3cef3ae38d0369e22bce48516c4dac0e08e6ef414d140a5e72ee6cc1fe6526ac", "control_mean": 0.6033333333333334, "layernorm_mean": 0.7993333333333333, "delta": 0.19599999999999995}
+        ]
+      },
+      {
+        "name": "normal_decline",
+        "both_arm_means_minimum_inclusive": 0.70,
+        "sort": ["layernorm_minus_control_ascending", "joint_config_fingerprint_ascending"],
+        "selected": [
+          {"joint_config_fingerprint": "5ffc17b5d01b6c942c626f91ffa1f1b421221c68c7d95b1ae1e5c3f5f4ae1cc6", "control_mean": 0.7933333333333333, "layernorm_mean": 0.7413333333333334, "delta": -0.051999999999999935},
+          {"joint_config_fingerprint": "8b7cc9b6a22d91e6a36ef7aa445569147b94d9b25b4a1b435d771dc61c365ce5", "control_mean": 0.7866666666666667, "layernorm_mean": 0.7360000000000001, "delta": -0.05066666666666664},
+          {"joint_config_fingerprint": "92983b9a894d91040a60ef3fb6fe1844e83c595e77dcfafe9a18b705f84d3081", "control_mean": 0.7879999999999999, "layernorm_mean": 0.7493333333333334, "delta": -0.038666666666666516},
+          {"joint_config_fingerprint": "3997ffea77cec765927245b02a132e4a799fc34b3176ef03e50e62dde70ac790", "control_mean": 0.8000000000000002, "layernorm_mean": 0.7653333333333334, "delta": -0.034666666666666734}
+        ]
+      }
+    ],
+    "selected_config_count": 12,
+    "groups_must_be_disjoint": true,
+    "stop_with_zero_gnn_if_any_group_has_fewer_than_four": true
+  },
+  "seed_freeze": {
+    "scan_start": 2000,
+    "scan_roots": ["results", "logs", "output_results", "artifacts", "packages", "legacy", "legacy_artifacts", "raw"],
+    "algorithm": "ascending_first_35_absent_from_repository_wide_executed_gnn_training_seed_inventory_with_fail_closed_derived_selection_window",
+    "global_inventory": {
+      "builder": "layernorm diagnostic window guard over analyse.final_checkpoint_seed_inventory.build_historical_gnn_seed_inventory",
+      "values": "executed_gnn_training_seeds",
+      "test_value_policy": "lexically skip values below test-named fields before deserialization",
+      "candidate_window_policy": "derive the proof window as 2000 through the provisional 35th unused recognized seed; record every unresolved value in that window and the subset independently recognized as used; only unresolved values that are themselves provisional first-35 candidates block, while all unresolved values remain committed",
+      "run_before_result_root_creation": true
+    },
+    "ledger_sources": [
+      {
+        "phase": "C",
+        "path": "results/posthoc/fixed-layernorm-enhancement-global4-v2-recovery1/formal/task_attempt_ledger.json",
+        "sha256": "18e69165c66ce0b80ffead386f036a4ea28cc0b5ddc653fd7eeba5606e5b8562"
+      },
+      {
+        "phase": "D",
+        "path": "results/posthoc/expanded-model-blind-search-global4-v1/formal/attempt_ledger.json",
+        "sha256": "1e0398285d9d94bdb758f961cd642d476ffddfb50745ed4644cdc931aa617993"
+      }
+    ],
+    "diagnostic_seeds": [2030, 2031, 2032, 2033, 2034],
+    "reserved_confirmation_seeds": [2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2044, 2045, 2046, 2047, 2048, 2049, 2050, 2051, 2052, 2053, 2054, 2055, 2056, 2057, 2058, 2059, 2060, 2061, 2062, 2063, 2064],
+    "commitment_sha256": "c6a823ab525d1c9f15de5bc634df96cb429e2e1b53a36ecbb99a77009ee58d51"
+  },
+  "conditions": [
+    {"id": "no_ln", "label": "No-LN", "component_variant": "baseline", "lr_multiplier": 1.0, "dropout_multiplier": 1.0, "weight_decay_multiplier": 1.0, "stable_recipe_priority": null},
+    {"id": "ln_original", "label": "Original LN", "component_variant": "layer_norm", "lr_multiplier": 1.0, "dropout_multiplier": 1.0, "weight_decay_multiplier": 1.0, "stable_recipe_priority": 0},
+    {"id": "ln_lr_x0_5", "label": "LN lr x0.5", "component_variant": "layer_norm", "lr_multiplier": 0.5, "dropout_multiplier": 1.0, "weight_decay_multiplier": 1.0, "stable_recipe_priority": 1},
+    {"id": "ln_lr_x0_25", "label": "LN lr x0.25", "component_variant": "layer_norm", "lr_multiplier": 0.25, "dropout_multiplier": 1.0, "weight_decay_multiplier": 1.0, "stable_recipe_priority": 2},
+    {"id": "ln_dropout_x0_5", "label": "LN dropout x0.5", "component_variant": "layer_norm", "lr_multiplier": 1.0, "dropout_multiplier": 0.5, "weight_decay_multiplier": 1.0, "stable_recipe_priority": 3},
+    {"id": "ln_weight_decay_x0_1", "label": "LN weight decay x0.1", "component_variant": "layer_norm", "lr_multiplier": 1.0, "dropout_multiplier": 1.0, "weight_decay_multiplier": 0.1, "stable_recipe_priority": 4}
+  ],
+  "training": {
+    "dataset": "Cora",
+    "dataset_root": "Cora",
+    "split": "public",
+    "transform": "NormalizeFeatures",
+    "max_epochs": 300,
+    "patience": 80,
+    "track_test": false,
+    "planned_task_count": 360,
+    "config_count": 12,
+    "condition_count": 6,
+    "seed_count": 5,
+    "attempts_per_task": 1,
+    "retry": false,
+    "replacement": false,
+    "adaptive_settings": false
+  },
+  "collapse_definition": {
+    "all_validation_predictions_same_class": true,
+    "best_validation_accuracy_exact": 0.316
+  },
+  "stable_recipe_gate": {
+    "completed_pairs_required": 60,
+    "collapse_count_maximum": 3,
+    "collapse_excess_over_no_ln_maximum": 1,
+    "mean_paired_delta_minimum_inclusive": 0.0,
+    "config_mean_noninferior_count_minimum": 8,
+    "config_count": 12,
+    "seeds_per_config": 5,
+    "pass_classification": "STABLE_LN_RECIPE_SELECTED",
+    "no_pass_classification": "NO_STABLE_LN_RECIPE",
+    "winner_sort": ["mean_paired_delta_descending", "collapse_count_ascending", "stable_recipe_priority_ascending"]
+  },
+  "workers": {
+    "count": 4,
+    "condition_order": "six-order Williams sequence with per-worker rows and paired GPU offsets",
+    "williams_base": [0, 1, 5, 2, 4, 3],
+    "mapping": [
+      {"worker_id": 0, "gpu_index": 0, "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49", "rotation_offset": 0},
+      {"worker_id": 1, "gpu_index": 1, "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9", "rotation_offset": 0},
+      {"worker_id": 2, "gpu_index": 0, "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49", "rotation_offset": 3},
+      {"worker_id": 3, "gpu_index": 1, "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9", "rotation_offset": 3}
+    ],
+    "blocks_per_worker": 15,
+    "tasks_per_worker": 90,
+    "blocks_per_gpu": 30,
+    "tasks_per_gpu": 180,
+    "each_condition_each_execution_position_global": 10,
+    "each_condition_each_execution_position_per_gpu": 5
+  },
+  "dependency_hashes": {
+    "analyse/final_checkpoint_seed_inventory.py": "523dea176a90a06e68418e2624de2b49e126d0a7173b9901958d9a65a14b0c17",
+    "eval_utils.py": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+    "deterministic_runtime.py": "41c3be4824cee9d4e1e9eee4afb58db8b61e69726dfeda0f44146adaf613ac24",
+    "evaluation_errors.py": "40c42b17454c6cc15e305cfb7f48f6bcd35624e6e29472d2cdd034c08c905936",
+    "hp_modes.py": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf"
+  },
+  "source_files": [
+    "analyse/layernorm_collapse_diagnostic_global4_v1.py",
+    "configs/layernorm_collapse_diagnostic_global4_v1.json",
+    "scripts/run_layernorm_collapse_diagnostic_global4_v1.sh",
+    "tests/test_layernorm_collapse_diagnostic_global4_v1.py"
+  ],
+  "lifecycle": {
+    "dry_run_gnn_count": 0,
+    "formal_launch_count": 1,
+    "result_root_must_be_initially_absent": true,
+    "prelaunch_source_snapshot_required": true,
+    "test_accessed": false,
+    "start_follow_on_phase": false
+  }
+}

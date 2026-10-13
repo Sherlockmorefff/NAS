@@ -1,0 +1,106 @@
+protocol_version: performance_metric_quick_gate_global4_v2
+scientific_scope: performance_geometry_and_gp_posterior_mean_only
+dataset: Cora
+hp_mode: global4
+
+data:
+  primary_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  primary_results: phase_b/initial/seed_results_merged.jsonl
+  primary_preregistration: preregistration.json
+  supplement_root: results/posthoc/original-head-confirmatory-attribution-global4-v2
+  supplement_results: phase_b/seed_results_merged.jsonl
+  supplement_preregistration: preregistration.json
+  supplement_only_below_unique_architectures: 80
+  training_seeds: [0, 1, 2]
+  require_track_test_false: true
+  reject_any_result_test_field: true
+
+hp_control:
+  fixed_hp_minimum_unique_architectures: 80
+  ridge_features: [log10_lr, dropout, log2_hidden_dim, log10_l2]
+  ridge_alphas: [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
+  ridge_group_folds: 5
+  ridge_selection_metric: mean_group_fold_mse
+  architecture_aggregation: inverse_variance
+  variance_epsilon: 1.0e-8
+
+split:
+  outer_folds: 5
+  pool_minimum_independent_groups: 5
+  pool_minimum_architectures: 8
+  fallback_group: architecture_fingerprint
+
+metric_encoder:
+  operation_order: [GCNConv, GATConv, SAGEConv, GINConv, GCNII, Identity]
+  node_features: [operation_one_hot, role_one_hot, normalized_topological_depth]
+  directed_gin_layers: 2
+  gin_eps: 0.0
+  gin_train_eps: false
+  gin_mlp: [linear, relu, linear]
+  hidden_dim: 32
+  pooling: [sum, mean]
+  output_mlp_hidden_dim: 32
+  output_dim: 8
+  l2_normalize: true
+  seeds: [0, 1, 2]
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_epochs: 200
+  patience: 20
+  inner_train_fraction: 0.8
+  inner_split: seeded_fingerprint_permutation
+  pair_policy: all_unordered_when_at_most_500
+  smooth_l1_beta: 1.0
+  reliability_clip_quantiles: [0.05, 0.95]
+
+knn:
+  k: 5
+  distance: euclidean
+  weight_epsilon: 1.0e-8
+
+gp:
+  mean: ConstantMean
+  kernel: Matern-5/2
+  ard: true
+  likelihood: fixed_se_squared_plus_learned_noise_floor
+  marginal_likelihood: ExactMarginalLogLikelihood
+  optimizer: Adam
+  learning_rate: 0.05
+  optimization_steps: 20
+  restart_seed: 0
+  learned_noise_floor_initial: 0.0001
+  learned_noise_floor_lower_bound: 1.0e-8
+  cholesky_jitter: 1.0e-6
+  standardize_features_from_outer_train: true
+  standardize_target_from_outer_train: true
+  use_posterior_variance_for_selection: false
+
+metrics:
+  top_fraction: 0.20
+  best_of_batch_size: 4
+  exhaustive_batch_limit: 5000
+  sampled_batch_count: 1000
+  sampled_batch_seed: 0
+  structure_far_train_quantile: 0.50
+  performance_close_train_quantile: 0.20
+  performance_far_train_quantile: 0.80
+
+decision:
+  geometry_median_spearman_strictly_greater_than: 0.25
+  geometry_positive_seed_count: 2
+  geometry_positive_fold_count_per_seed: 4
+  cross_structure_ratio_strictly_less_than: 0.80
+  mae_relative_improvement_at_least: 0.05
+  top20_precision_absolute_improvement_at_least: 0.05
+  best_of_4_regret_relative_improvement_at_least: 0.10
+  gp_better_fold_count_at_least: 4
+  insufficient_below: 40
+  underpowered_below: 80
+
+output:
+  result_root: results/posthoc/performance-metric-quick-gate-global4-v2
+  archive: results/posthoc/performance-metric-quick-gate-global4-v2.tar.gz
+  archive_sha256: results/posthoc/performance-metric-quick-gate-global4-v2.tar.gz.sha256
+  cache_directory: cache
+  long_log: logs/run.log

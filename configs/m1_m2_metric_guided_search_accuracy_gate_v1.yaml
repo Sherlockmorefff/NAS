@@ -1,0 +1,251 @@
+protocol_version: m1_m2_metric_guided_search_accuracy_gate_global4_v1
+scientific_question: >-
+  Under identical model-blind high-regime joint candidate pools and identical
+  real validation budgets, do frozen M1 weighted-kNN or frozen M2 isotropic
+  Matérn-5/2 posterior-mean screening find a higher final-best three-seed
+  validation estimate than model-blind uniform random screening?
+dataset: Cora
+hp_mode: global4
+
+authoritative_inputs:
+  historical_high_regime_v1:
+    result_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+    archive: results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz
+    archive_sha256: 050a64b0cde5bdb17ababa9833e5ee578b448c9b19da31fbb00f0251ec82491c
+    preregistration_sha256: 098240232515aacfb47f8f557765bb3c824faf37d60b8ae680f6e1b2cf2c7260
+    source_dependency_manifest_sha256: 4c836f903d1bea346bcd0139d7c1e367e52b8b99d8549dbf33b13db09cb9f115
+    historical_seed_shards:
+      phase_b/initial/gpu0/seed_results.jsonl: 58ed1c462378434d0d3e0a2880558062df94114f27bb1cdd3a764db16bad4e4b
+      phase_b/initial/gpu1/seed_results.jsonl: 5c91f08775830a1e6837f20c4b2a601132f7cf4652d5f2c3dc51ecca740fed18
+    unique_joint_configurations: 336
+    unique_architectures: 192
+    seed_records: 1008
+    training_seeds: [0, 1, 2]
+  frozen_soft_metric_v2:
+    result_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2
+    archive: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz
+    archive_sha256: f5a0a73cb45098994afa3d60de44eb4c54c010d6814d963e3d4c3ba69c219f74
+    required_marker: COMPLETE
+    classification: SOFT_JOINT_METRIC_REJECTED
+    config_sha256: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+    source_sha256: d042a158a2c006baecc7c9d1d50dd42683f7b4f4c4dbdfed0c2f2c8bcc3a3aea
+    source_snapshot_manifest_root: 7125d9d7eececca53fcd00c2d578fb685c1b0d2156de62f4de08b362ffe10273
+    split_logical_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+    artifacts:
+      oof_predictions.csv: 13deeecff25813ca4d98a6dcead07ea27c0e7dcaee16d78a7894b1eeaa565fe9
+      metric_training_audit.json: c6c656f88541e5908f82914fe110ee99f7835b8d40145ca26fb6520e3f1bf641
+      geometry_metrics.json: b841f960d7a4805c5add50a8e65b8a53662ab296b9605b8d8584e6d59d92876c
+      knn_locality.json: 8602a0e97bb279ec2fb85e5636b0eb71e324f95a5a8d95f88cf79ab5d5624d57
+      split_manifest.json: 5062395ef61868b211201141aae0a9a296cefb0389ad8f71629df236619fb586
+  previous_8_pool_prospective_v1:
+    result_root: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1
+    archive: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1.tar.gz
+    archive_sha256: 7bc437a8babcc61493bf1d86ec50e1c8c4db1596288479f6b47ac7a0bcf13736
+    required_marker: COMPLETE
+    candidate_manifest: pre_eval/candidate_manifest.json
+    candidate_manifest_sha256: 6fcbf5d73eb83d9f0d06fa3d554764069e444ddef88b32540a9efdad8962862c
+    candidate_count: 32
+    labels_in_training: false
+  previous_16_pool_confirmation_v1:
+    result_root: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1
+    archive: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1.tar.gz
+    archive_sha256: cf0e5fcb8b0e8efc4c9fb8e09af5d7590f9ad0202e208ed4e731fba042b8859c
+    required_marker: COMPLETE
+    classification: METRIC_FAMILY_NOT_CONFIRMED
+    candidate_manifest: pre_eval/candidate_manifest.json
+    candidate_manifest_sha256: a657120f6e2cf87cc3b7500bcf7c2ddd8bc71238049432e8360b6c2bf20188a7
+    candidate_count: 64
+    labels_in_training: false
+  b4_search_v1:
+    result_root: results/posthoc/b4-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: afb4bcf6dcc490ef884203dfa22414bbc1e203178b54f623fdb2ebdf1bf56ee9
+    required_marker: COMPLETE
+    classification: B4_SEARCH_NOT_CONFIRMED
+    config_sha256: 4322eb7dd40f1f8b56332cb86fa9e2cd469c0061dce15baefdd11ca5b6e5f97b
+    source_sha256: 916b773bdc0e9ea13e6bf2b27e1a15c0bcd221db6aee4d1c53409f9f879da1b1
+    evaluated_manifest: evaluation/task_manifest.json
+    evaluated_manifest_sha256: a194ade67170b03dfc02febea39243a0c836f0b0780664721a32440ea79ba8f4
+    evaluated_unique_configurations: 254
+    labels_in_training: false
+
+frozen_runtime:
+  live_scientific_source_fallback: forbidden
+  soft_snapshot_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/source_snapshot
+  high_regime_snapshot_root: results/search/high-regime-prior-model-blind-validation-global4-v1/source_snapshot
+  files:
+    configs/joint_configuration_soft_metric_gate_v2.yaml: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+    analyse/joint_configuration_soft_metric_gate.py: d823e87055774e29a11851a45b659785cbb9ba524fec063f2f5f0e0a3e011c50
+    analyse/joint_configuration_metric_gate.py: e7c883e63b7a6133f5be6d029cb8d8f2f5cf755d8366cf9cf715e0c214906a13
+    analyse/performance_metric_quick_gate.py: 92fd4bb6cf2e49a67f37b62582072fc6a9960f0725a92366e7b1ca271af6d7ba
+    analyse/high_regime_prior_model_blind_validation.py: 4c6f5228abe7480c1a018b187483461505a272246dc13ef1084eafac2887ac39
+    analyse/run_high_regime_prior_model_blind_validation_labels.py: b3b951993ff69f7a28b068235887443b995f6fa6e0f25ed6c532d086a81a4aab
+    eval_utils.py: 0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d
+    architecture_diagnostics.py: a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f
+  vae_checkpoint: checkpoints/joint_model_pipeline_global4_best.pth
+  vae_checkpoint_sha256: e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4
+
+frozen_metric:
+  supervision: historical_336_only
+  metric_seeds: [0, 1, 2]
+  outer_folds: 5
+  encoder_count: 15
+  embedding_dim: 8
+  l2_normalized: true
+  replay_tolerance: 1.0e-8
+  required_replay:
+    - all_15_metric_best_epochs
+    - M1_historical_OOF_predictions
+    - M2_historical_OOF_predictions
+    - pooled_metric_Gap_at_5
+    - all_15_distance_gap_Spearman
+    - all_336_top5_neighbor_fingerprint_sequences
+  M1:
+    name: weighted_k_nearest_neighbor
+    k: 5
+    distance: Euclidean
+    weight: inverse_distance_plus_1e-8
+    reference_set: corresponding_historical_outer_train_only
+    seed_then_fold_arithmetic_mean: true
+  M2:
+    name: isotropic_exact_GP_posterior_mean
+    input: l2_normalized_8d_joint_embedding
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: false
+    lengthscale_count: 1
+    per_dimension_input_standardization: false
+    observation_noise: validation_se_squared_plus_fitted_noise_floor_squared
+    posterior_variance_used: false
+    seed_then_fold_arithmetic_mean: true
+  previous_labels_in_training: forbidden
+  B4_search_labels_in_training: forbidden
+  current_labels_in_training: forbidden
+  online_update: forbidden
+  round_refit: forbidden
+
+candidate_generation:
+  proposal: frozen_model_blind_architecture_decode_plus_HIGH_REGIME_PRIOR
+  hp_raw_unit_interval_range: [0.80, 0.95]
+  candidate_master_seed: 202608300001
+  replicate_seed_rule: candidate_master_seed_plus_zero_based_replicate
+  replicates: 8
+  rounds_per_replicate: 4
+  candidates_per_round: 128
+  total_candidates: 4096
+  decode_batch_size: 256
+  maximum_decoded_draws_per_replicate: 262144
+  exact_joint_exclusions:
+    - historical_336
+    - previous_8_pool_32
+    - previous_16_pool_64
+    - b4_search_evaluated_254
+    - all_current_earlier_candidates
+  architecture_reuse_allowed: true
+  predictor_validation_metric_distance_head_test_access: forbidden
+
+search:
+  methods: [M1, M2, RANDOM]
+  selected_per_round_per_method: 4
+  selected_per_replicate_per_method: 16
+  selected_slots_per_method: 128
+  random_master_seed: 202608300002
+  random_sampling: uniform_without_replacement_from_each_frozen_round_pool
+  ranking: predicted_validation_descending
+  tie_break: joint_fingerprint_lexicographic_ascending
+  uncertainty_used: false
+  diversity_postprocessing: false
+  all_candidates_scores_and_selections_before_first_GNN: true
+
+selection_collapse_audit:
+  scopes: [all_selected_slots, per_replicate, per_round]
+  metrics:
+    - selected_slots_count
+    - unique_architecture_count
+    - top1_architecture_frequency
+    - top2_cumulative_frequency
+    - architecture_selection_entropy
+    - effective_number_of_architectures
+  may_modify_selection: false
+
+evaluation:
+  training_seeds: [0, 1, 2]
+  method_equivalent_config_slots: 384
+  method_equivalent_GNN_runs: 1152
+  maximum_physical_unique_configs: 384
+  maximum_physical_GNN_runs: 1152
+  same_config_trained_once_and_shared: true
+  max_epochs: 300
+  patience: 80
+  maximum_system_retries: 2
+  device_policy: frozen_two_GPU_shards
+  shard_to_gpu_uuid:
+    "0": GPU-5496be78-3b71-4978-3960-b6ed926ebe49
+    "1": GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9
+  validation_only_data_view: required_before_evaluator_entry
+  track_test: false
+  candidate_replacement_after_failure: forbidden
+
+analysis:
+  estimate_name: 3-seed validation estimate
+  budgets: [4, 8, 12, 16]
+  anytime_AUC: arithmetic_mean_best_after_4_8_12_16
+  numerical_tolerance: 1.0e-12
+  bootstrap:
+    unit: search_replicate
+    replicates: 10000
+    seed: 0
+    interval: percentile_95
+  M1_gate: &metric_gate
+    min_strict_wins: 7
+    min_mean_difference: 0.003
+    bootstrap_CI_lower_strictly_positive: true
+    mean_anytime_AUC_strictly_higher: true
+    min_strictly_higher_budget_points: 3
+  M2_gate: *metric_gate
+  M1_vs_M2:
+    execute_only_if_both_promoted: true
+    M2_min_strict_wins: 6
+    regret_oracle_name: OBSERVED_EVALUATED_UNION_ORACLE_r
+    regret_oracle_definition: max_BEST_M1_BEST_M2_BEST_R_within_replicate
+    oracle_scope: actually_evaluated_M1_M2_R_union_only
+    not_full_128_candidate_pool_oracle: true
+    regret_use: M1_vs_M2_surrogate_selection_gate_only
+    M2_mean_regret_at_most_M1_fraction: 0.90
+    regret_comparison_tolerance: 1.0e-12
+    both_mean_regrets_at_most_1e_12_forces_S2_false: true
+    bootstrap_M2_minus_M1_CI_lower_strictly_positive: true
+    parsimony_default: M1
+  historical_P:
+    role: DESCRIPTIVE_HISTORICAL_REFERENCE
+    source_file: results/search/high-regime-prior-model-blind-validation-global4-v1/stabilization/F_final_candidate.json
+    source_sha256: d00dd5e43065dae6cac95b5b44d25e8d81da80a3f2b4875d876c6a98d6ec0f5d
+    validation_mean: 0.8087333333333333
+    primary_gate_use: forbidden
+
+next_stage:
+  freeze_only_if_any_metric_promoted: true
+  source: selected_NEXT_SURROGATE_replicate_winners
+  ranking: three_seed_validation_mean_descending
+  duplicate_handling: deduplicate_then_backfill
+  tie_break: joint_fingerprint_lexicographic_ascending
+  fresh_seed_training_in_this_run: forbidden
+
+output:
+  result_root: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1
+  archive: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz.sha256
+  formal_path_overwrite: forbidden
+
+allowed_classifications:
+  - INPUT_IDENTITY_INVALID
+  - METRIC_SCORER_REPLAY_MISMATCH
+  - CANDIDATE_GENERATION_FAILED
+  - SEARCH_NO_SELECTION_DIFFERENCE
+  - SEARCH_EVALUATION_INCOMPLETE
+  - METRIC_SEARCH_NOT_CONFIRMED
+  - M1_SEARCH_PROMOTED
+  - M2_SEARCH_PROMOTED
+  - M1_M2_SEARCH_PROMOTED_KNN_SELECTED
+  - M1_M2_SEARCH_PROMOTED_GP_SELECTED
+  - RUN_FAILED

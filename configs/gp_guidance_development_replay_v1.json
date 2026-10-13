@@ -1,0 +1,167 @@
+{
+  "protocol": "gp-guidance-development-replay-20260916-v1",
+  "methods": [
+    "C_GP",
+    "S_GP",
+    "C_HEAD",
+    "RANDOM"
+  ],
+  "search_seeds": [
+    2026091600,
+    2026091601,
+    2026091602,
+    2026091603,
+    2026091604
+  ],
+  "model_seed": 0,
+  "gp_seed": 0,
+  "initial_size": 50,
+  "query_budget": 50,
+  "batch_size": 5,
+  "mapping_updates_at": [
+    10,
+    20,
+    30,
+    40
+  ],
+  "selection_gp_at": [
+    0,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45
+  ],
+  "warmstart_steps": 100,
+  "initial_steps": 200,
+  "update_steps": 200,
+  "gp_steps": 20,
+  "block_starts": [
+    0,
+    50,
+    100,
+    150
+  ],
+  "groups": 3,
+  "group_hash_prefix": "gp_mean_guidance_v1:",
+  "input": {
+    "z": 12,
+    "hp": 4,
+    "hp_order": [
+      "log10_lr",
+      "dropout",
+      "log2_hidden_dim",
+      "log10_l2"
+    ],
+    "hp_encoder": [
+      4,
+      16
+    ],
+    "mapping": [
+      28,
+      32,
+      32,
+      8
+    ],
+    "head": [
+      8,
+      1
+    ],
+    "activation": "SiLU"
+  },
+  "mapping_optimizer": {
+    "lr": 0.001,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.0,
+    "amsgrad": false,
+    "foreach": false,
+    "fused": false,
+    "maximize": false,
+    "capturable": false,
+    "differentiable": false
+  },
+  "gp_optimizer": {
+    "lr": 0.05,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "amsgrad": false,
+    "foreach": null,
+    "fused": null,
+    "maximize": false,
+    "capturable": false,
+    "differentiable": false
+  },
+  "lambda_size": 0.001,
+  "lambda_guidance": 0.1,
+  "warmstart_objective": "regression + .001 size, same as C",
+  "size_reduction": "mean(sum(e**2, dim=-1))",
+  "guidance_reduction": "mean squared error over all current revealed points exactly once",
+  "gp_kernel": "ConstantMean+ScaleKernel(isotropic Matern5/2)",
+  "fixed_noise": "(SE/frozen_initial50_y_scale)**2",
+  "noise_initial_raw_sd": 0.0001,
+  "noise_lower_raw_sd": 1e-08,
+  "min_fixed_noise": 0.0,
+  "cholesky_jitters": [
+    0.0,
+    1e-06,
+    1e-05,
+    0.0001
+  ],
+  "gp_default_initial_mean": 0.0,
+  "gp_default_initial_lengthscale": 0.6931471805599453,
+  "gp_default_initial_outputscale": 0.6931471805599453,
+  "mapping_dtype": "float32",
+  "gp_dtype": "float64",
+  "device": "cpu",
+  "threads": 1,
+  "input_std_floor": 1e-06,
+  "target_std_floor": 1e-08,
+  "std_correction": 0,
+  "scaling": "fit initial50 only; fixed for full trajectory",
+  "selection": "score descending then candidate_id ascending",
+  "interval": "1.96*sqrt(latent_var + learned_noise + revealed_mean_SE2)",
+  "early_stop": false,
+  "gradient_clip": null,
+  "scheduler": null,
+  "P2": false,
+  "normalization": null,
+  "limits": {
+    "mapping": 18000,
+    "gp": 10000,
+    "gp_fits": 500
+  },
+  "planned": {
+    "mapping": 14500,
+    "gp": 8000,
+    "gp_fits": 400,
+    "queries": 1000
+  },
+  "logical_mapping_per_learning_method": 5500,
+  "initial_shared_physical_records": 250,
+  "initial_logical_records": 1000,
+  "GNN": 0,
+  "VAE": 0,
+  "synthetic_limit": {
+    "mapping": 100,
+    "gp": 100
+  },
+  "recovery_tests": [
+    "first common mapping step1",
+    "first C selection GP step1",
+    "first S initial mapping step1",
+    "first C selected before reveal",
+    "first C revealed before aggregation"
+  ]
+}

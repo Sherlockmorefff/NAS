@@ -1,0 +1,182 @@
+protocol_version: b4_arch_diversity_prospective_search_accuracy_gate_global4_v1
+study_type: prospective_preregistered_confirmatory_search_intervention
+dataset: Cora
+hp_mode: global4
+
+authoritative_inputs:
+  collapse_diagnosis:
+    root: results/posthoc/cross-method-search-collapse-diagnosis-global4-v1
+    archive: results/posthoc/cross-method-search-collapse-diagnosis-global4-v1.tar.gz
+    archive_sha256: 5830148084d0f91765e1d4f073664eac3dd2ad1826316c5e3889e018f43ff7c2
+    manifest_sha256: ad9c25c23e98b76ac172480fc1a6a1a0da0ef038a6e252b288265414c639ff8d
+    decision_sha256: a125018ccc3f2f4892a9346d56716a6884edff8c416acff9f10a4639c4778d8d
+    prospective_spec_sha256: b6290cadf6d2584eef7a0c701ed670483e20371dbe0266051396d0f10774a34b
+    required_classification: DIVERSITY_TEST_AUTHORIZED
+    required_systematic_collapse: true
+    required_saturation_pattern: true
+    required_scorer: B4
+    required_policy: P2
+  previous_b4_search:
+    root: results/posthoc/b4-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: afb4bcf6dcc490ef884203dfa22414bbc1e203178b54f623fdb2ebdf1bf56ee9
+    manifest_sha256: 5ef4d5f7560d0a62ed92bd3e901c80ede3f20755661bb69acc7a6dd5970ee0ab
+    candidate_manifest_sha256: 5576fe06e93c2357b05ada5932d7914b9d815526adc9ae5db73596b9753d7f58
+    predictions_sha256: 01a9bcb8784e1a6ce5f858a887190de9af6dde349172b36e450805954faed964
+    pre_search_root_sha256: 0176ac4299ba96a5c819ee8b29e14edff3a69e1c024c4089b128ef5b0ab0048b
+    required_classification: B4_SEARCH_NOT_CONFIRMED
+    candidate_count: 4096
+  previous_metric_search:
+    root: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: 49e7b91956c433597f6f5e076ccaf2cf8d110b703388c9c81ad4dd5a8a141597
+    candidate_manifest_sha256: 721ad4510273a52d89b51fc87f36e18afeb76481a929edd9e8bf9c8e6e23d32d
+    pre_search_root_sha256: 2d645f4edc3768db00bb0526f41ba9d2a3e906ecda5058639e96b2ad388a0f21
+    candidate_count: 4096
+  previous_8_pool:
+    root: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1
+    candidate_manifest_sha256: 6fcbf5d73eb83d9f0d06fa3d554764069e444ddef88b32540a9efdad8962862c
+    candidate_count: 32
+  previous_16_pool:
+    root: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1
+    candidate_manifest_sha256: a657120f6e2cf87cc3b7500bcf7c2ddd8bc71238049432e8360b6c2bf20188a7
+    candidate_count: 64
+  frozen_b4_protocol:
+    config: configs/b4_guided_search_accuracy_gate_v1.yaml
+    config_sha256: 4322eb7dd40f1f8b56332cb86fa9e2cd469c0061dce15baefdd11ca5b6e5f97b
+    source: results/posthoc/b4-guided-search-accuracy-gate-global4-v1/source_snapshot/analyse/b4_guided_search_accuracy_gate.py
+    source_sha256: a6623cdd8c3946751280b82b21941db794caf3f905975978647e0246f430cb67
+
+frozen_b4:
+  supervision: historical_336_only
+  model_seeds: [0, 1, 2]
+  outer_folds: 5
+  prediction_aggregation: model_seed_mean_then_outer_fold_mean
+  replay_absolute_tolerance: 1.0e-8
+  replay_required:
+    historical_oof_rows: 336
+    previous_confirmation_predictions: 64
+    previous_b4_search_predictions: 4096
+  prospective_labels_in_training: forbidden
+  online_update: forbidden
+  round_refit: forbidden
+
+p2_policy:
+  id: P2
+  name: ROUND_UNIQUE_CAP2
+  ranking: frozen_b4_prediction_descending
+  tie_break: joint_fingerprint_lexicographic_ascending
+  within_round_unique_architectures: 4
+  maximum_selected_slots_per_architecture_per_replicate: 2
+  round_order: [0, 1, 2, 3]
+  validation_access: forbidden
+
+candidate_generation:
+  proposal: frozen_model_blind_architecture_decode_plus_HIGH_REGIME_PRIOR
+  hp_raw_unit_interval_range: [0.80, 0.95]
+  candidate_master_seed: 202608310001
+  replicate_seed_rule: master_plus_zero_based_replicate
+  replicates: 12
+  rounds_per_replicate: 4
+  candidates_per_round: 128
+  total_candidates: 6144
+  decode_batch_size: 256
+  maximum_decoded_draws_per_replicate: 262144
+  exact_joint_exclusions:
+    - historical_336
+    - previous_8_pool_32
+    - previous_16_pool_64
+    - old_b4_search_all_4096
+    - old_m1_m2_search_all_4096
+    - current_earlier_candidates
+  architecture_reuse_allowed: true
+  scorer_validation_test_or_search_feedback_access: forbidden
+
+search:
+  methods: [PURE_B4_TOP4, B4_P2_DIVERSITY, MODEL_BLIND_RANDOM_HIGH_REGIME]
+  selected_per_round_per_method: 4
+  selected_per_replicate_per_method: 16
+  selected_slots_per_method: 192
+  random_master_seed: 202608310002
+  random_sampling: numpy_default_rng_continuous_replicate_then_round_uniform_without_replacement
+  all_candidates_predictions_and_selections_before_first_GNN: true
+  diversity_information_gate:
+    minimum_replicates_with_divergence_at_least_4: 8
+    median_divergence_minimum: 4
+
+evaluation:
+  training_seeds: [0, 1, 2]
+  method_equivalent_config_slots: 576
+  method_equivalent_GNN_runs: 1728
+  maximum_physical_unique_configs: 576
+  maximum_physical_GNN_runs: 1728
+  same_config_trained_once_and_shared: true
+  max_epochs: 300
+  patience: 80
+  maximum_system_retries: 2
+  device_policy: frozen_two_GPU_shards
+  shard_to_gpu_uuid:
+    "0": GPU-5496be78-3b71-4978-3960-b6ed926ebe49
+    "1": GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9
+  validation_only_data_view: required_before_evaluator_entry
+  track_test: false
+  candidate_replacement_after_failure: forbidden
+
+analysis:
+  budgets: [4, 8, 12, 16]
+  anytime_AUC: arithmetic_mean_best_after_4_8_12_16
+  numerical_tolerance: 1.0e-12
+  bootstrap_replicates: 10000
+  bootstrap_unit: search_replicate
+  A_p2_vs_pure:
+    minimum_strict_wins: 8
+    minimum_mean_difference: 0.003
+    bootstrap_seed: 0
+    CI_lower_strictly_positive: true
+    mean_anytime_AUC_strictly_higher: true
+    minimum_higher_budget_points: 3
+  B_p2_vs_random:
+    minimum_strict_wins: 8
+    minimum_mean_difference: 0.003
+    bootstrap_seed: 1
+    CI_lower_strictly_positive: true
+    mean_anytime_AUC_strictly_higher: true
+    minimum_higher_budget_points: 3
+  observed_union_regret:
+    role: descriptive_only
+    primary_gate_use: forbidden
+  historical_P:
+    role: DESCRIPTIVE_HISTORICAL_REFERENCE
+    source_file: results/search/high-regime-prior-model-blind-validation-global4-v1/stabilization/F_final_candidate.json
+    source_sha256: d00dd5e43065dae6cac95b5b44d25e8d81da80a3f2b4875d876c6a98d6ec0f5d
+    joint_fingerprint: 30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2
+    validation_seed_count: 30
+    validation_mean: 0.8087333333333333
+    primary_gate_use: forbidden
+
+next_stage:
+  freeze_only_if: DIVERSITY_SEARCH_PROMOTED
+  top_unique_winners_per_method: 3
+  tie_break: validation_mean_descending_then_joint_fingerprint_ascending
+  fresh_training_seeds:
+    start: 1000
+    stop_inclusive: 1029
+  execute_fresh_seeds_in_this_run: forbidden
+
+allowed_classifications:
+  - INPUT_IDENTITY_INVALID
+  - B4_SCORER_REPLAY_MISMATCH
+  - CANDIDATE_GENERATION_FAILED
+  - P2_POLICY_INFEASIBLE
+  - DIVERSITY_INTERVENTION_LOW_INFORMATION
+  - DIVERSITY_EVALUATION_INCOMPLETE
+  - DIVERSITY_SEARCH_NOT_CONFIRMED
+  - DIVERSITY_MECHANISM_CONFIRMED_NO_SEARCH_PROMOTION
+  - DIVERSITY_SEARCH_PROMOTED
+  - RUN_FAILED
+
+output:
+  root: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1
+  archive: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1.tar.gz.sha256
+  overwrite: forbidden

@@ -1,0 +1,22 @@
+{
+  "protocol_id": "20260910-v1",
+  "old_output": "results/posthoc/fuzzy-metric-stage2-20260910-v1",
+  "output": "results/posthoc/fuzzy-metric-stage2-diagnosis-20260910-v1",
+  "workers": 1,
+  "threads": 1,
+  "gnn_training_budget": 0,
+  "fold": "fold0",
+  "split": "original_inner",
+  "model_seeds": [0, 1, 2],
+  "methods": ["regression", "N2"],
+  "mapping_snapshots": [100, 300],
+  "gp_snapshots": [20, 100],
+  "gp_seed": 0,
+  "optional_weight_divisor": 10,
+  "max_mapping_trajectories": 9,
+  "max_gp_trajectories": 18,
+  "max_completed_mapping_updates": 2700,
+  "max_completed_gp_updates": 1800,
+  "max_failure_retries_per_trajectory": 2,
+  "scientific_scope": "one fixed development inner split; original fivefold result unchanged"
+}

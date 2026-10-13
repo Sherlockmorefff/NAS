@@ -1,0 +1,333 @@
+protocol_version: joint_configuration_metric_gate_global4_v1
+scientific_scope: joint_architecture_hp_configuration_performance_metric_posterior_mean_only
+dataset: Cora
+hp_mode: global4
+
+data:
+  source_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  result_shards:
+    - phase_b/initial/gpu0/seed_results.jsonl
+    - phase_b/initial/gpu1/seed_results.jsonl
+  preregistration: preregistration.json
+  artifact_manifest: artifact_manifest.json
+  excluded_stage: phase_c/stabilization
+  recursive_results_scan: false
+  training_seeds: [0, 1, 2]
+  require_single_split_identity: true
+  require_single_training_protocol_identity: true
+  require_single_architecture_canonicalization_identity: true
+  require_track_test_false: true
+  reject_any_test_field: true
+  require_raw_hp: true
+  require_successful_complete_seeds: true
+  require_source_file: true
+  aggregate_target: raw_validation_accuracy_seed_mean
+  hp_residualization: forbidden
+  duplicate_key:
+    - joint_fingerprint
+    - training_seed
+    - training_protocol_identity
+  conflicting_duplicate_policy: fail_closed
+  minimum_unique_joint_configurations: 200
+  minimum_unique_architectures: 100
+
+split:
+  outer_folds: 5
+  preferred_outer_group: pool_id
+  conflict_resolution_group: architecture_pool_connected_component
+  require_pool_within_one_fold: true
+  require_architecture_within_one_fold: true
+  require_joint_fingerprint_within_one_fold: true
+  inner_train_fraction: 0.80
+  inner_validation_fraction: 0.20
+  inner_group: architecture_fingerprint
+  refit_on_full_outer_train: true
+
+architecture_encoder:
+  source: canonical_graph_not_vae_latent
+  operation_order: [GCNConv, GATConv, SAGEConv, GINConv, GCNII, Identity]
+  node_features:
+    - operation_one_hot
+    - input_output_internal_role_one_hot
+    - normalized_topological_depth
+  forward_gin_layers: 2
+  reverse_gin_layers: 2
+  concatenate_forward_reverse_nodes: true
+  pooling: [sum, mean]
+  output_layer: [Linear, ReLU]
+  output_dim: 32
+  architecture_projection_dim: 16
+  old_vae_latent_as_primary_input: false
+
+hp_encoder:
+  raw_features:
+    - log10_lr
+    - dropout
+    - log2_hidden_dim
+    - log10_l2
+  standardizer_fit_scope: outer_train_only
+  layers: [4, 16, 16]
+  activation: ReLU
+  output_dim: 16
+
+fusion:
+  components:
+    - architecture_projection
+    - hp_representation
+    - elementwise_interaction
+  concatenated_dim: 48
+  layers: [48, 32, 8]
+  activation: ReLU
+  output_dim: 8
+  l2_normalize: true
+
+triplets:
+  confidence_level: 0.90
+  equivalence_margin: 0.006
+  far_margin: 0.012
+  triplet_margin: 0.20
+  difference_mode: matched_training_seed
+  positive_rule: paired_t_interval_subset_of_equivalence_interval
+  negative_rule: paired_t_interval_disjoint_from_far_interval
+  ambiguous_pair_in_metric_loss: false
+  cross_factor_positive:
+    require_different_architecture: true
+    hp_distance_rule: above_outer_train_median
+    minimum_epoch_sampling_fraction: 0.50
+  minimum_power_per_outer_fold:
+    anchors_with_positive_and_negative: 30
+    cross_architecture_positive_pairs: 50
+    cross_factor_positive_pairs: 25
+    reliable_negative_pairs: 200
+  underpowered_classification: JOINT_METRIC_UNDERPOWERED
+  threshold_relaxation: forbidden
+  loss: triplet_margin_only
+
+training:
+  metric_model_seeds: [0, 1, 2]
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_epochs: 200
+  patience: 20
+  batch_anchors: 64
+  best_epoch_source: inner_validation_only
+  final_refit_initialization: fresh
+  final_refit_data: full_outer_train
+  final_refit_epochs: best_epoch
+  metric_seed_prediction_aggregation: arithmetic_mean
+  metric_seed_selection: forbidden
+
+baselines:
+  B0:
+    name: hp_only_gp
+    input: transformed_raw_hp_4d
+    standardize_from: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+  B1:
+    name: architecture_only_gp
+    input_features:
+      - flattened_adjacency
+      - ordered_operation_one_hot
+      - operation_counts
+      - edge_count
+      - dag_depth
+      - skip_count
+      - path_count
+      - shortest_path
+      - longest_path
+      - in_out_degree_statistics
+    standardize_from: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+  B2:
+    name: explicit_joint_features_gp
+    input: explicit_graph_features_plus_transformed_raw_hp
+    standardize_from: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+    strongest_non_metric_gp_candidate: true
+  B3:
+    name: direct_joint_regressor
+    encoder: same_architecture_hp_and_fusion_branches_as_full_joint
+    output_dim: 1
+    target: raw_validation_mean
+    loss: Huber
+    training_schedule: same_optimizer_inner_architecture_split_and_fresh_full_outer_refit_as_metric_encoder
+    seeds: [0, 1, 2]
+    seed_prediction_aggregation: arithmetic_mean
+  B4:
+    name: old_z_search_gp
+    optional: true
+    require_unambiguous_existing_frozen_representation: true
+    unavailable_status: OLD_Z_SEARCH_UNAVAILABLE
+    retrain_or_reencode_vae: forbidden
+
+metric_methods:
+  M1:
+    name: joint_metric_weighted_knn
+    k: 5
+    distance: Euclidean
+    weight: inverse_distance
+    weight_epsilon: 1.0e-8
+  M2:
+    name: joint_metric_isotropic_gp
+    input_dim: 8
+    input_l2_normalized: true
+    standardize_input_dimensions: false
+    standardize_target_from: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: false
+    lengthscale_count: 1
+    marginal_likelihood: ExactMarginalLogLikelihood
+    observation_noise: validation_se_squared_plus_fitted_noise_floor_squared
+    noise_floor_fit_scope: outer_train_only
+  M3:
+    name: joint_metric_local_gp
+    neighbors: 32
+    neighbor_space: joint_embedding
+    gp_protocol: M2
+  M4:
+    name: joint_metric_ard_gp_diagnostic
+    standardize_input_dimensions: true
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+    may_replace_M2_for_decision: false
+
+controls:
+  branch_ablations:
+    - architecture_branch_only
+    - hp_branch_only
+    - full_joint
+  oof_shuffles:
+    - architecture_branch
+    - hp_branch
+  shuffle_scope: within_outer_fold
+  shuffle_seed: 0
+  architecture_shuffle_joint_claim_rule: reuse_joint_contribution_two_of_three_strict_improvements
+  report_metrics:
+    - mae_change
+    - top20_precision_change
+    - best_of_4_regret_change
+
+geometry:
+  pair_scope: heldout_query_to_outer_train_reference_only
+  distance_gap_correlation: Spearman
+  cross_factor_locality_ratio: true
+  equivalent_neighbor_precision:
+    k: 5
+    point_equivalence_margin: 0.006
+    report_cross_architecture: true
+    report_cross_factor: true
+  explicit_joint_feature_knn_comparator:
+    input: B2_explicit_joint_features
+    neighbor_protocol: M1
+
+prediction_metrics:
+  - MAE
+  - RMSE
+  - Pearson
+  - Spearman
+  - Kendall
+  - Top-20% Precision
+  - Top-region Kendall
+  - NDCG@20%
+
+best_of_4:
+  batch_size: 4
+  exhaustive_combination_limit: 5000
+  sampled_batch_count: 1000
+  sampled_batch_seed: 0
+  shared_batch_manifest: true
+  report:
+    - mean_simple_regret
+    - median_simple_regret
+    - probability_selecting_true_best
+    - selected_raw_validation_mean
+
+decision:
+  allowed_classifications:
+    - INSUFFICIENT_JOINT_CONFIG_DATA
+    - JOINT_METRIC_UNDERPOWERED
+    - JOINT_METRIC_REJECTED
+    - JOINT_METRIC_NOT_JOINT
+    - JOINT_METRIC_FEATURE_ONLY
+    - JOINT_METRIC_LOCALITY_ONLY
+    - JOINT_METRIC_GP_READY
+    - RUN_FAILED
+  data_gate:
+    minimum_unique_joint_configurations: 200
+    minimum_unique_architectures: 100
+    require_complete_training_seeds: [0, 1, 2]
+  geometry_gate:
+    median_fold_spearman_across_metric_seeds_strictly_greater_than: 0.25
+    positive_seed_count_at_least: 2
+    positive_folds_per_seed_at_least: 4
+    cross_factor_locality_ratio_strictly_less_than: 0.80
+    equivalent_neighbor_precision5_improvement_over_explicit_knn_at_least: 0.10
+  M1_gate_over_explicit_joint_feature_knn:
+    mae_relative_improvement_at_least: 0.05
+    top20_precision_absolute_improvement_at_least: 0.05
+    best_of_4_regret_relative_improvement_at_least: 0.10
+  M2_gate_over_strongest_non_metric_gp:
+    mae_relative_improvement_at_least: 0.05
+    top20_precision_absolute_improvement_at_least: 0.05
+    best_of_4_regret_relative_improvement_at_least: 0.10
+    lower_regret_outer_folds_at_least: 4
+  joint_contribution_gate:
+    required_better_metric_count: 2
+    compare_against: [B0, B1]
+    metrics: [MAE, Top-20% Precision, best-of-4 regret]
+    maximum_mae_degradation_vs_B3: 0.02
+  cross_model_metric_splicing: forbidden
+  gp_ready_claim: posterior_mean_warrants_prospective_discrete_candidate_pool_validation_only
+  uncertainty_or_acquisition_claim: forbidden
+
+prohibitions:
+  new_candidate_gnn_training: true
+  test_data_access: true
+  vae_decoder_original_head_phase4_modification: true
+  old_vae_retraining: true
+  decoder_generation_from_new_metric: true
+  nao_gradient_search: true
+  acquisition_functions: [qLogEI, EI, UCB, TS, KG, other]
+  automatic_formal_bo_integration: true
+  network_or_paper_search: true
+  hyperparameter_or_loss_scan: true
+
+output:
+  result_root: results/posthoc/joint-configuration-metric-gate-global4-v1
+  archive: results/posthoc/joint-configuration-metric-gate-global4-v1.tar.gz
+  archive_sha256: results/posthoc/joint-configuration-metric-gate-global4-v1.tar.gz.sha256
+  cache_directory: cache
+  required_files:
+    - state.json
+    - frozen_protocol.json
+    - data_inventory.json
+    - data_provenance.json
+    - split_manifest.json
+    - pair_inventory.json
+    - metric_training_audit.json
+    - geometry_metrics.json
+    - metrics_per_fold.csv
+    - oof_predictions.csv
+    - best_of_4_batches.json
+    - best_of_4_results.json
+    - branch_ablation.json
+    - shuffle_controls.json
+    - decision.json
+    - final_report.md
+    - environment.json
+    - git_status.txt
+    - git_diff.patch
+    - manifest.json
+    - logs/py_compile.log
+    - logs/pytest_focused.log
+    - logs/synthetic_smoke.log
+    - logs/run.log

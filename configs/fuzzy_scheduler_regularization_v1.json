@@ -1,0 +1,155 @@
+{
+  "version": "fuzzy-scheduler-regularization-v1",
+  "groups": [
+    "C",
+    "F"
+  ],
+  "lambda_w": [
+    0,
+    1e-05,
+    0.0001,
+    0.001
+  ],
+  "lambda_e": 0.001,
+  "regularizer": "sum of squares of ALL 2337 trainable mapping + HP + regressor parameters, includes biases; no half/count factor",
+  "weight_decay": 0,
+  "guard_steps": {
+    "mapping": 120,
+    "gp": 60
+  },
+  "caps": {
+    "mapping": 1000,
+    "gp": 300
+  },
+  "prefix": {
+    "mapping": 100,
+    "gp": 20
+  },
+  "formal_limits": {
+    "mapping": 403000,
+    "gp": 150900,
+    "mapping_fits": 403,
+    "gp_fits": 503
+  },
+  "synthetic_limits": {
+    "mapping": 60,
+    "gp": 60
+  },
+  "fold_parameters": [
+    [
+      0.02,
+      0.01
+    ],
+    [
+      0.005,
+      0.01
+    ],
+    [
+      0.02,
+      0.1
+    ],
+    [
+      0.01,
+      1.0
+    ],
+    [
+      0.005,
+      0.01
+    ]
+  ],
+  "inner": {
+    "folds": 3,
+    "model_seed": 0,
+    "architecture_shuffle": "numpy.default_rng(seed).permutation(sorted architecture IDs)",
+    "assignment": "minimum candidate count, fold ID ties",
+    "selection": [
+      "mean_r2",
+      "mean_r1",
+      "mean_GP_MAE",
+      "smaller_lambda_w"
+    ],
+    "tie_tolerance": 1e-12,
+    "outer_seed": "2026092100 + fold",
+    "replay_seed": "search_seed",
+    "minimum_validation": [
+      3,
+      2
+    ],
+    "minimum_train": [
+      8,
+      4
+    ]
+  },
+  "stopping": {
+    "mapping_interval": 20,
+    "mapping_width": 60,
+    "gp_interval": 10,
+    "gp_width": 30,
+    "consecutive": 3,
+    "mapping_loss_tolerance": 0.002,
+    "gp_loss_tolerance": 0.001,
+    "parameter_and_total_scale": "mean abs Ltotal",
+    "L0_and_original_components_scale": "mean abs L0",
+    "gp_prediction_tolerance_raw": 0.0005,
+    "minimum_gradient_rms": [
+      1e-05,
+      1e-06
+    ],
+    "minimum_gradient_max": [
+      0.0001,
+      1e-05
+    ],
+    "relative_initial_gradient": 0.01,
+    "distance_vector_relative": 0.01,
+    "distance_pair_relative": 0.02
+  },
+  "replay": {
+    "initial": 20,
+    "queries": 50,
+    "batch": 5,
+    "mapping_fit_q": [
+      0,
+      10,
+      20,
+      30,
+      40
+    ],
+    "gp_fit_q": [
+      0,
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45
+    ],
+    "search_seeds": [
+      2026091900,
+      2026091901,
+      2026091902,
+      2026091903,
+      2026091904
+    ],
+    "model_seed": 0,
+    "epsilon": 0.01,
+    "F": 0.1
+  },
+  "device": "cpu",
+  "threads": 1,
+  "GNN_training": 0,
+  "VAE_updates": 0,
+  "B_test_access": 0,
+  "logical_replays": 35,
+  "logical_new_replays": 20,
+  "numerical_tolerances": {
+    "prefix": "exact",
+    "gp_mean": 1e-08,
+    "metrics": 1e-14
+  },
+  "insufficient_observation": "fewer than three consecutive valid final windows at current lr",
+  "finite_cap": "continue marked fallback",
+  "failure": "stop trajectory; no retuning; no random fill"
+}

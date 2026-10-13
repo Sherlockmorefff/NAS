@@ -1,0 +1,185 @@
+protocol_version: joint_configuration_pair_power_projection_global4_v1
+scientific_scope: conditional_plugin_pair_power_planning_audit_only
+dataset: Cora
+cpu_only: true
+
+authoritative_v1:
+  result_root: results/posthoc/joint-configuration-metric-gate-global4-v1
+  archive: results/posthoc/joint-configuration-metric-gate-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/joint-configuration-metric-gate-global4-v1.tar.gz.sha256
+  classification: JOINT_METRIC_UNDERPOWERED
+  archive_sha256: 355d1b9846831b211f068186e8f8c533a02ba74448e4f37bd54d23f8e41c5ff5
+  config_sha256: a272bf87a7a6d458aa81b1709d1b432f3b0e981a27fd4646bbbfeed0ef2597d3
+  source_sha256: cf52c1e954eaf54231ef875ff2b1fdd4b021674c2f6457b631d007b2cf796ded
+  split_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  unique_joint_configurations: 336
+  unique_architectures: 192
+  unique_pools: 24
+  training_seeds: [0, 1, 2]
+  target: raw_validation_accuracy_seed_mean
+  required_marker: COMPLETE
+
+data:
+  source_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  result_shards:
+    - phase_b/initial/gpu0/seed_results.jsonl
+    - phase_b/initial/gpu1/seed_results.jsonl
+  preregistration: preregistration.json
+  artifact_manifest: artifact_manifest.json
+  recursive_results_scan: false
+  reject_any_test_field: true
+  require_validation_only: true
+  candidate_gnn_training: forbidden
+
+split:
+  source: authoritative_v1_split_manifest
+  folds: 5
+  standardizer_fit_scope: outer_train_only
+  hp_distance_median_fit_scope: outer_train_only
+  heldout_validation_in_pairs: forbidden
+
+pair_protocol:
+  confidence: 0.90
+  equivalence_margin: 0.006
+  far_margin: 0.012
+  difference_mode: matched_training_seed
+  positive_rule: paired_t_interval_subset_of_equivalence_interval
+  negative_rule: paired_t_interval_disjoint_from_far_interval
+  ambiguous_as_positive_or_negative: false
+  power_gate_per_fold:
+    anchors_with_positive_and_negative: 30
+    cross_architecture_positive_pairs: 50
+    cross_factor_positive_pairs: 25
+    reliable_negative_pairs: 200
+
+projection:
+  kind: conditional_plugin_planning_projection
+  seed_grid: [3, 5, 7, 10, 15, 20, 30, 50, 100, 200]
+  minimum_n_search: [3, 500]
+  future_mean_difference: fixed_to_seed_0_1_2_paired_mean
+  future_paired_sd: fixed_to_seed_0_1_2_sample_paired_sd
+  t_quantile: 0.95
+  degrees_of_freedom: n_minus_1
+  probability_claim: forbidden
+  point_limit_radius: 0.0
+
+calibration:
+  optional: true
+  unavailable_status: UNAVAILABLE
+  union_configs: stabilization/stabilization_union_configs.json
+  strategy_statistics: stabilization/strategy_top8_30seed_statistics.json
+  result_shards:
+    - phase_c/stabilization/gpu0/seed_results.jsonl
+    - phase_c/stabilization/gpu1/seed_results.jsonl
+  merged_result_crosscheck: phase_c/stabilization/seed_results_merged.jsonl
+  union_config_sha256: e6e574c2e3a4c42f1039be5da6d582e9f4f4006ae4366dfc5414e81f5230c8e0
+  strategy_statistics_sha256: 81ec09312f210a876034d7b1cd1c8b63995d7d9854edbfff766e699f3dd317d0
+  merged_result_sha256: e2d1542a57bc2380e05b3cbf6fc6f7bc84226699584c99b1fdf6e0e37bd0a099
+  expected_configurations: 14
+  required_seeds: [0, 29]
+  prefix_grid: [3, 5, 7, 10, 15, 20, 30]
+  projected_parameter_seeds: [0, 1, 2]
+  reference_name: 30-seed reference
+  representative_sample_claim: forbidden
+  main_classification_input: false
+
+cost:
+  target_seed_counts: [5, 7, 10, 15, 20, 30]
+  completion_definition: common_integer_prefix_from_seed_zero
+  gpu_hour_estimate: unavailable_unless_complete_trustworthy_runtime_protocol_exists
+
+priority:
+  status: PLANNING_ONLY
+  target_seed_counts: [5, 7, 10, 15, 20, 30]
+  report_top20_target_n: 30
+  comparison_baseline_n: 3
+  projected_degree_counting: unique_neighbor_fingerprints_across_outer_train_folds
+  missing_cross_factor_edge_definition: not_positive_at_n3_and_cross_factor_positive_at_target_n
+  new_eligible_anchor_definition: ineligible_at_n3_and_eligible_at_target_n
+  fold_contribution_counting: at_most_one_per_configuration_per_fold
+  sort:
+    - missing_cross_factor_edge_contribution_descending
+    - new_eligible_anchor_contribution_descending
+    - cross_factor_positive_degree_descending
+    - cross_architecture_positive_degree_descending
+    - additional_runs_ascending
+    - joint_fingerprint_lexicographic
+  automatic_topup_selection: forbidden
+  training_command_generation: forbidden
+
+classification:
+  allowed:
+    - PAIR_POWER_INPUT_INVALID
+    - PAIR_POWER_SUPPORT_LIMITED
+    - PAIR_POWER_PRECISION_LIMITED
+    - PAIR_POWER_MIXED_LIMITED
+    - RUN_FAILED
+  source: infinite_precision_point_limit_fold_gate_only
+  calibration_may_change_classification: false
+  modifies_joint_metric_v1_classification: false
+
+reporting:
+  minimum_nonwhitespace_characters: 3000
+  required_sections:
+    - Executive conclusion
+    - Input integrity
+    - Existing v1 failure recap
+    - Point-limit support analysis
+    - Plug-in projection results
+    - Minimum required n distribution
+    - 30-seed calibration
+    - Cost analysis
+    - Priority candidates
+    - Interpretation and limitations
+    - Frozen classification
+    - Engineering audit
+  archive_sha_note: final_archive_hash_is_generated_after_packaging_and_recorded_in_sidecar
+
+source_snapshot:
+  root: source_snapshot
+  mandatory_files:
+    - configs/joint_pair_power_projection_audit_v1.yaml
+    - analyse/joint_pair_power_projection_audit.py
+    - scripts/run_joint_pair_power_projection_audit.sh
+    - tests/test_joint_pair_power_projection_audit.py
+    - analyse/joint_configuration_metric_gate.py
+    - analyse/performance_metric_quick_gate.py
+  enumerate_imported_local_python_modules: true
+  preserve_repository_relative_paths: true
+  fail_closed_on_unreadable_source: true
+
+output:
+  result_root: results/posthoc/joint-configuration-pair-power-projection-global4-v1
+  archive: results/posthoc/joint-configuration-pair-power-projection-global4-v1.tar.gz
+  archive_sha256: results/posthoc/joint-configuration-pair-power-projection-global4-v1.tar.gz.sha256
+  overwrite_nonempty: false
+  required_files:
+    - state.json
+    - frozen_protocol.json
+    - input_integrity.json
+    - data_inventory.json
+    - seed_coverage_by_config.csv
+    - original_pair_gate_reproduction.json
+    - point_limit_pair_inventory.json
+    - projection_by_n_and_fold.csv
+    - projection_summary.json
+    - pair_minimum_n.csv
+    - minimum_n_summary.json
+    - calibration_inventory.json
+    - calibration_prefix_results.csv
+    - calibration_transition_matrices.json
+    - calibration_metrics.json
+    - full_topup_cost.csv
+    - topup_candidate_priority.csv
+    - decision.json
+    - final_report.md
+    - environment.json
+    - git_status.txt
+    - git_diff.patch
+    - source_snapshot/imported_local_modules.json
+    - source_snapshot/sha256_manifest.json
+    - manifest.json
+    - logs/py_compile.log
+    - logs/pytest_focused.log
+    - logs/synthetic_smoke.log
+    - logs/run.log

@@ -1,0 +1,347 @@
+protocol_version: joint_configuration_cross_factor_locality_diagnosis_global4_v1
+scientific_scope: read_only_posthoc_cross_factor_locality_diagnosis
+dataset: Cora
+hp_mode: global4
+cpu_only: true
+
+authoritative_soft_metric_v2:
+  result_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2
+  archive: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz
+  archive_sha256_sidecar: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz.sha256
+  required_marker: COMPLETE
+  classification: SOFT_JOINT_METRIC_REJECTED
+  archive_sha256: f5a0a73cb45098994afa3d60de44eb4c54c010d6814d963e3d4c3ba69c219f74
+  config_sha256: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+  source_sha256: d042a158a2c006baecc7c9d1d50dd42683f7b4f4c4dbdfed0c2f2c8bcc3a3aea
+  source_snapshot_manifest_root: 7125d9d7eececca53fcd00c2d578fb685c1b0d2156de62f4de08b362ffe10273
+  split_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  expected_identity:
+    unique_joint_configurations: 336
+    unique_architectures: 192
+    unique_pools: 24
+    seed_records: 1008
+    training_seeds: [0, 1, 2]
+    target: raw_validation_accuracy_seed_mean
+  expected_gate_results:
+    G1: true
+    G2: true
+    G3: false
+    G4: true
+    M1: true
+    M2: true
+  expected_key_values:
+    median_distance_gap_spearman: 0.23855197770116204
+    cross_factor_locality_ratio: 0.9626225041479666
+    metric_gap_at_5: 0.06259007936507938
+    explicit_joint_feature_gap_at_5: 0.11416587301587301
+
+frozen_v2_runtime:
+  snapshot_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/source_snapshot
+  manifest: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/source_snapshot/sha256_manifest.json
+  load_scientific_implementation_from_snapshot_only: true
+  files:
+    configs/joint_configuration_soft_metric_gate_v2.yaml:
+      sha256: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+      use: frozen_protocol
+    analyse/joint_configuration_soft_metric_gate.py:
+      sha256: d823e87055774e29a11851a45b659785cbb9ba524fec063f2f5f0e0a3e011c50
+      use: scientific_runtime
+    analyse/joint_configuration_metric_gate.py:
+      sha256: e7c883e63b7a6133f5be6d029cb8d8f2f5cf755d8366cf9cf715e0c214906a13
+      use: scientific_runtime
+    analyse/performance_metric_quick_gate.py:
+      sha256: 92fd4bb6cf2e49a67f37b62582072fc6a9960f0725a92366e7b1ca271af6d7ba
+      use: scientific_runtime
+  copy_all_entries_from_frozen_snapshot_manifest: true
+  fail_closed_on_missing_unreadable_or_hash_mismatch: true
+  live_repository_scientific_source_fallback: forbidden
+
+frozen_soft_metric_contract:
+  delta: 0.012
+  minimum_pair_weight: 0.20
+  reliability_weight_fraction: 0.80
+  pair_cap: 50000
+  pair_sampling_seed: 0
+  pair_sampling: uniform_without_replacement
+  architecture_representation_dim: 32
+  architecture_projection_dim: 16
+  hp_representation_dim: 16
+  fusion_input_components: [architecture_projection, hp_representation, elementwise_interaction]
+  fusion_layers: [48, 32, 8]
+  embedding_dim: 8
+  embedding_l2_normalized: true
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_epochs: 200
+  patience: 20
+  metric_model_seeds: [0, 1, 2]
+  mutable_for_diagnosis: false
+
+data:
+  source_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  result_shards:
+    - phase_b/initial/gpu0/seed_results.jsonl
+    - phase_b/initial/gpu1/seed_results.jsonl
+  preregistration: preregistration.json
+  artifact_manifest: artifact_manifest.json
+  recursive_results_scan: false
+  training_seeds: [0, 1, 2]
+  require_exact_soft_v2_rows: true
+  reject_any_test_field: true
+  test_data_access: forbidden
+  stabilization_data_access: forbidden
+  candidate_gnn_training: forbidden
+
+split:
+  manifest: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/split_manifest.json
+  logical_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  outer_folds: 5
+  reuse_without_resplitting: true
+  architecture_grouped: true
+  pool_grouped: true
+  expected_heldout_train_architecture_different_rate: 1.0
+
+replay:
+  purpose: recover_unarchived_soft_v2_embeddings_only
+  device: cpu
+  deterministic: true
+  python_hash_seed: 0
+  torch_num_threads: 1
+  metric_model_seeds: [0, 1, 2]
+  encoder_count: 15
+  pair_scope: frozen_soft_v2_outer_train
+  inner_split: frozen_soft_v2_architecture_grouped_80_20
+  best_epoch_source: archived_metric_training_audit
+  final_refit: frozen_soft_v2_fresh_initialization_on_complete_outer_train
+  hp_standardizer: fit_on_current_outer_train_only
+  embedding_normalization: l2
+  distance: heldout_query_to_outer_train_euclidean
+  distance_seed_aggregation: arithmetic_mean_of_seed_distance_matrices
+  allowed_training: frozen_soft_metric_encoder_only
+  forbidden_replays:
+    - B0
+    - B1
+    - B2
+    - B3
+    - B4
+    - M2_GP
+    - M3
+    - M4
+    - best_of_4
+    - direct_joint_regressor
+  identity_gate:
+    absolute_tolerance: 1.0e-8
+    top_k_fingerprint_order_exact: true
+    reproduce:
+      - all_15_fold_seed_distance_gap_spearman
+      - all_5_fold_cross_factor_locality_ratios
+      - all_336_metric_top5_neighbor_fingerprint_sequences
+      - pooled_metric_gap_at_5
+    failure_decision: REPLAY_IDENTITY_MISMATCH
+    stop_diagnosis_on_failure: true
+
+cross_factor:
+  architecture_fingerprint_different: true
+  hp_features: [log10_lr, dropout, log2_hidden_dim, log10_l2]
+  hp_standardizer_fit_scope: current_outer_train_only
+  hp_far_rule: heldout_to_train_hp_distance_strictly_greater_than_outer_train_pair_median
+  hp_near_rule: heldout_to_train_hp_distance_less_than_or_equal_to_outer_train_pair_median
+  architecture_different_rate_interpretation: guaranteed_by_outer_split_not_metric_learning
+
+original_g3_quantiles:
+  cell_scope: cross_factor_heldout_query_to_outer_train_reference
+  ordering: raw_validation_performance_gap_ascending
+  deterministic_tie_break: [query_joint_fingerprint, reference_joint_fingerprint]
+  group_fraction: 0.20
+  group_size: ceil
+  low_group: bottom
+  high_group: top
+  gap_quantiles: [minimum, q10, q25, median, q75, q90, maximum]
+  threshold_fractions: [0.006, 0.012, 0.025]
+  original_group_definition_may_change: false
+
+absolute_gap_bins:
+  - {id: bin_1, lower: 0.0, lower_inclusive: true, upper: 0.006, upper_inclusive: true}
+  - {id: bin_2, lower: 0.006, lower_inclusive: false, upper: 0.012, upper_inclusive: true}
+  - {id: bin_3, lower: 0.012, lower_inclusive: false, upper: 0.025, upper_inclusive: true}
+  - {id: bin_4, lower: 0.025, lower_inclusive: false, upper: 0.050, upper_inclusive: true}
+  - {id: bin_5, lower: 0.050, lower_inclusive: false, upper: null, upper_inclusive: false}
+gap_bin_statistics:
+  per_fold: true
+  metric_distance: [mean, median, q25, q75]
+  counts: [pair_count, query_count]
+  include_explicit_joint_feature_baseline: true
+  include_each_metric_seed: true
+  monotonicity_diagnostic: count_strictly_increasing_adjacent_median_transitions_out_of_4
+  new_pass_threshold: forbidden
+
+distance_methods:
+  joint_metric:
+    source: replayed_D_mean
+    standardize_embedding_dimensions: false
+  explicit_joint_features:
+    feature_source: frozen_soft_v2_explicit_canonical_graph_plus_hp_features
+    standardizer_fit_scope: current_outer_train_only
+    distance: Euclidean
+  shared_query_reference_cells: true
+  top_k_tie_break: [distance_ascending, reference_joint_fingerprint_lexicographic]
+
+neighbor_composition:
+  k: [5, 10]
+  measures:
+    - gap_le_0_006_rate
+    - gap_le_0_012_rate
+    - hp_far_rate
+    - hp_near_rate
+    - hp_far_and_gap_le_0_006_rate
+    - hp_far_and_gap_le_0_012_rate
+    - architecture_different_rate
+  summaries: [mean, median, query_weighted_bootstrap_95_percent_ci]
+
+retrieval:
+  delta_close: [0.006, 0.012]
+  k: [5, 10]
+  relevant: architecture_different_and_hp_far_and_gap_le_delta_close
+  precision_denominator: k
+  recall_denominator: all_relevant_outer_train_references_for_query
+  hit: at_least_one_relevant_in_top_k
+  conditional_recall_and_hit_eligible_queries_only: true
+  no_opportunity_queries_excluded_from_conditional_denominator: true
+  base_prevalence_denominator: all_outer_train_references
+  precision_lift: precision_divided_by_base_prevalence
+  include_methods: [joint_metric, explicit_joint_features]
+
+rank_retrieval:
+  delta_close: [0.006, 0.012]
+  eligible_queries_only: true
+  rank_origin: 1
+  per_query: [best_relevant_rank, median_relevant_rank]
+  summaries: [median_best_rank, mean_best_rank, mean_reciprocal_best_rank]
+  hit_cutoffs: [1, 5, 10, 20]
+  include_methods: [joint_metric, explicit_joint_features]
+
+distance_discrimination:
+  close_thresholds: [0.006, 0.012]
+  far_rule: gap_strictly_greater_than_0_050
+  query_eligibility: at_least_one_close_and_one_far_cross_factor_reference
+  auc: probability_distance_far_strictly_greater_than_distance_close_with_half_credit_for_ties
+  cliffs_delta: probability_distance_far_greater_minus_probability_distance_far_less
+  statistical_unit: heldout_query
+  summaries: [mean, median, query_cluster_bootstrap_95_percent_ci]
+  include_methods: [joint_metric, explicit_joint_features]
+
+hp_near_far_locality:
+  top_k: 10
+  strata: [hp_near, hp_far]
+  measures: [mean_raw_performance_gap, median_raw_performance_gap, gap_le_0_006_rate, gap_le_0_012_rate]
+  hp_far_neighbor_count_query_cutoffs: [1, 3, 5]
+  include_methods: [joint_metric, explicit_joint_features]
+
+metric_seed_stability:
+  seeds: [0, 1, 2]
+  never_select_best_seed: true
+  diagnostics:
+    - cross_factor_gap_bin_median_distances
+    - precision_at_5
+    - precision_at_10
+    - hit_at_5
+    - hit_at_10
+    - close12_vs_far_auc
+
+bootstrap:
+  unit: heldout_query
+  replicates: 2000
+  seed: 0
+  confidence_interval: percentile_95
+  neighbor_pairs_as_independent_units: forbidden
+
+interpretation:
+  status: POSTHOC_INTERPRETATION
+  choices:
+    A: original_G3_quantile_metric_misaligned_with_training_target
+    B: local_family_smoothness_without_cross_factor_locality
+    C: cross_factor_locality_below_original_global_median_ratio_gate_strength
+    D: mixed_evidence_cannot_distinguish
+  quantitative_choice_thresholds: SPEC_UNDERDEFINED
+  may_modify_model_or_historical_classification: false
+  may_authorize_gp_locality_bo_or_acquisition: false
+
+decision:
+  allowed:
+    - CROSS_FACTOR_DIAGNOSIS_COMPLETE
+    - REPLAY_INPUT_IDENTITY_MISMATCH
+    - REPLAY_IDENTITY_MISMATCH
+    - RUN_FAILED
+  successful_diagnosis: CROSS_FACTOR_DIAGNOSIS_COMPLETE
+  historical_soft_metric_classification: SOFT_JOINT_METRIC_REJECTED
+  historical_classification_modified: false
+  new_method_classification: forbidden
+
+reporting:
+  required_sections:
+    - Executive conclusion
+    - Input identity
+    - Replay identity
+    - Original G3 recap
+    - Bottom-20% performance-gap audit
+    - Absolute gap-bin distance analysis
+    - Top-5/top-10 neighbor composition
+    - Cross-factor precision/recall/hit
+    - Relevant-rank analysis
+    - Distance AUC and Cliff's delta
+    - HP-near vs HP-far locality
+    - Metric-seed stability
+    - Posthoc interpretation
+    - What this does NOT change
+    - Recommended next scientific question
+    - Engineering audit
+  answer_questions: [Q1, Q2, Q3, Q4]
+  core_tables_must_be_nonempty: true
+
+source_snapshot:
+  root: source_snapshot
+  mandatory_new_files:
+    - configs/joint_configuration_cross_factor_locality_diagnosis_v1.yaml
+    - analyse/joint_configuration_cross_factor_locality_diagnosis.py
+    - scripts/run_joint_configuration_cross_factor_locality_diagnosis.sh
+    - tests/test_joint_configuration_cross_factor_locality_diagnosis.py
+  copy_all_used_frozen_v2_snapshot_sources: true
+  enumerate_imported_local_python_modules: true
+  preserve_repository_relative_paths: true
+  fail_closed_on_unreadable_source: true
+
+output:
+  result_root: results/posthoc/joint-configuration-cross-factor-locality-diagnosis-global4-v1
+  archive: results/posthoc/joint-configuration-cross-factor-locality-diagnosis-global4-v1.tar.gz
+  archive_sha256: results/posthoc/joint-configuration-cross-factor-locality-diagnosis-global4-v1.tar.gz.sha256
+  overwrite_existing_result_path: false
+  required_files:
+    - state.json
+    - frozen_protocol.json
+    - input_integrity.json
+    - replay_identity.json
+    - g3_quantile_alignment.csv
+    - cross_factor_gap_bins.csv
+    - cross_factor_gap_bin_summary.json
+    - neighbor_composition_per_query.csv
+    - neighbor_composition_summary.json
+    - cross_factor_retrieval_per_query.csv
+    - cross_factor_retrieval_metrics.json
+    - cross_factor_rank_retrieval.json
+    - distance_discrimination_per_query.csv
+    - distance_discrimination.json
+    - hp_near_far_locality.json
+    - metric_seed_stability.json
+    - decision.json
+    - final_report.md
+    - environment.json
+    - git_status.txt
+    - git_diff.patch
+    - source_snapshot/imported_local_modules.json
+    - source_snapshot/sha256_manifest.json
+    - manifest.json
+    - logs/py_compile.log
+    - logs/pytest_focused.log
+    - logs/synthetic_smoke.log
+    - logs/run.log

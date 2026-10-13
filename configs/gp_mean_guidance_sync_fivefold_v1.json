@@ -1,0 +1,127 @@
+{
+  "GNN": 0,
+  "VAE": 0,
+  "additional_steps": 200,
+  "block_starts": [
+    0,
+    50,
+    100,
+    150
+  ],
+  "branches": [
+    "S"
+  ],
+  "cholesky_jitter_double": 1e-06,
+  "cholesky_max_tries": 3,
+  "device": "cpu",
+  "early_stop": false,
+  "effective_gp": 3900,
+  "effective_mapping": 3000,
+  "fixed_noise": "(SE/outer_y_scale)^2",
+  "folds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "formal_conditionings": 9000,
+  "gp_dtype": "float64",
+  "gp_kernel": "ConstantMean+ScaleKernel(isotropic Matern5/2)",
+  "gp_optimizer": {
+    "amsgrad": false,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "capturable": false,
+    "differentiable": false,
+    "eps": 1e-08,
+    "foreach": null,
+    "fused": null,
+    "lr": 0.05,
+    "maximize": false,
+    "weight_decay": 0
+  },
+  "gp_seed": 0,
+  "gp_steps": 20,
+  "gradient_clip": null,
+  "group_hash_prefix": "gp_mean_guidance_v1:",
+  "groups": 3,
+  "guidance_target_dtype": "float64",
+  "input": {
+    "head": [
+      8,
+      1
+    ],
+    "hp": 4,
+    "hp_embedding": 16,
+    "hp_order": [
+      "log10_lr",
+      "dropout",
+      "log2_hidden_dim",
+      "log10_l2"
+    ],
+    "mapping": [
+      28,
+      32,
+      32,
+      8
+    ],
+    "z": 12
+  },
+  "interval_z": 1.96,
+  "lambda_guidance": 0.1,
+  "lambda_size": 0.001,
+  "limits": {
+    "gp": 4095,
+    "mapping": 3150
+  },
+  "mapping_dtype": "float32",
+  "mapping_optimizer": {
+    "amsgrad": false,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "foreach": false,
+    "fused": false,
+    "lr": 0.001,
+    "weight_decay": 0.0
+  },
+  "min_fixed_noise": 0.0,
+  "neighborhood": false,
+  "nodes": [
+    0,
+    1,
+    50,
+    100,
+    150,
+    200
+  ],
+  "noise_initial_raw_sd": 0.0001,
+  "noise_lower_raw_sd": 1e-08,
+  "normalization": null,
+  "pseudo_labels": false,
+  "scheduler": null,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "selection": "prediction descending, candidate_id ascending; five per outer fold",
+  "support": "current; gradient through support and query, K_SS, Cholesky and alpha",
+  "threads": 1,
+  "tolerances": {
+    "finite_difference_atol": 2e-06,
+    "finite_difference_rtol": 2e-05,
+    "finite_difference_step": 1e-06,
+    "gp_mean": 1e-09,
+    "gp_variance": 1e-08,
+    "old_target": 1e-12
+  },
+  "variance_minimization": false,
+  "version": "gp_mean_guidance_sync_fivefold_v1",
+  "warmstart": 100
+}

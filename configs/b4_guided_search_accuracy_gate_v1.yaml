@@ -1,0 +1,238 @@
+protocol_version: b4_guided_search_accuracy_gate_global4_v1
+scientific_question: >-
+  Under identical model-blind high-regime joint candidate pools and identical
+  real validation budgets, does frozen B4 screening find a higher final-best
+  three-seed validation estimate than model-blind uniform random screening?
+dataset: Cora
+hp_mode: global4
+
+authoritative_inputs:
+  historical_high_regime_v1:
+    result_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+    archive: results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz
+    archive_sha256: 050a64b0cde5bdb17ababa9833e5ee578b448c9b19da31fbb00f0251ec82491c
+    preregistration_sha256: 098240232515aacfb47f8f557765bb3c824faf37d60b8ae680f6e1b2cf2c7260
+    source_dependency_manifest_sha256: 4c836f903d1bea346bcd0139d7c1e367e52b8b99d8549dbf33b13db09cb9f115
+    historical_seed_shards:
+      phase_b/initial/gpu0/seed_results.jsonl: 58ed1c462378434d0d3e0a2880558062df94114f27bb1cdd3a764db16bad4e4b
+      phase_b/initial/gpu1/seed_results.jsonl: 5c91f08775830a1e6837f20c4b2a601132f7cf4652d5f2c3dc51ecca740fed18
+    unique_joint_configurations: 336
+    unique_architectures: 192
+    unique_pools: 24
+    seed_records: 1008
+    training_seeds: [0, 1, 2]
+    dataset_content_fingerprint: 373d00c7962dc1ab0cc86974b1542eb76a768d2878013ceee0691b3932d062c7
+    split_fingerprint: bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09
+    track_test: false
+  previous_8_pool_prospective_v1:
+    result_root: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1
+    archive: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1.tar.gz
+    archive_sha256: 7bc437a8babcc61493bf1d86ec50e1c8c4db1596288479f6b47ac7a0bcf13736
+    candidate_manifest: pre_eval/candidate_manifest.json
+    candidate_manifest_sha256: 6fcbf5d73eb83d9f0d06fa3d554764069e444ddef88b32540a9efdad8962862c
+    candidate_count: 32
+    labels_in_B4_training: false
+  previous_16_pool_confirmation_v1:
+    result_root: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1
+    archive: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1.tar.gz
+    archive_sha256: cf0e5fcb8b0e8efc4c9fb8e09af5d7590f9ad0202e208ed4e731fba042b8859c
+    required_marker: COMPLETE
+    classification: METRIC_FAMILY_NOT_CONFIRMED
+    config_sha256: 7ee1cbbd8bd0890cfa13f15e99b526b38ca6b63df593e4a6180ec14bc51916a7
+    source_sha256: 78a83432b51cde5957fa530179b7c7431ac0d2caf437cc1bcad24c8f0d2ac12f
+    source_snapshot_manifest_root: e58311de4f2f3aceb49f80d0718d1361a931bd3b8087222d371c6bbc99c39b3d
+    pre_search_source_root_sha256: 2f4fff8e835d23a41a2167a1d7b05dde919ea48517ca281b5ead79402b34d1fb
+    candidate_manifest: pre_eval/candidate_manifest.json
+    candidate_manifest_sha256: a657120f6e2cf87cc3b7500bcf7c2ddd8bc71238049432e8360b6c2bf20188a7
+    predictions: pre_eval/predictions.csv
+    predictions_sha256: 4b2ae111ad3377a8ff649836c04e7aba77b1c1eb0d7e63f53019d23d764c5113
+    scorer_identity_sha256: 017cded1ac15039347155ee37dceafdd1b35b4ad0226f523be29fb3dc4b1a750
+    candidate_count: 64
+    labels_in_B4_training: false
+  frozen_soft_metric_v2:
+    result_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2
+    archive: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz
+    archive_sha256: f5a0a73cb45098994afa3d60de44eb4c54c010d6814d963e3d4c3ba69c219f74
+    config_sha256: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+    direct_regressor_source_sha256: e7c883e63b7a6133f5be6d029cb8d8f2f5cf755d8366cf9cf715e0c214906a13
+    oof_predictions_sha256: 13deeecff25813ca4d98a6dcead07ea27c0e7dcaee16d78a7894b1eeaa565fe9
+    split_physical_sha256: 5062395ef61868b211201141aae0a9a296cefb0389ad8f71629df236619fb586
+    split_logical_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+
+frozen_runtime:
+  live_scientific_source_fallback: forbidden
+  fail_closed_on_missing_unreadable_or_hash_mismatch: true
+  soft_snapshot_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/source_snapshot
+  high_regime_snapshot_root: results/search/high-regime-prior-model-blind-validation-global4-v1/source_snapshot
+  direct_regressor_source: analyse/joint_configuration_metric_gate.py
+  direct_regressor_source_sha256: e7c883e63b7a6133f5be6d029cb8d8f2f5cf755d8366cf9cf715e0c214906a13
+  high_regime_generator_source: analyse/high_regime_prior_model_blind_validation.py
+  high_regime_generator_source_sha256: 4c6f5228abe7480c1a018b187483461505a272246dc13ef1084eafac2887ac39
+  high_regime_evaluator_source: analyse/run_high_regime_prior_model_blind_validation_labels.py
+  high_regime_evaluator_source_sha256: b3b951993ff69f7a28b068235887443b995f6fa6e0f25ed6c532d086a81a4aab
+  eval_utils_sha256: 0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d
+  architecture_diagnostics_sha256: a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f
+  vae_checkpoint: checkpoints/joint_model_pipeline_global4_best.pth
+  vae_checkpoint_sha256: e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4
+
+frozen_B4:
+  name: B4_DIRECT_JOINT_REGRESSOR
+  supervision: historical_336_only
+  target: three_seed_raw_validation_mean
+  architecture_branch: frozen_bidirectional_graph_message_passing_projection_16d
+  hp_branch:
+    transformed_features: [log10_lr, dropout, log2_hidden_dim, log10_l2]
+    fit_scope: corresponding_outer_train_only
+    layers: [4, 16, 16]
+  interaction: architecture_projection_elementwise_times_hp_representation
+  fusion: concatenate_architecture_hp_interaction_48d
+  regression_layers: [48, 32, 1]
+  loss: Huber
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  maximum_epochs: 200
+  patience: 20
+  model_seeds: [0, 1, 2]
+  outer_folds: 5
+  inner_train_fraction: 0.80
+  inner_group: architecture_fingerprint
+  final_refit: fresh_initialization_complete_outer_train_exact_best_epoch
+  aggregate_model_seeds: arithmetic_mean
+  aggregate_outer_folds: arithmetic_mean
+  replay_absolute_tolerance: 1.0e-8
+  frozen_best_epochs:
+    fold_0: [200, 199, 146]
+    fold_1: [200, 200, 110]
+    fold_2: [200, 200, 113]
+    fold_3: [200, 199, 200]
+    fold_4: [199, 160, 197]
+  replay_required:
+    historical_OOF_rows: 336
+    previous_16_pool_predictions: 64
+  previous_8_pool_labels_in_training: forbidden
+  previous_16_pool_labels_in_training: forbidden
+  current_labels_in_training: forbidden
+  online_update: forbidden
+  round_refit: forbidden
+  replay_failure_classification: B4_SCORER_REPLAY_MISMATCH
+
+candidate_generation:
+  proposal: frozen_model_blind_architecture_decode_plus_HIGH_REGIME_PRIOR
+  architecture_source: frozen_VAE_standard_normal_deterministic_greedy
+  hp_prior: HIGH_REGIME_PRIOR
+  hp_raw_unit_interval_range: [0.80, 0.95]
+  hp_draw_timing: after_static_architecture_validity
+  candidate_master_seed: 202608290001
+  replicate_seed_rule: candidate_master_seed_plus_zero_based_replicate
+  replicate_rng_streams:
+    architecture: one_continuous_torch_CPU_Generator_per_replicate
+    hp: one_continuous_numpy_default_rng_per_replicate
+  rounds_advance_same_replicate_stream_in_fixed_order: true
+  replicates: 8
+  rounds_per_replicate: 4
+  candidates_per_round: 128
+  total_candidates: 4096
+  decode_batch_size: 256
+  maximum_decoded_draws_per_replicate: 262144
+  exact_joint_exclusions:
+    - historical_336
+    - previous_8_pool_32
+    - previous_16_pool_64
+    - all_current_earlier_candidates
+  architecture_reuse_allowed: true
+  scorer_access: forbidden
+  validation_access: forbidden
+  historical_best_access: forbidden
+  metric_access: forbidden
+  head_access: forbidden
+  mutation_local_search_acquisition: forbidden
+  failure_classification: CANDIDATE_GENERATION_FAILED
+
+search:
+  methods: [B4_GUIDED, MODEL_BLIND_RANDOM_HIGH_REGIME]
+  selected_per_round_per_method: 4
+  selected_per_replicate_per_method: 16
+  selected_slots_per_method: 128
+  random_master_seed: 202608290002
+  random_sampling: uniform_without_replacement_from_each_frozen_round_pool
+  B4_ranking: predicted_validation_descending
+  tie_break: joint_fingerprint_lexicographic_ascending
+  uncertainty_used: false
+  diversity_postprocessing: false
+  all_candidates_scores_and_selections_before_first_GNN: true
+  candidate_replacement_after_freeze: forbidden
+  no_selection_difference_rule: all_8_replicate_16_config_sets_identical
+
+evaluation:
+  selected_union_only: true
+  training_seeds: [0, 1, 2]
+  method_equivalent_config_slots: 256
+  method_equivalent_GNN_runs: 768
+  maximum_physical_unique_configs: 256
+  maximum_physical_GNN_runs: 768
+  same_config_trained_once_and_shared: true
+  max_epochs: 300
+  patience: 80
+  maximum_system_retries: 2
+  device_policy: frozen_two_GPU_shards
+  shard_to_gpu_uuid:
+    "0": GPU-5496be78-3b71-4978-3960-b6ed926ebe49
+    "1": GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9
+  validation_only_data_view: required_before_evaluator_entry
+  track_test: false
+  test_named_fields_at_evaluator_boundary: forbidden
+  candidate_replacement_after_failure: forbidden
+  incomplete_classification: SEARCH_EVALUATION_INCOMPLETE
+
+analysis:
+  configuration_estimate: arithmetic_mean_validation_over_seeds_0_1_2
+  estimate_name: 3-seed validation estimate
+  budgets: [4, 8, 12, 16]
+  anytime_AUC: arithmetic_mean_best_after_4_8_12_16
+  bootstrap:
+    unit: search_replicate
+    replicates: 10000
+    seed: 0
+    statistic: mean_paired_final_best_difference
+    interval: percentile_95
+  primary_gate:
+    S1_min_strict_wins: 7
+    S2_min_mean_difference: 0.003
+    S3_bootstrap_CI_lower_strictly_positive: true
+    S4_mean_anytime_AUC_strictly_higher: true
+    S5_min_strictly_higher_budget_points: 3
+  historical_P:
+    role: DESCRIPTIVE_HISTORICAL_REFERENCE
+    source_file: results/search/high-regime-prior-model-blind-validation-global4-v1/stabilization/F_final_candidate.json
+    source_sha256: d00dd5e43065dae6cac95b5b44d25e8d81da80a3f2b4875d876c6a98d6ec0f5d
+    joint_fingerprint: 30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2
+    validation_seed_count: 30
+    validation_mean: 0.8087333333333333
+    primary_gate_use: forbidden
+
+next_stage:
+  always_write_replicate_winner_tables: true
+  freeze_top3_only_if: B4_SEARCH_PROMOTED
+  ranking: three_seed_validation_mean_descending
+  duplicate_handling: deduplicate_then_backfill
+  tie_break: joint_fingerprint_lexicographic_ascending
+  fresh_seed_training_in_this_run: forbidden
+
+output:
+  result_root: results/posthoc/b4-guided-search-accuracy-gate-global4-v1
+  archive: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz.sha256
+  formal_path_overwrite: forbidden
+  pre_search_root_algorithm: sha256_of_canonical_JSON_sorted_relative_path_and_file_sha256_pairs
+  source_snapshot_copies_bytes: true
+
+allowed_classifications:
+  - B4_SEARCH_PROMOTED
+  - B4_SEARCH_NOT_CONFIRMED
+  - SEARCH_NO_SELECTION_DIFFERENCE
+  - SEARCH_EVALUATION_INCOMPLETE
+  - B4_SCORER_REPLAY_MISMATCH
+  - CANDIDATE_GENERATION_FAILED
+  - INPUT_IDENTITY_INVALID
+  - RUN_FAILED

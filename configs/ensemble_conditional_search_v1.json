@@ -1,0 +1,97 @@
+{
+  "adam": {
+    "amsgrad": false,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "foreach": false,
+    "fused": false,
+    "lr": 0.001,
+    "weight_decay": 0.0
+  },
+  "batch_size": 5,
+  "budgets": {
+    "GNN": 0,
+    "GP": 0,
+    "VAE": 0,
+    "max_extra_physical_attempts": 512,
+    "max_queries": 3500,
+    "max_ridge_solves": 50,
+    "max_synthetic_steps": 32,
+    "max_updates": 187000,
+    "stage1_queries": 500,
+    "stage1_updates": 55000,
+    "stage2_queries": 3000,
+    "stage2_updates": 132000
+  },
+  "device": "cpu",
+  "dtype": "float32",
+  "id": "ensemble-conditional-search-v1",
+  "initial_count": 20,
+  "initial_steps": 300,
+  "list_count": 16,
+  "list_prefix": "budget_champion_v1:list",
+  "list_size": 16,
+  "margin_cap": 0.1,
+  "members": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "nominate_prefix": "ensemble-conditional-search-v1:nominate",
+  "nominate_stage_encoding": "integer 1 or 2 decimal, batch from 0; UTF8 SHA256 full digest big-endian integer; numpy Generator(PCG64) integers(0,5)",
+  "query_budget": 50,
+  "random_prefix": "ensemble-conditional-search-v1:random",
+  "ranking_weight": 0.0,
+  "rules": {
+    "disagreement": "HEAD_UNCERTAINTY_REJECTED: descriptive only; never EI UCB KG",
+    "ridge": "only if stage1 not qualified or stage2 primary not met; exactly50 float64 lambda1 solves",
+    "stage1": "H>=H_C+1 AND R<=R_C+1e-12; then H desc R asc AUC_regret asc E_MEAN",
+    "stage2": "J>=10; paired exact one-sided p, Bonferroni2; ordered PASS/TREND/PRIMARY_NOT_MET"
+  },
+  "size_weight": 0.001,
+  "snapshots": [
+    0,
+    50,
+    100,
+    "event_end"
+  ],
+  "stage1_seeds": [
+    2026091600,
+    2026091601,
+    2026091602,
+    2026091603,
+    2026091604
+  ],
+  "stage2_seeds": [
+    2026091700,
+    2026091701,
+    2026091702,
+    2026091703,
+    2026091704,
+    2026091705,
+    2026091706,
+    2026091707,
+    2026091708,
+    2026091709,
+    2026091710,
+    2026091711,
+    2026091712,
+    2026091713,
+    2026091714,
+    2026091715,
+    2026091716,
+    2026091717,
+    2026091718,
+    2026091719
+  ],
+  "start_prefix": "ensemble-conditional-search-v1:start",
+  "threads": 1,
+  "tie_tolerance": 1e-12,
+  "update_interval": 10,
+  "update_steps": 200
+}

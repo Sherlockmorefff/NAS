@@ -1,0 +1,280 @@
+protocol_version: joint_configuration_soft_metric_gate_global4_v2
+scientific_scope: uncertainty_weighted_joint_architecture_hp_performance_metric_posterior_mean_only
+dataset: Cora
+hp_mode: global4
+
+authoritative_inputs:
+  joint_metric_v1:
+    result_root: results/posthoc/joint-configuration-metric-gate-global4-v1
+    archive: results/posthoc/joint-configuration-metric-gate-global4-v1.tar.gz
+    required_marker: COMPLETE
+    classification: JOINT_METRIC_UNDERPOWERED
+    archive_sha256: 355d1b9846831b211f068186e8f8c533a02ba74448e4f37bd54d23f8e41c5ff5
+    config_sha256: a272bf87a7a6d458aa81b1709d1b432f3b0e981a27fd4646bbbfeed0ef2597d3
+    source_sha256: cf52c1e954eaf54231ef875ff2b1fdd4b021674c2f6457b631d007b2cf796ded
+    split_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  pair_power_audit_v1:
+    result_root: results/posthoc/joint-configuration-pair-power-projection-global4-v1
+    archive: results/posthoc/joint-configuration-pair-power-projection-global4-v1.tar.gz
+    required_marker: COMPLETE
+    classification: PAIR_POWER_PRECISION_LIMITED
+    archive_sha256: 74a4573d8343d7ef2d53dff88a54b50fe0abadee1ff59451230ae73effb5d886
+    config_sha256: 1ec6c65d3591e8b51c93dbd62d9a5bf954242e2db574173ba1e426217c53243e
+    source_sha256: 8ddbd91c3040324115c8e4360395858e1dc03041f220b1b39a8dbaf92c9685aa
+    source_snapshot_manifest_root: b992c8f65f73816f27c2b60a34514a2cdae3cd3fc0f8aaf5bf168f4a3e99a85a
+    first_all_five_fold_projection_n: 20
+
+data:
+  source_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  result_shards:
+    - phase_b/initial/gpu0/seed_results.jsonl
+    - phase_b/initial/gpu1/seed_results.jsonl
+  preregistration: preregistration.json
+  artifact_manifest: artifact_manifest.json
+  recursive_results_scan: false
+  training_seeds: [0, 1, 2]
+  expected_seed_records: 1008
+  expected_unique_joint_configurations: 336
+  expected_unique_architectures: 192
+  expected_unique_pools: 24
+  aggregate_target: raw_validation_accuracy_seed_mean
+  hp_residualization: forbidden
+  stabilization_seeds_in_training: forbidden
+  reject_any_test_field: true
+
+split:
+  source_manifest: results/posthoc/joint-configuration-metric-gate-global4-v1/split_manifest.json
+  expected_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  outer_folds: 5
+  inner_train_fraction: 0.80
+  inner_validation_fraction: 0.20
+  inner_group: architecture_fingerprint
+  standardizer_fit_scope: outer_train_only
+  final_refit_data: full_outer_train
+  final_refit_initialization: fresh
+
+encoder:
+  architecture_representation_dim: 32
+  architecture_projection_dim: 16
+  hp_features: [log10_lr, dropout, log2_hidden_dim, log10_l2]
+  hp_layers: [4, 16, 16]
+  interaction: elementwise_product
+  joint_components: [architecture_projection, hp_representation, elementwise_interaction]
+  fusion_layers: [48, 32, 8]
+  output_dim: 8
+  l2_normalize: true
+  old_vae_latent_as_primary_input: false
+  regression_auxiliary_head: forbidden
+
+soft_metric:
+  delta: 0.012
+  minimum_pair_weight: 0.20
+  reliability_weight_fraction: 0.80
+  similarity: exp_negative_half_squared_gap_over_delta
+  reliability: delta_squared_over_delta_squared_plus_paired_se_squared
+  embedding_similarity: one_plus_cosine_over_two
+  loss: weighted_SmoothL1
+  smooth_l1_beta: 1.0
+  hard_triplets: forbidden
+  hard_pair_power_gate: forbidden
+  reconstruction_or_ranking_loss: forbidden
+  pair_scope: unordered_outer_train_only
+  pair_cap: 50000
+  pair_sampling_seed: 0
+  pair_sampling: uniform_without_replacement_independent_of_labels_architecture_hp_and_model_results
+
+training:
+  metric_model_seeds: [0, 1, 2]
+  optimizer: Adam
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_epochs: 200
+  patience: 20
+  inner_validation_loss: uncertainty_weighted_soft_metric_loss
+  final_refit_epochs: best_epoch
+  metric_seed_prediction_aggregation: arithmetic_mean
+  best_metric_seed_selection: forbidden
+
+baselines:
+  B0: {name: outer_train_mean}
+  B1: {name: hp_only_gp, kernel: Matern-5/2, ard: true, standardize_from: outer_train_only}
+  B2: {name: architecture_only_explicit_feature_gp, kernel: Matern-5/2, ard: true, standardize_from: outer_train_only}
+  B3: {name: explicit_joint_feature_gp, kernel: Matern-5/2, ard: true, standardize_from: outer_train_only}
+  B4: {name: direct_joint_regressor, loss: Huber, seeds: [0, 1, 2]}
+  explicit_joint_knn:
+    name: EJ_KNN
+    k: 5
+    distance: Euclidean
+    weight: inverse_distance_plus_1e-8
+
+metric_methods:
+  M1:
+    k: 5
+    distance: raw_embedding_Euclidean
+    weight: inverse_distance_plus_1e-8
+    per_dimension_standardization: false
+  M2:
+    input_dim: 8
+    input_l2_normalized: true
+    per_dimension_standardization: false
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: false
+    lengthscale_count: 1
+    observation_noise: validation_se_squared_plus_outer_train_fitted_noise_floor_squared
+  M3:
+    neighbors: 32
+    gp_protocol: M2
+    diagnostic_only: true
+  M4:
+    per_dimension_standardization: true
+    kernel: Matern-5/2
+    ard: true
+    diagnostic_only: true
+    may_form_gp_ready: false
+  gp_numerical_protocol:
+    source: unchanged_joint_metric_v1_implementation
+    optimizer: Adam
+    learning_rate: 0.05
+    optimization_steps: 20
+    restart_seed: 0
+    initial_noise_floor_original_target_units: 0.0001
+    minimum_noise_floor_original_target_units: 1.0e-8
+    cholesky_jitter: 1.0e-6
+
+controls:
+  shuffle_seed: 0
+  shuffle_scope: heldout_representations_within_outer_fold_only
+  unshuffled_reference_embeddings: true
+  retrain_for_controls: false
+  branch_controls: [architecture_only, hp_only]
+  shuffle_controls: [architecture_representation, hp_representation]
+  report_method: isotropic_M2
+
+geometry:
+  scope: heldout_query_to_outer_train_reference_only
+  metric_seed_distance_aggregation: arithmetic_mean_distance_matrix_reused_from_joint_v1
+  local_neighbors: 5
+  explicit_joint_feature_standardization: outer_train_only
+  cross_factor:
+    architecture_different: true
+    hp_distance: above_outer_train_median
+    low_gap_group: bottom_20_percent_by_deterministic_rank_within_fold
+    high_gap_group: top_20_percent_by_deterministic_rank_within_fold
+    group_size: ceil_20_percent
+
+prediction_metrics:
+  top_fraction: 0.20
+  metrics: [MAE, RMSE, Pearson, Spearman, Kendall, Top-20% Precision, Top-region Kendall, NDCG@20%]
+
+best_of_4:
+  batch_size: 4
+  exhaustive_combination_limit: 5000
+  sampled_batch_count: 1000
+  sampled_batch_seed: 0
+  shared_manifest_all_models: true
+
+sensitivity_30seed:
+  status: DESCRIPTIVE_SENSITIVITY_ONLY
+  union_configs: stabilization/stabilization_union_configs.json
+  strategy_statistics: stabilization/strategy_top8_30seed_statistics.json
+  result_shards:
+    - phase_c/stabilization/gpu0/seed_results.jsonl
+    - phase_c/stabilization/gpu1/seed_results.jsonl
+  merged_result_crosscheck: phase_c/stabilization/seed_results_merged.jsonl
+  union_config_sha256: e6e574c2e3a4c42f1039be5da6d582e9f4f4006ae4366dfc5414e81f5230c8e0
+  strategy_statistics_sha256: 81ec09312f210a876034d7b1cd1c8b63995d7d9854edbfff766e699f3dd317d0
+  merged_result_sha256: e2d1542a57bc2380e05b3cbf6fc6f7bc84226699584c99b1fdf6e0e37bd0a099
+  expected_configurations: 14
+  required_seed_range_inclusive: [0, 29]
+  may_train_or_select_parameters: false
+  may_change_classification: false
+  nearest_neighbor_stability_statistic: SPEC_UNDERDEFINED
+
+decision:
+  allowed:
+    - INPUT_IDENTITY_MISMATCH
+    - SOFT_JOINT_METRIC_REJECTED
+    - SOFT_JOINT_METRIC_GEOMETRY_ONLY
+    - SOFT_JOINT_METRIC_LOCALITY_ONLY
+    - SOFT_JOINT_METRIC_FEATURE_ONLY
+    - SOFT_JOINT_METRIC_NOT_JOINT
+    - SOFT_JOINT_METRIC_GP_READY
+    - RUN_FAILED
+  strongest_non_metric_gp:
+    candidates: [B1, B2, B3]
+    selection: lowest_pooled_OOF_MAE_then_model_name
+    source: unchanged_joint_metric_v1_convention
+  geometry_gate:
+    median_fold_spearman_across_metric_seeds_strictly_greater_than: 0.20
+    positive_seed_count_at_least: 2
+    positive_folds_per_seed_at_least: 4
+    cross_factor_locality_ratio_strictly_less_than: 0.85
+    local_gap5_relative_reduction_over_explicit_knn_at_least: 0.05
+  M1_gate_over_explicit_joint_feature_knn:
+    mae_relative_improvement_at_least: 0.05
+    top20_precision_absolute_improvement_at_least: 0.05
+    best_of_4_regret_relative_improvement_at_least: 0.10
+  M2_gate_over_strongest_non_metric_gp:
+    mae_relative_improvement_at_least: 0.05
+    top20_precision_absolute_improvement_at_least: 0.05
+    best_of_4_regret_relative_improvement_at_least: 0.10
+    lower_regret_outer_folds_at_least: 4
+  feature_only_diagnostic_gate:
+    source: unchanged_joint_metric_v1_composite_improvement_convention
+    comparator: strongest_non_metric_gp
+    mae_relative_improvement_at_least: 0.05
+    top20_precision_absolute_improvement_at_least: 0.05
+    best_of_4_regret_relative_improvement_at_least: 0.10
+    lower_regret_outer_folds_at_least: 4
+  joint_contribution_gate:
+    required_better_metric_count_vs_each_branch: 2
+    metrics: [MAE, Top20 Precision, best-of-4 regret]
+    architecture_shuffle:
+      mae_relative_degradation_at_least: 0.03
+      top20_precision_absolute_decrease_at_least: 0.03
+      regret_relative_degradation_at_least: 0.05
+    hp_shuffle:
+      mae_relative_degradation_at_least: 0.03
+      top20_precision_absolute_decrease_at_least: 0.03
+      regret_relative_degradation_at_least: 0.05
+  underdefined_state:
+    condition: geometry_pass_and_M2_pass_and_M1_fail_and_joint_contribution_pass
+    action: SPEC_UNDERDEFINED_fail_closed
+
+source_snapshot:
+  mandatory_files:
+    - configs/joint_configuration_soft_metric_gate_v2.yaml
+    - analyse/joint_configuration_soft_metric_gate.py
+    - scripts/run_joint_configuration_soft_metric_gate.sh
+    - tests/test_joint_configuration_soft_metric_gate.py
+    - analyse/joint_configuration_metric_gate.py
+    - analyse/performance_metric_quick_gate.py
+  enumerate_imported_local_python_modules: true
+  fail_closed_on_unreadable_source: true
+
+reporting:
+  required_sections:
+    - Executive conclusion
+    - Input identity
+    - Data and split
+    - Soft metric formulation
+    - Training audit
+    - Geometry results
+    - kNN locality results
+    - GP results
+    - Prediction metrics
+    - best-of-4 replay
+    - architecture/HP ablations
+    - shuffle controls
+    - 30-seed sensitivity
+    - Frozen classification
+    - Interpretation
+    - Limitations
+    - Engineering audit
+
+output:
+  result_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2
+  archive: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz
+  archive_sha256: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz.sha256
+  overwrite_nonempty: false

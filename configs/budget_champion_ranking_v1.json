@@ -1,0 +1,144 @@
+{
+  "identity": "budget-champion-ranking-v1",
+  "methods": [
+    "C_HEAD",
+    "BR_HEAD"
+  ],
+  "replay_methods": [
+    "C_HEAD",
+    "BR_HEAD",
+    "RANDOM"
+  ],
+  "model": {
+    "z": 12,
+    "hp": 4,
+    "hp_order": [
+      "log10_lr",
+      "dropout",
+      "log2_hidden_dim",
+      "log10_l2"
+    ],
+    "hp_encoder": [
+      4,
+      16
+    ],
+    "mapping": [
+      28,
+      32,
+      32,
+      8
+    ],
+    "head": [
+      8,
+      1
+    ],
+    "activation": "SiLU"
+  },
+  "mapping_optimizer": {
+    "lr": 0.001,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "amsgrad": false,
+    "foreach": false,
+    "fused": false,
+    "maximize": false,
+    "capturable": false,
+    "differentiable": false
+  },
+  "ranking_weight": 0.1,
+  "margin": 0.1,
+  "size_weight": 0.001,
+  "tie_tolerance": 1e-12,
+  "list_count": 16,
+  "list_size": "min(16,known_count)",
+  "list_hash": "budget_champion_v1:list:{stage}:{task_id}:{update_event}:{optimizer_step}:{list_index}:{candidate_id}",
+  "stage_values": [
+    "offline",
+    "replay"
+  ],
+  "task_id_offline": "fold{fold}-s{model_seed}",
+  "task_id_replay": "start{search_seed}-s0",
+  "update_event_values": [
+    "initial",
+    "new10",
+    "new20",
+    "new30",
+    "new40"
+  ],
+  "optimizer_step": "zero-based within each training event",
+  "list_index": "decimal 0..15",
+  "hash_encoding": "UTF-8; lowercase SHA256; ties by candidate_id; no method name; no model RNG consumed",
+  "offline_folds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "offline_model_seeds": [
+    0,
+    1,
+    2
+  ],
+  "offline_steps": 300,
+  "offline_K": 10,
+  "offline_aux_K": [
+    1,
+    5,
+    20
+  ],
+  "offline_rho": "10/heldout_count",
+  "replay_initial": 20,
+  "replay_query_budget": 50,
+  "replay_batch": 5,
+  "replay_seeds": [
+    2026091600,
+    2026091601,
+    2026091602,
+    2026091603,
+    2026091604
+  ],
+  "replay_initial_steps": 300,
+  "replay_update_steps": 200,
+  "replay_updates": [
+    10,
+    20,
+    30,
+    40
+  ],
+  "replay_rho": "(50-new_count)/(159-new_count)",
+  "replay_random_hash": "budget_champion_v1:random:{search_seed}:{candidate_id}",
+  "scaling": "offline train only; replay initial20 only then fixed",
+  "input_std_floor": 1e-06,
+  "target_std_floor": 1e-08,
+  "std_correction": 0,
+  "dtype": "float32",
+  "device": "cpu",
+  "threads": 1,
+  "early_stop": false,
+  "scheduler": null,
+  "gradient_clip": null,
+  "AMP": false,
+  "selection": "same head; descending score; ascending candidate_id",
+  "limits": {
+    "mapping": 24000,
+    "gp": 0,
+    "gp_fits": 0
+  },
+  "planned": {
+    "offline_updates": 9000,
+    "replay_updates": 11000,
+    "total_updates": 20000,
+    "replay_queries": 750,
+    "initial_logical": 300,
+    "initial_shared_per_start_total": 100
+  },
+  "synthetic_update_limit": 200,
+  "GNN": 0,
+  "VAE": 0,
+  "GP": 0
+}

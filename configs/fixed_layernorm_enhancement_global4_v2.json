@@ -1,0 +1,851 @@
+{
+  "schema_version": "fixed-layernorm-enhancement-global4-v2-engineering-correction-ordinal-3-v1",
+  "experiment": "fixed-layernorm-enhancement-global4-v2",
+  "scientific_amendment_id": "phase-a-e-master-global4-v1-amendment-phase-c-v2",
+  "scientific_amendment_sha256": "1d487f8bd5ddebc4a6b964f77975e3fc1931496ce4c800658b50cfa8640f4279",
+  "scientific_amendment_zlib_base64": "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",
+  "execution_control": {
+    "control_id": "phase-c-v2-cleanroom-execution-control-2026-08-30",
+    "sha256": "bac75381c9d3315529cac88d966e739cf41d7cfba1f98c66cfc2534fdb764237",
+    "initial_zero_state": {
+      "verified_before_any_write": true,
+      "implementation_target_count_present": 0,
+      "result_target_present": false,
+      "tmux_present": false
+    },
+    "incident": {
+      "classification": "PHASE_C_V2_PREEXECUTION_IDENTITY_ONLY_ACCESS_VIOLATION_ZERO_STATE",
+      "stage": "PREIMPLEMENTATION_READ_ONLY_AUDIT",
+      "historical_validation_outcome_visible": true,
+      "test_outcome_accessed": false,
+      "outcome_supplied_to_selector": false,
+      "outcome_used_to_alter_scientific_input_or_decision": false,
+      "implementation_files_created": 0,
+      "result_directories_created": 0,
+      "seed_freezes_created": 0,
+      "gnn_evaluations": 0,
+      "gpu_training_seconds": 0,
+      "formal_tmux_created": false,
+      "phase_c_scientific_execution_started": false,
+      "gnn_task_attempts_or_retries_consumed": "0/0",
+      "contaminated_executor_disposition": "TERMINATED_AND_NONRESUMABLE",
+      "scientific_status": "NOT_STARTED",
+      "clean_room_eligibility": "ELIGIBLE_WITH_STRICT_CONTAINMENT"
+    }
+  },
+  "engineering_correction": {
+    "control_id": "phase-c-v2-engineering-preflight-correction-ordinal-1-2026-08-30",
+    "sha256": "dbd6db86c857457df3258d92f65e4ff5929da5efdb1aa5d18e64ebf914ccc449",
+    "correction_class": "ENGINEERING_PREFLIGHT_CORRECTION",
+    "ordinal": 1,
+    "dirty_status_porcelain_z_sha256": "b272a65a343cc40ba4ea0ecacd617068891c1cfae22506faf8e7ca04bcc9341b",
+    "before_sha256": {
+      "analyse/fixed_layernorm_enhancement_v2.py": "44e93cac18d60862ea86fa59858995fb7959ba0c75ede0962888fa982a748ffe",
+      "configs/fixed_layernorm_enhancement_global4_v2.json": "6da9193d437cc46b8fa0839466aed4f264d68d0792b0418a19f99db0cc2c8b22",
+      "scripts/run_fixed_layernorm_enhancement_v2.sh": "d705e8ae14cd58b4a81687b0c8d707b75cea406d4da21dc526cceeabc4bb23b1",
+      "tests/test_fixed_layernorm_enhancement_v2.py": "a32b47852b9a989e79ae2ac13b2537a1ed80c11bbde6902865d5bfc6b034858a"
+    },
+    "zero_state_blocks": [
+      {
+        "classification": "PHASE_C_V1_PROTOCOL_INFEASIBLE_PREEXECUTION",
+        "scientific_status": "NOT_STARTED",
+        "implementation_files_created": 0,
+        "result_directories_created": 0,
+        "seed_freezes_created": 0,
+        "gnn_evaluations": 0,
+        "gpu_training_seconds": 0,
+        "formal_tmux_created": false,
+        "test_accessed": false
+      },
+      {
+        "classification": "PHASE_C_V2_PREEXECUTION_IDENTITY_ONLY_ACCESS_VIOLATION_ZERO_STATE",
+        "scientific_status": "NOT_STARTED",
+        "implementation_files_created": 0,
+        "result_directories_created": 0,
+        "seed_freezes_created": 0,
+        "gnn_evaluations": 0,
+        "gpu_training_seconds": 0,
+        "formal_tmux_created": false,
+        "test_accessed": false
+      },
+      {
+        "classification": "ENGINEERING_ORCHESTRATION_PREFLIGHT_BLOCK",
+        "scientific_status": "NOT_STARTED",
+        "implementation_files_created": 0,
+        "result_directories_created": 0,
+        "seed_freezes_created": 0,
+        "gnn_evaluations": 0,
+        "gpu_training_seconds": 0,
+        "formal_tmux_created": false,
+        "test_accessed": false
+      },
+      {
+        "classification": "ENGINEERING_PHASE_A_SCHEMA_BINDING_BLOCK",
+        "scientific_status": "NOT_STARTED",
+        "result_directories_created": 0,
+        "seed_freezes_created": 0,
+        "gnn_evaluations": 0,
+        "gpu_training_seconds": 0,
+        "formal_tmux_created": false,
+        "phase_c_seed_consumption": 0,
+        "test_accessed": false
+      }
+    ]
+  },
+  "engineering_correction_ordinal_2": {
+    "control_id": "phase-c-v2-phase-a-manifest-binding-correction-ordinal-2-2026-08-30",
+    "sha256": "4d6990d47fbb55d0a7190d06706387239960478f9977f1b5c0726d780bebebdd",
+    "correction_class": "ENGINEERING_SCHEMA_BINDING_CORRECTION",
+    "ordinal": 2,
+    "scientific_amendment_sha256": "1d487f8bd5ddebc4a6b964f77975e3fc1931496ce4c800658b50cfa8640f4279",
+    "clean_room_control_sha256": "bac75381c9d3315529cac88d966e739cf41d7cfba1f98c66cfc2534fdb764237",
+    "ordinal_1_control_sha256": "dbd6db86c857457df3258d92f65e4ff5929da5efdb1aa5d18e64ebf914ccc449",
+    "ordinal_1_terminal": {
+      "stage": "PHASE_A",
+      "error_code": "PHASE_A_MANIFEST_RECORD_SCHEMA_MISMATCH",
+      "event": "ENGINEERING_PHASE_A_MANIFEST_RECORD_SCHEMA_BINDING_BLOCK_ORDINAL_1",
+      "scientific_decision": "NOT_REACHED",
+      "classification": null,
+      "phase_c_scientific_run_started": false,
+      "disposition": "TERMINAL_NONRESUMABLE"
+    },
+    "before_file_identities": {
+      "analyse/fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 165911,
+        "sha256": "81e9255845971a6e311d26ea48204543bc452f82a352c6014fb9ec0304159743"
+      },
+      "configs/fixed_layernorm_enhancement_global4_v2.json": {
+        "size_bytes": 24113,
+        "sha256": "29adbe25bcdfaa9cb69b788f5c23a9c5aba0a0ecc5deecbb8caaf6e35ef35d3e"
+      },
+      "scripts/run_fixed_layernorm_enhancement_v2.sh": {
+        "size_bytes": 1111,
+        "sha256": "875bad60d0f3fc0a75153929ac216c659ae2d2e2190821cf074f84791a110ec4"
+      },
+      "tests/test_fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 39357,
+        "sha256": "2c0b4a2e1b47087fc83b897c688e4bb4edb0211f1f0d5deec14240c56efda770"
+      }
+    },
+    "phase_a_manifest_identity": {
+      "path": "results/posthoc/boundary-training-ceiling-audit-global4-v1/manifest.json",
+      "size_bytes": 5381,
+      "sha256": "45f4d33361a501bdbd9a21dd05ba0f018d14ac9da365b6a853fe404a52ba2270"
+    },
+    "phase_a_manifest_schema": {
+      "root_keys": [
+        "archive_excluded_from_manifest",
+        "archive_self_inclusion",
+        "created_at",
+        "experiment",
+        "file_count",
+        "files",
+        "manifest_root_sha256"
+      ],
+      "safe_root_controls": {
+        "archive_excluded_from_manifest": true,
+        "archive_self_inclusion": false,
+        "experiment": "boundary-training-ceiling-audit-global4-v1",
+        "file_count": 29,
+        "manifest_root_sha256": "23e486d1aafb7101c5f236ca504045d9be29b827028354ea3fce3734a2dec8f4"
+      },
+      "record_keys": ["relative_path", "sha256", "size_bytes"],
+      "relative_paths": [
+        "attempt_ledger.json",
+        "corpus_audit.json",
+        "decision.json",
+        "environment.json",
+        "final_report.md",
+        "frozen_protocol.json",
+        "git_after.txt",
+        "git_before.txt",
+        "high_regime_secondary_analysis.json",
+        "input_hashes.json",
+        "interaction_analysis.json",
+        "logs/execution.log",
+        "matched_analysis.json",
+        "matched_pairs.csv",
+        "pre_execution_estimate.json",
+        "primary_configurations.csv",
+        "q90_analysis.csv",
+        "q90_analysis.json",
+        "seed_collision_audit.json",
+        "source_snapshot/analyse/boundary_training_ceiling_audit.py",
+        "source_snapshot/configs/boundary_training_ceiling_audit_global4_v1.json",
+        "source_snapshot/scripts/run_boundary_training_ceiling_audit.sh",
+        "source_snapshot/tests/test_boundary_training_ceiling_audit.py",
+        "state.json",
+        "test_firewall.json",
+        "top_tail_analysis.csv",
+        "top_tail_analysis.json",
+        "training_audit.json",
+        "training_seed_runs.csv"
+      ],
+      "safe_projection_size_bytes": 4829,
+      "safe_projection_sha256": "5a272edee3457d1f5d72052022c5dcea946a8a05a2dd1f7ea329280c98b8d022"
+    },
+    "zero_state_attestation": {
+      "dirty_status_entry_count": 140,
+      "dirty_status_porcelain_z_sha256": "b272a65a343cc40ba4ea0ecacd617068891c1cfae22506faf8e7ca04bcc9341b",
+      "unrelated_status_universe_entry_count": 136,
+      "unrelated_status_content_merkle_sha256": "8879782d37fe55b01b05c6f43ea8a15b8624cbb209b2418c1d5939324b591906",
+      "result_path_present": false,
+      "tmux_present": false,
+      "named_process_count": 0,
+      "gpu_compute_process_count": 0,
+      "gnn_evaluations": 0,
+      "gpu_training_seconds": 0,
+      "fresh_seed_consumption": 0,
+      "test_accessed": false,
+      "phase_b_started": false,
+      "phase_d_started": false,
+      "phase_e_started": false
+    }
+  },
+  "engineering_correction_ordinal_3": {
+    "control_id": "phase-c-v2-sealed-control-placement-correction-ordinal-3-2026-08-31",
+    "sha256": "15b5506ec5c164a362f0360ae007bd8bd5c5c28f6f8c0709fdb37ccbb95a4623",
+    "correction_class": "ENGINEERING_CONTROL_SCHEMA_BINDING_CORRECTION",
+    "ordinal": 3,
+    "scientific_amendment_sha256": "1d487f8bd5ddebc4a6b964f77975e3fc1931496ce4c800658b50cfa8640f4279",
+    "clean_room_control_sha256": "bac75381c9d3315529cac88d966e739cf41d7cfba1f98c66cfc2534fdb764237",
+    "ordinal_1_control_sha256": "dbd6db86c857457df3258d92f65e4ff5929da5efdb1aa5d18e64ebf914ccc449",
+    "ordinal_2_control_sha256": "4d6990d47fbb55d0a7190d06706387239960478f9977f1b5c0726d780bebebdd",
+    "previous_engineering_terminals": {
+      "ordinal_1": {
+        "stage": "PHASE_A",
+        "error_code": "PHASE_A_MANIFEST_RECORD_SCHEMA_MISMATCH",
+        "event": "ENGINEERING_PHASE_A_MANIFEST_RECORD_SCHEMA_BINDING_BLOCK_ORDINAL_1",
+        "scientific_decision": "NOT_REACHED",
+        "classification": null,
+        "phase_c_scientific_run_started": false,
+        "disposition": "TERMINAL_NONRESUMABLE"
+      },
+      "ordinal_2": {
+        "stage": "PHASE_A",
+        "error_code": "PHASE_A_REQUIRED_TOP_LEVEL_CONTROL_MISSING",
+        "status": "FAIL_CLOSED",
+        "event": "ENGINEERING_PHASE_A_CONTROL_TOP_LEVEL_SCHEMA_BINDING_BLOCK_ORDINAL_2_ZERO_GNN",
+        "scientific_decision": "NOT_REACHED",
+        "classification": null,
+        "phase_c_scientific_run_started": false,
+        "disposition": "TERMINAL_NONRESUMABLE"
+      }
+    },
+    "before_file_identities": {
+      "analyse/fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 185692,
+        "sha256": "64d563a7be02c7b987985897a4f7ab7752d496b922205a6ad00f52a9efdb48e3"
+      },
+      "configs/fixed_layernorm_enhancement_global4_v2.json": {
+        "size_bytes": 30832,
+        "sha256": "65f2f059dde8a41bf2ad293aaa590de8882d79b414ef162bfae4cc5ea72ffb56"
+      },
+      "scripts/run_fixed_layernorm_enhancement_v2.sh": {
+        "size_bytes": 1111,
+        "sha256": "875bad60d0f3fc0a75153929ac216c659ae2d2e2190821cf074f84791a110ec4"
+      },
+      "tests/test_fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 54832,
+        "sha256": "135eb5f4cef6b51eb0fc95146e58657de50dd11ee24ce5612424bb73da30297d"
+      }
+    },
+    "phase_a_control_contract": {
+      "control_projection_schema": "exact-sealed-phase-a-safe-top-level-native-types-v3",
+      "files": {
+        "decision.json": {
+          "size_bytes": 3923,
+          "sha256": "72d5ee8862d88e5201c772871526137d5727985bbf1c3b880711fcfa8fd77f47",
+          "safe_fields": {
+            "classification": {"native_type": "str", "value": "NO_SIMPLE_BOUNDARY_OR_TRAINING_SIGNAL"},
+            "boundary": {"native_type": "bool", "value": false},
+            "training": {"native_type": "bool", "value": false},
+            "training_sufficient": {"native_type": "bool", "value": true},
+            "new_gnn_runs": {"native_type": "int", "value": 0},
+            "gpu_compute_runs": {"native_type": "int", "value": 0},
+            "test_accessed": {"native_type": "bool", "value": false},
+            "phase_b_started": {"native_type": "bool", "value": false}
+          },
+          "conflicting_aliases": ["boundary_signal", "decision", "training_data_sufficient", "training_signal"],
+          "safe_projection_size_bytes": 204,
+          "safe_projection_sha256": "9a3c3f352d58f63fea49d0a33b2ec8d09c13332a57c756c1d236ae65af6cc681"
+        },
+        "state.json": {
+          "size_bytes": 607,
+          "sha256": "2becfe6125bc4763443b0af0ae436a3d954de8ee96c4d1caa691dabdfdca8b1d",
+          "safe_fields": {
+            "status": {"native_type": "str", "value": "COMPLETE"},
+            "classification": {"native_type": "str", "value": "NO_SIMPLE_BOUNDARY_OR_TRAINING_SIGNAL"},
+            "gpu_compute_used": {"native_type": "bool", "value": false},
+            "phase_b_started": {"native_type": "bool", "value": false},
+            "test_accessed": {"native_type": "bool", "value": false}
+          },
+          "conflicting_aliases": [],
+          "safe_projection_size_bytes": 150,
+          "safe_projection_sha256": "bd5b74c9cbd08d31741609808b32585f904cb6f967ce542e2c679a82a55b1cde"
+        },
+        "training_audit.json": {
+          "size_bytes": 5123,
+          "sha256": "3127bbd89669950ddb848029726224ee56035caede3503e9611b34f24100040e",
+          "safe_fields": {
+            "status": {"native_type": "str", "value": "TRAINING_AUDIT_SUFFICIENT"},
+            "sufficient": {"native_type": "bool", "value": true},
+            "raw_training_truncation_signal": {"native_type": "bool", "value": false},
+            "training_truncation_signal": {"native_type": "bool", "value": false}
+          },
+          "conflicting_aliases": ["gnn_evaluations", "training_signal"],
+          "safe_projection_size_bytes": 131,
+          "safe_projection_sha256": "7a2a9753eb370eff7ea5b2885b2630cd11022682abe35b338366b532fb589090"
+        },
+        "test_firewall.json": {
+          "size_bytes": 547,
+          "sha256": "bf0c7401a45b66cc3a61f6eb88389ebb8ab1fc4d78cbf263c4d07a634566089f",
+          "safe_fields": {
+            "passed": {"native_type": "bool", "value": true},
+            "gnn_training_calls": {"native_type": "int", "value": 0},
+            "gpu_compute_calls": {"native_type": "int", "value": 0},
+            "test_data_reads": {"native_type": "int", "value": 0},
+            "runner_exact_command_verified": {"native_type": "bool", "value": true}
+          },
+          "conflicting_aliases": ["test_accessed", "test_outcome_accessed", "test_values_accessed"],
+          "safe_projection_size_bytes": 118,
+          "safe_projection_sha256": "9709e36bf70ba63592f72f0fadeff529ab1918c4dd636d0a3184a2d164a32f3a"
+        }
+      },
+      "aggregate_safe_projection_size_bytes": 677,
+      "aggregate_safe_projection_sha256": "6c54598c7c01d63dd0ae88a3c52e085706190670852c2403ea012e4e29c0b833"
+    },
+    "zero_state_attestation": {
+      "dirty_status_entry_count": 140,
+      "dirty_status_porcelain_z_sha256": "b272a65a343cc40ba4ea0ecacd617068891c1cfae22506faf8e7ca04bcc9341b",
+      "unrelated_status_universe_entry_count": 136,
+      "unrelated_status_content_merkle_sha256": "8879782d37fe55b01b05c6f43ea8a15b8624cbb209b2418c1d5939324b591906",
+      "ordinal_2_real_dry_run_count": 1,
+      "ordinal_2_real_dry_run_exhausted": true,
+      "result_path_present": false,
+      "launch_request_present": false,
+      "formal_state_present": false,
+      "tmux_present": false,
+      "named_process_count": 0,
+      "gpu_compute_process_count": 0,
+      "gnn_evaluations": 0,
+      "gpu_training_seconds": 0,
+      "fresh_seed_consumption": 0,
+      "test_accessed": false,
+      "phase_b_started": false,
+      "phase_d_started": false,
+      "phase_e_started": false
+    },
+    "scientific_design_changed": false
+  },
+  "engineering_correction_ordinal_4": {
+    "control_id": "phase-c-v2-exposure-self-binding-identity-schema-adapter-correction-ordinal-4-2026-08-31",
+    "sha256": "724c81672736d603ef9c1e225c557961233a86b30c1b057823e87e565e7a8a34",
+    "correction_class": "ENGINEERING_EXPOSURE_SELF_BINDING_AND_IDENTITY_SCHEMA_ADAPTER_CORRECTION",
+    "ordinal": 4,
+    "scientific_amendment_sha256": "1d487f8bd5ddebc4a6b964f77975e3fc1931496ce4c800658b50cfa8640f4279",
+    "clean_room_control_sha256": "bac75381c9d3315529cac88d966e739cf41d7cfba1f98c66cfc2534fdb764237",
+    "ordinal_1_control_sha256": "dbd6db86c857457df3258d92f65e4ff5929da5efdb1aa5d18e64ebf914ccc449",
+    "ordinal_2_control_sha256": "4d6990d47fbb55d0a7190d06706387239960478f9977f1b5c0726d780bebebdd",
+    "ordinal_3_control_sha256": "15b5506ec5c164a362f0360ae007bd8bd5c5c28f6f8c0709fdb37ccbb95a4623",
+    "ordinal_3_terminal": {
+      "event": "ENGINEERING_EXPOSURE_REGISTRY_FILE_COUNT_BINDING_BLOCK_ORDINAL_3_ZERO_GNN",
+      "stage": "EXPOSURE_REGISTRY",
+      "error_code": "EXPOSURE_FILE_COUNT_MISMATCH",
+      "status": "FAIL_CLOSED",
+      "scientific_decision": "NOT_REACHED",
+      "classification": null,
+      "phase_c_scientific_run_started": false,
+      "disposition": "TERMINAL_NONRESUMABLE"
+    },
+    "before_file_identities": {
+      "analyse/fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 205302,
+        "sha256": "f9bd5a9d02180dbadfaab046d0d1ce233daaf7367c33516d497a60255a59ece8"
+      },
+      "configs/fixed_layernorm_enhancement_global4_v2.json": {
+        "size_bytes": 37748,
+        "sha256": "c28badd6e506db754b798e1c8399b63ffb1864b31424cb8d755224762f3c30a3"
+      },
+      "scripts/run_fixed_layernorm_enhancement_v2.sh": {
+        "size_bytes": 1111,
+        "sha256": "875bad60d0f3fc0a75153929ac216c659ae2d2e2190821cf074f84791a110ec4"
+      },
+      "tests/test_fixed_layernorm_enhancement_v2.py": {
+        "size_bytes": 71998,
+        "sha256": "33c65a87a6d9983b25d7e986a81bfd3df5f3e83de97ad0b587550825316e8c9f"
+      }
+    },
+    "ordinal_3_after_ledger_identity": {
+      "path": "/tmp/phase_c_v2_ordinal3_after_identities.json",
+      "size_bytes": 870,
+      "sha256": "6b9ee3d0c72765493b7517980d892c5c1357afd4b57b793dbc9ee89400273ae3"
+    },
+    "ordinal_3_prompt_sha256": "ef27f763955e012cce5520f4dd9a8fc5f0fa6ffc31819a1fbc18e5a07d386b1b",
+    "adapter_plan_commitments": {
+      "marker_filtered_prewrite_file_count": 607,
+      "marker_filtered_prewrite_tree_sha256": "0316ef48a9b48297074bdc39b93088d2781057af7ae36a88607a7559dc738ea0",
+      "marker_filtered_current_file_count": 607,
+      "execution_owned_exact_exclusions": ["configs/fixed_layernorm_enhancement_global4_v2.json"],
+      "historical_file_count": 606,
+      "historical_tree_sha256": "40a9fc01007a06dc702b6413d6fdf23d4258f5237f3bbff7421b59b2e0f7dec7",
+      "historical_root_counts": {"analyse": 5, "configs": 3, "results": 593, "tests": 5},
+      "adapter_class_counts": {
+        "CSV_JSON_IDENTITY_CELL_V1": 102,
+        "JSON_IDENTITY_DEFAULT_V1": 490,
+        "JSON_EXACT_ISOLATED_EDGES_COUNT_COLLISION_V1": 4,
+        "OPAQUE_EXACT_IDENTITY_TOKEN_V1": 10
+      },
+      "adapter_manifest_root_sha256": "1ba2d2d7b2d6ba8dfa1bc9e2a81e5487674608f413739b57c981861cfba591db",
+      "legacy_error_count": 74,
+      "legacy_error_class_counts": {
+        "CSV_SERIALIZED_IDENTITY_ARRAY_NOT_DECODED": 70,
+        "JSON_ISOLATED_NONIDENTITY_EDGES_COLLISION": 4
+      },
+      "legacy_error_set_root_sha256": "99b6ea7cb1ba028eaf7b3562b4ea990ad8c1652cbb9fe1e2fe51437b5dd98566",
+      "legacy_success_count": 532,
+      "legacy_success_projection_root_sha256": "4b6168d6c41eb4315e82cad5345d8701fa297ae527d9ce0c38e79dfb9b4d582e",
+      "new_projection_file_count": 606,
+      "new_projection_root_sha256": "f00d5c3ddb07b2d30dfcad15db1314ba9ea8c82af4084b2eeff5c5d5029c0aad",
+      "csv_schema_plan_root_sha256": "19e93f7ac69632b1bb73fea5030de98aedb488bf58cdb5551026586cb9e1ee3f",
+      "csv_legacy_error_path_set_sha256": "67eb18d84314d2193b78183365cd8f84a8be0d7a9097143631044b62e90c26f1",
+      "csv_legacy_error_inventory_sha256": "8ce306aa1f3b4f61c4bda3b459779235ab18281f9237ce70bbfc85892aed45b3",
+      "exact_json_contract_sha256": "50c21a181acb7fc31acc55ca0dde0432c7a08b5884033676c2da171c36abc817",
+      "exposed_architecture_count": 1253,
+      "exposed_architecture_set_sha256": "2c4d67b50cbc9458747dff05ea1ed2efddbef49471990075b48d85fe34979f6d"
+    },
+    "zero_state_attestation": {
+      "dirty_status_entry_count": 140,
+      "dirty_status_porcelain_z_sha256": "b272a65a343cc40ba4ea0ecacd617068891c1cfae22506faf8e7ca04bcc9341b",
+      "unrelated_status_universe_entry_count": 136,
+      "unrelated_status_content_merkle_sha256": "8879782d37fe55b01b05c6f43ea8a15b8624cbb209b2418c1d5939324b591906",
+      "ordinal_3_real_dry_run_count": 1,
+      "ordinal_3_real_dry_run_exhausted": true,
+      "ordinal_3_focused_pytest_cases_passed": 193,
+      "result_path_present": false,
+      "launch_request_present": false,
+      "formal_state_present": false,
+      "tmux_present": false,
+      "named_process_count": 0,
+      "gpu_compute_process_count": 0,
+      "gnn_evaluations": 0,
+      "gpu_training_seconds": 0,
+      "fresh_seed_consumption": 0,
+      "test_accessed": false,
+      "phase_b_started": false,
+      "phase_d_started": false,
+      "phase_e_started": false
+    },
+    "scientific_design_changed": false
+  },
+  "launch_control": {
+    "fixed_tmux_command": "tmux new-session -d -s fixed_layernorm_enhancement_v2 \"cd /home/fangxy/D-VAE && conda run -n nas bash scripts/run_fixed_layernorm_enhancement_v2.sh; exec bash\"",
+    "request_schema": "phase-c-v2-launch-request-v1",
+    "single_request_only": true,
+    "foreground_formal_forbidden": true
+  },
+  "repository": {
+    "branch": "feature/accuracy-bottleneck-diagnostics",
+    "head": "64a44c14316f11debaf01cf8583426acfe1410e6"
+  },
+  "dependency_hashes": {
+    "eval_utils.py": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+    "hp_modes.py": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf",
+    "analyse/final_checkpoint_seed_inventory.py": "523dea176a90a06e68418e2624de2b49e126d0a7173b9901958d9a65a14b0c17",
+    "architecture_diagnostics.py": "a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f"
+  },
+  "phase_a": {
+    "primary_table": "results/posthoc/boundary-training-ceiling-audit-global4-v1/primary_configurations.csv",
+    "primary_sha256": "52c9e8f7c6129262b2ea26be4ee356a2264f018415548294c82c0e4d8c2007e6",
+    "primary_size": 135387,
+    "primary_header": "architecture_fingerprint,dropout,effective_layers,hidden,hp_fingerprint,joint_fingerprint,l2,lr,mean_val,seed_0,seed_1,seed_2,source,u_dropout,u_l2,u_lr",
+    "archive": "results/posthoc/boundary-training-ceiling-audit-global4-v1/boundary-training-ceiling-audit-global4-v1.tar.gz",
+    "archive_sha256": "f6899c37c24c43d366c64b261fde58bd2ae81a40b08cda5be61155d5af7d874d",
+    "primary_archive_member": "boundary-training-ceiling-audit-global4-v1/primary_configurations.csv",
+    "manifest_identity": {
+      "path": "results/posthoc/boundary-training-ceiling-audit-global4-v1/manifest.json",
+      "size_bytes": 5381,
+      "sha256": "45f4d33361a501bdbd9a21dd05ba0f018d14ac9da365b6a853fe404a52ba2270"
+    },
+    "manifest_schema": {
+      "root_keys": [
+        "archive_excluded_from_manifest",
+        "archive_self_inclusion",
+        "created_at",
+        "experiment",
+        "file_count",
+        "files",
+        "manifest_root_sha256"
+      ],
+      "safe_root_controls": {
+        "archive_excluded_from_manifest": true,
+        "archive_self_inclusion": false,
+        "experiment": "boundary-training-ceiling-audit-global4-v1",
+        "file_count": 29,
+        "manifest_root_sha256": "23e486d1aafb7101c5f236ca504045d9be29b827028354ea3fce3734a2dec8f4"
+      },
+      "record_keys": ["relative_path", "sha256", "size_bytes"],
+      "relative_paths": [
+        "attempt_ledger.json",
+        "corpus_audit.json",
+        "decision.json",
+        "environment.json",
+        "final_report.md",
+        "frozen_protocol.json",
+        "git_after.txt",
+        "git_before.txt",
+        "high_regime_secondary_analysis.json",
+        "input_hashes.json",
+        "interaction_analysis.json",
+        "logs/execution.log",
+        "matched_analysis.json",
+        "matched_pairs.csv",
+        "pre_execution_estimate.json",
+        "primary_configurations.csv",
+        "q90_analysis.csv",
+        "q90_analysis.json",
+        "seed_collision_audit.json",
+        "source_snapshot/analyse/boundary_training_ceiling_audit.py",
+        "source_snapshot/configs/boundary_training_ceiling_audit_global4_v1.json",
+        "source_snapshot/scripts/run_boundary_training_ceiling_audit.sh",
+        "source_snapshot/tests/test_boundary_training_ceiling_audit.py",
+        "state.json",
+        "test_firewall.json",
+        "top_tail_analysis.csv",
+        "top_tail_analysis.json",
+        "training_audit.json",
+        "training_seed_runs.csv"
+      ],
+      "safe_projection_size_bytes": 4829,
+      "safe_projection_sha256": "5a272edee3457d1f5d72052022c5dcea946a8a05a2dd1f7ea329280c98b8d022"
+    }
+  },
+  "source_manifests": [
+    {
+      "source": "OH_BLIND_JOINT_RANDOM",
+      "live_path": "results/posthoc/original-head-confirmatory-attribution-global4-v2/selected_union_configs.json",
+      "sha256": "129fdf72399d607681815b2df4788be459abf802148803116f8ced10b92a7f7c",
+      "archive_path": "results/posthoc/original-head-confirmatory-attribution-global4-v2/original-head-confirmatory-attribution-global4-v2-20260825.tar.gz",
+      "archive_member": "selected_union_configs.json"
+    },
+    {
+      "source": "HR_BALANCED_RANDOM_HP",
+      "live_path": "results/search/high-regime-prior-model-blind-validation-global4-v1/selected_union_configs.json",
+      "sha256": "7ae5cb88664ffb7d3d33374766ff8b986f25f6d465ba3a65d968f1f03c73c792",
+      "archive_path": "results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz",
+      "archive_member": "selected_union_configs.json"
+    }
+  ],
+  "base_p": {
+    "joint_fingerprint": "30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2",
+    "architecture_fingerprint": "960efb3b97f00491c3956657cfd57958effb6096f65b1db2fa8aaae586b82207",
+    "hp_fingerprint": "911259943106a1edad300bc5300a3883ece8cbffba48b95e6c61b6e5eb4b679d",
+    "operations": ["GCNConv", "GATConv", "GCNII", "GCNII", "SAGEConv"],
+    "edges": [[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [4, 5], [3, 5], [0, 5], [5, 6]],
+    "lr": 0.0219530948,
+    "dropout": 0.55173624,
+    "hidden": 512,
+    "l2": 0.001,
+    "max_epochs": 300,
+    "patience": 80
+  },
+  "exposure_rule": {
+    "roots": ["analyse", "configs", "scripts", "tests", "results"],
+    "path_markers": ["layernorm", "layer_norm", "layer-norm"],
+    "suffixes": [".py", ".json", ".jsonl", ".ndjson", ".csv", ".md", ".txt", ".yaml", ".yml"],
+    "excluded_markers": ["fixed_layernorm_enhancement_v2", "fixed-layernorm-enhancement-global4-v2"],
+    "identity_whitelist": ["architecture_fingerprint", "joint_config_fingerprint", "joint_fingerprint", "hp_fingerprint", "operations", "ops", "edges", "config_id"]
+  },
+  "exposure_adapter_plan": {
+    "canonical_commitment_schema": "canonical-json-no-newline-v1",
+    "routing_priority": [
+      "JSON_EXACT_ISOLATED_EDGES_COUNT_COLLISION_V1",
+      "CSV_JSON_IDENTITY_CELL_V1",
+      "JSON_IDENTITY_DEFAULT_V1",
+      "OPAQUE_EXACT_IDENTITY_TOKEN_V1"
+    ],
+    "execution_owned_exact_exclusions": ["configs/fixed_layernorm_enhancement_global4_v2.json"],
+    "commitments": {
+      "marker_filtered_prewrite_file_count": 607,
+      "marker_filtered_prewrite_tree_sha256": "0316ef48a9b48297074bdc39b93088d2781057af7ae36a88607a7559dc738ea0",
+      "marker_filtered_current_file_count": 607,
+      "execution_owned_exact_exclusions": ["configs/fixed_layernorm_enhancement_global4_v2.json"],
+      "historical_file_count": 606,
+      "historical_tree_sha256": "40a9fc01007a06dc702b6413d6fdf23d4258f5237f3bbff7421b59b2e0f7dec7",
+      "historical_root_counts": {"analyse": 5, "configs": 3, "results": 593, "tests": 5},
+      "adapter_class_counts": {
+        "CSV_JSON_IDENTITY_CELL_V1": 102,
+        "JSON_IDENTITY_DEFAULT_V1": 490,
+        "JSON_EXACT_ISOLATED_EDGES_COUNT_COLLISION_V1": 4,
+        "OPAQUE_EXACT_IDENTITY_TOKEN_V1": 10
+      },
+      "adapter_manifest_root_sha256": "1ba2d2d7b2d6ba8dfa1bc9e2a81e5487674608f413739b57c981861cfba591db",
+      "legacy_error_count": 74,
+      "legacy_error_class_counts": {
+        "CSV_SERIALIZED_IDENTITY_ARRAY_NOT_DECODED": 70,
+        "JSON_ISOLATED_NONIDENTITY_EDGES_COLLISION": 4
+      },
+      "legacy_error_set_root_sha256": "99b6ea7cb1ba028eaf7b3562b4ea990ad8c1652cbb9fe1e2fe51437b5dd98566",
+      "legacy_success_count": 532,
+      "legacy_success_projection_root_sha256": "4b6168d6c41eb4315e82cad5345d8701fa297ae527d9ce0c38e79dfb9b4d582e",
+      "new_projection_file_count": 606,
+      "new_projection_root_sha256": "f00d5c3ddb07b2d30dfcad15db1314ba9ea8c82af4084b2eeff5c5d5029c0aad",
+      "csv_schema_plan_root_sha256": "19e93f7ac69632b1bb73fea5030de98aedb488bf58cdb5551026586cb9e1ee3f",
+      "csv_legacy_error_path_set_sha256": "67eb18d84314d2193b78183365cd8f84a8be0d7a9097143631044b62e90c26f1",
+      "csv_legacy_error_inventory_sha256": "8ce306aa1f3b4f61c4bda3b459779235ab18281f9237ce70bbfc85892aed45b3",
+      "exact_json_contract_sha256": "50c21a181acb7fc31acc55ca0dde0432c7a08b5884033676c2da171c36abc817",
+      "exposed_architecture_count": 1253,
+      "exposed_architecture_set_sha256": "2c4d67b50cbc9458747dff05ea1ed2efddbef49471990075b48d85fe34979f6d"
+    },
+    "csv_header_groups": {
+      "0180b68837cd693d9d64c84fa849d166e4a67267a121304d570655bae3ad3ddd": {
+        "columns": 43,
+        "files": 16,
+        "rows": 272,
+        "identity_columns": []
+      },
+      "3eccd7a52ff966bbb45f5bd74c8a9b314a4c5702f2e7fec85523f7e5e25de60e": {
+        "columns": 86,
+        "files": 16,
+        "rows": 2400,
+        "identity_columns": ["architecture_fingerprint", "hp_fingerprint"]
+      },
+      "99e1c8f3a06c74682b11a839763ba0b6c03196e2afb107f8de430045273aa272": {
+        "columns": 44,
+        "files": 47,
+        "rows": 235,
+        "identity_columns": ["edges", "operations"]
+      },
+      "c00a2993946df064fbda624ec1f4b18588694c3e3306b8eff47c4abdc2d3510c": {
+        "columns": 44,
+        "files": 23,
+        "rows": 23,
+        "identity_columns": ["edges", "operations"]
+      }
+    },
+    "exact_json_adapter_contract": {
+      "schema_version": "phase-c-v2-historical-json-identity-adapter-contract-v1",
+      "files": [
+        {
+          "path": "results/posthoc/cora-layernorm-crossover-v1/crossover_manifest.json",
+          "size": 16643,
+          "sha256": "9f02f3daf0381f9ece4375de2bc54ab8cdbf3137dc569f3997438cc0eae33e79",
+          "structured_record_contracts": [
+            {
+              "pointer_pattern": "/new_combinations/*",
+              "expected_count": 2,
+              "required_identity_keys": ["architecture_fingerprint", "edges", "operations"]
+            },
+            {
+              "pointer_pattern": "/structure_comparison/diverse_truncation_stress_1",
+              "expected_count": 1,
+              "required_identity_keys": ["edges", "operations"]
+            },
+            {
+              "pointer_pattern": "/structure_comparison/median_1",
+              "expected_count": 1,
+              "required_identity_keys": ["edges", "operations"]
+            },
+            {
+              "pointer_pattern": "/structure_comparison/top_1",
+              "expected_count": 1,
+              "required_identity_keys": ["edges", "operations"]
+            }
+          ],
+          "fingerprint_only_contracts": [],
+          "skipped_non_architecture_identity_contracts": [
+            {"pointer_pattern": "/dataset_identity/edges", "expected_count": 1, "expected_json_type": "integer"}
+          ],
+          "skipped_redundant_identity_contracts": [],
+          "expected_structured_record_count": 5,
+          "expected_fingerprint_only_record_count": 0,
+          "expected_unique_architecture_count": 3,
+          "identity_set_sha256": "6b9ed62eb36df6091c4195fc7763bff1dfec9b633f6de147d9b88682fff26d97"
+        },
+        {
+          "path": "results/posthoc/cora-layernorm-high-region-v1/high_region_manifest.json",
+          "size": 22583,
+          "sha256": "c7d94521f27445285cccb90fe510e8a6442c493cf2f76ceeb04c8a21f38b3466",
+          "structured_record_contracts": [
+            {
+              "pointer_pattern": "/selected_candidates/*",
+              "expected_count": 5,
+              "required_identity_keys": ["architecture_fingerprint", "edges", "operations"]
+            }
+          ],
+          "fingerprint_only_contracts": [],
+          "skipped_non_architecture_identity_contracts": [
+            {"pointer_pattern": "/dataset_identity/edges", "expected_count": 1, "expected_json_type": "integer"}
+          ],
+          "skipped_redundant_identity_contracts": [
+            {
+              "pointer_pattern": "/selected_candidates/*/architecture_summary/operations",
+              "expected_count": 5,
+              "expected_json_type": "array"
+            }
+          ],
+          "expected_structured_record_count": 5,
+          "expected_fingerprint_only_record_count": 0,
+          "expected_unique_architecture_count": 5,
+          "identity_set_sha256": "ca4b56485fe165f43315d52f826b5d1080fb27058b8bbcd68cc80571d245348b"
+        },
+        {
+          "path": "results/posthoc/cora-layernorm-subgroup-v1/subgroup_manifest.json",
+          "size": 25861,
+          "sha256": "fd008b5d8d9308fdad5a14c6a6b7639a3be24f1e0730bb683210a0e9f5e5a660",
+          "structured_record_contracts": [
+            {
+              "pointer_pattern": "/selected_candidates/*",
+              "expected_count": 6,
+              "required_identity_keys": ["architecture_fingerprint", "edges", "operations"]
+            }
+          ],
+          "fingerprint_only_contracts": [],
+          "skipped_non_architecture_identity_contracts": [
+            {"pointer_pattern": "/dataset_identity/edges", "expected_count": 1, "expected_json_type": "integer"}
+          ],
+          "skipped_redundant_identity_contracts": [],
+          "expected_structured_record_count": 6,
+          "expected_fingerprint_only_record_count": 0,
+          "expected_unique_architecture_count": 6,
+          "identity_set_sha256": "ddf7176a354bf27ff1f9a03fed9de556ff0f712b71fbb3c92e876ac5ac214dcc"
+        },
+        {
+          "path": "results/posthoc/cora-layernorm-v1/layernorm_manifest.json",
+          "size": 16467,
+          "sha256": "52ce8241e5f0c800971c4190dcaf9d77d3fb1ee824598f61aeacf51cf4c25319",
+          "structured_record_contracts": [
+            {
+              "pointer_pattern": "/candidate_panel/*",
+              "expected_count": 3,
+              "required_identity_keys": ["architecture_fingerprint", "edges", "operations"]
+            }
+          ],
+          "fingerprint_only_contracts": [
+            {
+              "pointer_pattern": "/baseline_provenance/baseline_rows/*/architecture_fingerprint",
+              "expected_count": 9,
+              "expected_json_type": "string"
+            }
+          ],
+          "skipped_non_architecture_identity_contracts": [
+            {"pointer_pattern": "/dataset_identity/edges", "expected_count": 1, "expected_json_type": "integer"}
+          ],
+          "skipped_redundant_identity_contracts": [],
+          "expected_structured_record_count": 3,
+          "expected_fingerprint_only_record_count": 9,
+          "expected_unique_architecture_count": 3,
+          "identity_set_sha256": "6b9ed62eb36df6091c4195fc7763bff1dfec9b633f6de147d9b88682fff26d97"
+        }
+      ]
+    }
+  },
+  "exposure_expected": {
+    "file_count": 606,
+    "parse_error_count": 0,
+    "tree_sha256": "40a9fc01007a06dc702b6413d6fdf23d4258f5237f3bbff7421b59b2e0f7dec7",
+    "architecture_count": 1253
+  },
+  "safety_selection_material": "fixed-layernorm-enhancement-global4-v2|safety-architecture-selection|2026-08-30",
+  "safety_selection_expected": {
+    "eligible_counts": {
+      "OH_BLIND_JOINT_RANDOM": 174,
+      "HR_BALANCED_RANDOM_HP": 191
+    },
+    "selected": [
+      {
+        "source": "OH_BLIND_JOINT_RANDOM",
+        "rank": 1,
+        "architecture_fingerprint": "c8997b13a29eb83cc6e86479197e01fedce82f3a9b7833302a29831c5baf4257",
+        "rank_hash": "00f2b6cbf4e7c6f0f8d4c66c7c456e3c8eaf13b68417283e604ab9b31d0959d8"
+      },
+      {
+        "source": "OH_BLIND_JOINT_RANDOM",
+        "rank": 2,
+        "architecture_fingerprint": "c132164074f86a46208ed6fc88c1a5896313e5788052018b177cc77904561f0e",
+        "rank_hash": "01eaff54014e660a3d20cc102db6dd1a14d7511a8d925e411b1c5ed544e6ee39"
+      },
+      {
+        "source": "HR_BALANCED_RANDOM_HP",
+        "rank": 1,
+        "architecture_fingerprint": "4de35d83f0269c97f99369d038212e9e53d3f191eef4019e02630308e0d19820",
+        "rank_hash": "0262a3d9a5848eaec921cf74f003aa9b3ff233cf8fb3ead3ed394ccc5f3d2194"
+      },
+      {
+        "source": "HR_BALANCED_RANDOM_HP",
+        "rank": 2,
+        "architecture_fingerprint": "4914015d3629fecd2384e45d954746522838e303b72e448309ff13551845eb31",
+        "rank_hash": "0572f84a50c38954f4f765193e92983d9636d41ad6addb27baa9eb0f60d58a29"
+      }
+    ]
+  },
+  "hp_screening": {
+    "raw_points": [
+      [0.875, 0.875, 0.875, 0.875],
+      [0.9125, 0.8375, 0.8375, 0.8375],
+      [0.8375, 0.9125, 0.9125, 0.9125],
+      [0.85625, 0.85625, 0.89375, 0.93125],
+      [0.93125, 0.93125, 0.81875, 0.85625]
+    ],
+    "expected_decoded": [
+      {"lr": 0.01539926526059492, "dropout": 0.5375, "hidden": 512, "l2": 0.001},
+      {"lr": 0.019109532372387533, "dropout": 0.518749988079071, "hidden": 512, "l2": 0.001},
+      {"lr": 0.01240937590439518, "dropout": 0.5562500119209289, "hidden": 512, "l2": 0.001},
+      {"lr": 0.01382372132496226, "dropout": 0.5281249940395355, "hidden": 512, "l2": 0.001},
+      {"lr": 0.02128751369636368, "dropout": 0.565624988079071, "hidden": 256, "l2": 0.001}
+    ]
+  },
+  "seed_rule": {
+    "start": 1000,
+    "count": 45,
+    "primary_count": 30,
+    "screening_count": 5,
+    "safety_count": 10
+  },
+  "inference": {
+    "signflip_seed_material": "fixed-layernorm-enhancement-global4-v2|signflip|2026-08-30",
+    "bootstrap_seed_material": "fixed-layernorm-enhancement-global4-v2|bootstrap|2026-08-30",
+    "signflip_draws": 200000,
+    "bootstrap_replicates": 100000
+  },
+  "workers": {
+    "count": 4,
+    "minimum_free_memory_mib": 20000,
+    "gpus": [
+      {"index": 0, "uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"},
+      {"index": 1, "uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"}
+    ],
+    "mapping": [
+      {"worker_id": 0, "gpu_index": 0, "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"},
+      {"worker_id": 1, "gpu_index": 1, "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"},
+      {"worker_id": 2, "gpu_index": 0, "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"},
+      {"worker_id": 3, "gpu_index": 1, "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"}
+    ]
+  },
+  "runtime_cost_records": [
+    {
+      "path": "results/posthoc/cora-layernorm-v1/training_cost.json",
+      "sha256": "f1fd44c93c960e7b72be2c4cab3a9aedfc50334479774a6dc0939d00c43e70ab",
+      "new_trainings": 9,
+      "gpu_seconds": 72.77165496721864
+    },
+    {
+      "path": "results/posthoc/cora-layernorm-crossover-v1/training_cost.json",
+      "sha256": "c089dc7fb9d63d3a8282830fa2f4dd0c6244bb1e195ca1cba13ebf46b8a88072",
+      "new_trainings": 12,
+      "gpu_seconds": 126.68223544210196
+    },
+    {
+      "path": "results/posthoc/cora-layernorm-high-region-v1/training_cost.json",
+      "sha256": "b68c51bf3b8139414acf1fb078e257d23bdd36daebc9ffb5a86efda220121bf5",
+      "new_trainings": 30,
+      "gpu_seconds": 319.63554343022406
+    },
+    {
+      "path": "results/posthoc/cora-layernorm-subgroup-v1/training_cost.json",
+      "sha256": "027e112fa7ff3ebb0268755207374fdaa240bde2bcbee7d8e45433d05e1a9c73",
+      "new_trainings": 36,
+      "gpu_seconds": 420.09404740296304
+    }
+  ]
+}

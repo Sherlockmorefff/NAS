@@ -1,0 +1,91 @@
+protocol_version: cross_method_search_collapse_diagnosis_global4_v1
+study_type: exploratory_posthoc_mechanism_diagnosis
+new_gnn_runs: 0
+gpu_use: forbidden
+test_access: forbidden
+
+inputs:
+  b4:
+    root: results/posthoc/b4-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: afb4bcf6dcc490ef884203dfa22414bbc1e203178b54f623fdb2ebdf1bf56ee9
+    required_classification: B4_SEARCH_NOT_CONFIRMED
+    learned_method: B4
+    random_method: B4_RANDOM
+  metric:
+    root: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1
+    archive: results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz
+    archive_sha256: 49e7b91956c433597f6f5e076ccaf2cf8d110b703388c9c81ad4dd5a8a141597
+    required_classification: METRIC_SEARCH_NOT_CONFIRMED
+    learned_methods: [M1, M2]
+    random_method: M12_RANDOM
+
+search_grid:
+  replicates: 8
+  rounds: 4
+  candidates_per_round: 128
+  selected_per_round: 4
+  selected_slots_per_method: 128
+  ranking_top_k: [4, 8, 16, 32]
+
+collapse_gate:
+  C1_effective_ratio_to_random_max: 0.35
+  C2_top2_share_min: 0.50
+  C3_median_unique_ratio_to_random_max: 0.60
+  indicators_required: 2
+  systematic_methods_required: [B4, M1, M2]
+
+pool_richness:
+  median_unique_architectures_per_pool_min: 64
+  both_universes_required: true
+
+saturation:
+  anytime_auc_gain_strictly_positive: true
+  original_gate_not_promoted: true
+  methods_required: 2
+
+counterfactual_policies:
+  P1:
+    name: ROUND_UNIQUE
+    unique_architectures_within_round: 4
+  P2:
+    name: ROUND_UNIQUE_CAP2
+    unique_architectures_within_round: 4
+    maximum_slots_per_architecture_per_replicate: 2
+  tie_break: joint_fingerprint_lexicographic_ascending
+  validation_may_influence_selection: false
+
+policy_feasibility:
+  tolerance: 1.0e-12
+  required_complete_rounds: 32
+  median_unique_architecture_multiplier_min: 1.50
+  median_original_rank_max: 16
+  fraction_original_rank_at_most_32_min: 0.90
+  mean_z_score_sacrifice_max: 0.50
+  preference: [P2, P1, NONE]
+
+scorer_selection:
+  eligibility:
+    anytime_auc_gain_strictly_positive: true
+    preferred_policy_not_none: true
+  ordering:
+    - anytime_auc_gain_descending
+    - final_best_gain_descending_within_1e-12
+    - method_id_lexicographic_ascending
+  tolerance: 1.0e-12
+
+authorization:
+  requires: [POOL_RICH, SYSTEMATIC_COLLAPSE, SATURATION_PATTERN, POLICY_AVAILABLE]
+  allowed_classifications:
+    - DIAGNOSIS_INPUT_INVALID
+    - NO_SYSTEMATIC_SEARCH_COLLAPSE
+    - COLLAPSE_PRESENT_BUT_DIVERSITY_TEST_NOT_JUSTIFIED
+    - DIVERSITY_TEST_AUTHORIZED
+    - RUN_FAILED
+
+output:
+  root: results/posthoc/cross-method-search-collapse-diagnosis-global4-v1
+  archive: results/posthoc/cross-method-search-collapse-diagnosis-global4-v1.tar.gz
+  archive_sha256_sidecar: results/posthoc/cross-method-search-collapse-diagnosis-global4-v1.tar.gz.sha256
+  overwrite: forbidden
+  next_experiment_automatic_execution: forbidden

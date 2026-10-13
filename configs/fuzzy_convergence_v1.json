@@ -1,0 +1,23 @@
+{
+  "version": "fuzzy-convergence-v1",
+  "groups": ["C", "F", "W"],
+  "model_seeds": [0, 1, 2],
+  "search_seeds": [2026091900, 2026091901, 2026091902, 2026091903, 2026091904],
+  "fold_parameters": [[0.02,0.01],[0.005,0.01],[0.02,0.1],[0.01,1.0],[0.005,0.01]],
+  "lambda_e": 0.001,
+  "mapping": {"prefix":100,"interval":20,"window":60,"cap":1000,"lr":0.001,"min_lr":0.00001,"loss_relative_range":0.002,"gradient_relative_initial":0.01,"gradient_rms_floor":0.00001,"gradient_max_floor":0.0001,"distance_l2":0.01,"distance_pair":0.02},
+  "gp": {"prefix":20,"interval":10,"window":30,"cap":300,"lr":0.05,"min_lr":0.0001,"loss_range":0.001,"gradient_relative_initial":0.01,"gradient_rms_floor":0.000001,"gradient_max_floor":0.00001,"prediction_range_raw":0.0005},
+  "stable_consecutive_windows":3,
+  "scheduler_stagnant_checks":3,
+  "scheduler_factor":0.5,
+  "mapping_best_improvement":"best-current > max(1e-8, 0.002*abs(best))",
+  "gp_best_improvement":"best-current > 0.001*max(1,abs(best))",
+  "scheduler_order":"check stable first; passing window pauses scheduler; lr changes invalidate windows until all post states use new lr",
+  "formal_limits":{"mapping":127500,"gp":75000,"gp_fits":390},
+  "synthetic_limits":{"mapping":60,"gp":60},
+  "replay":{"initial":20,"queries":50,"batch":5,"mapping_update_every":10,"mapping_fit_q":[0,10,20,30,40],"gp_fit_q":[0,5,10,15,20,25,30,35,40,45],"epsilon":0.01,"C":0.0,"F":0.1,"W":0.01},
+  "device":"cpu","threads":1,"new_GNN_training":0,"VAE_updates":0,"B_test_access":0,
+  "numerical_tolerances":{"prefix_model_Adam_RNG":"exact hash equality","independent_GP_mean":1e-8,"scalar_metrics":1e-14},
+  "finite_cap_behavior":"continue frozen final state and mark fallback",
+  "nonfinite_behavior":"stop trajectory, no random filling or parameter retry"
+}

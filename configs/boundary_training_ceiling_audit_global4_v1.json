@@ -1,0 +1,343 @@
+{
+  "analysis_contract": {
+    "boundary": {
+      "continuous_main_upper_u": 0.9,
+      "continuous_secondary_upper_u": 0.8,
+      "depth_6_7_authorized": false,
+      "enrichment_denominator_zero": "INVALID",
+      "equal_source_weighting": true,
+      "fixed_top_tail_no_tie_expansion": true,
+      "practical_margin": 0.003,
+      "top_tail_proportions": [
+        0.25,
+        0.1,
+        0.05
+      ]
+    },
+    "classification_table": {
+      "boundary_false_training_false_sufficient_false": "AUDIT_INPUT_INCOMPATIBLE",
+      "boundary_false_training_false_sufficient_true": "NO_SIMPLE_BOUNDARY_OR_TRAINING_SIGNAL",
+      "boundary_false_training_true_sufficient_true": "TRAINING_CEILING_PRIORITY",
+      "boundary_true_training_false_any_sufficiency": "HP_BOUNDARY_EXPANSION_AUTHORIZED",
+      "boundary_true_training_true_sufficient_true": "BOUNDARY_AND_TRAINING_BOTH_PLAUSIBLE",
+      "engineering_exception": "RUN_FAILED"
+    },
+    "interaction": {
+      "adjacent_cells": [
+        [
+          256,
+          0.001
+        ],
+        [
+          512,
+          0.0005
+        ]
+      ],
+      "combined_min_cell_n": 20,
+      "high_high_cell": [
+        512,
+        0.001
+      ],
+      "source_complete_cell_reversal_forbidden": true
+    },
+    "matching": {
+      "configuration_reuse": false,
+      "exact_coordinate_tolerance": 1e-12,
+      "exact_first": true,
+      "larger_target_gain": true,
+      "nearest_coordinate_tolerance": 0.1,
+      "normalized_euclidean_distance": true,
+      "same_architecture": true,
+      "same_source_stratum": true,
+      "tie_win_credit": 0.5
+    },
+    "primary_strata": [
+      "OH_BLIND_JOINT_RANDOM",
+      "HR_BALANCED_RANDOM_HP"
+    ],
+    "q90": {
+      "bootstrap_ci": "percentile_2.5_97.5",
+      "bootstrap_gate_role": "robustness_only",
+      "bootstrap_unit": "configuration",
+      "combined_min_high_penultimate_n": 20,
+      "continuous_bins": [
+        0.0,
+        0.2,
+        0.4,
+        0.6,
+        0.8,
+        1.0
+      ],
+      "discrete_l2_comparison": [
+        0.001,
+        0.0005
+      ],
+      "equal_source_gap": true,
+      "method": "linear"
+    },
+    "secondary_boundary_authorization": false,
+    "training": {
+      "complete_field_coverage_min": 0.95,
+      "equal_weight_sources": 5,
+      "late_best_eval_fraction": 0.9,
+      "source_direction_min": 3,
+      "top10_complete_seed_runs_min": 30,
+      "truncation_logic": "T1_AND_(T2_OR_T3)_AND_SOURCE_DIRECTION_GUARD"
+    },
+    "validation_only": true
+  },
+  "bootstrap_replicates": 50000,
+  "bootstrap_specification": {
+    "confidence_interval": "percentile_2.5_97.5",
+    "gate_role": "robustness_only_not_gate",
+    "metric_order": [
+      "hidden",
+      "l2",
+      "lr_u",
+      "dropout_u",
+      "depth",
+      "hidden_l2_interaction"
+    ],
+    "quantile_method": "linear",
+    "resampling": "resample whole configurations with replacement within each source stratum, then recompute source Q90 gaps and equal-weight the two source gaps",
+    "rng_seed": "unsigned big-endian integer from the first 8 bytes of frozen_protocol.json SHA256",
+    "unit": "configuration"
+  },
+  "compatibility": {
+    "component_variant": "baseline",
+    "dataset": "Cora",
+    "dataset_content_fingerprint": "373d00c7962dc1ab0cc86974b1542eb76a768d2878013ceee0691b3932d062c7",
+    "eval_epochs": 300,
+    "graph_transform": "NormalizeFeatures",
+    "hp_mode": "global4",
+    "metric": "accuracy",
+    "normalization": "none",
+    "patience": 80,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "split": "public",
+    "split_fingerprint": "bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09",
+    "test_accessed": false,
+    "track_test": false,
+    "training_entry": "eval_utils.train_and_eval_arch",
+    "training_mode": "full_batch"
+  },
+  "decoder": {
+    "dropout_bounds": [
+      0.1,
+      0.6
+    ],
+    "hidden_levels": [
+      16,
+      32,
+      64,
+      128,
+      256,
+      512
+    ],
+    "hp_modes_sha256": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf",
+    "hp_modes_snapshot": "results/posthoc/b4-guided-search-accuracy-gate-global4-v1/source_snapshot/hp_modes.py",
+    "l2_levels": [
+      1e-05,
+      5e-05,
+      0.0001,
+      0.0005,
+      0.001
+    ],
+    "lr_bounds": [
+      0.0001,
+      0.03162277660168379
+    ],
+    "max_effective_depth": 5,
+    "nas_space_sha256": "386514dac7bbffabea45bd8a2663bf6da8b740b3fd55eef361aa2ae14350727b",
+    "nas_space_snapshot": "results/posthoc/b4-guided-search-accuracy-gate-global4-v1/source_snapshot/imported_local_modules/nas_space.py"
+  },
+  "experiment": "boundary-training-ceiling-audit-global4-v1",
+  "fresh_ceiling_identity": {
+    "candidate_universe": "results/posthoc/fresh-seed-accuracy-ceiling-confirmation-global4-v1/candidate_universe.csv",
+    "candidate_universe_sha256": "290c1bb9f61d7369b03b294f616c65a42eb9160537c2f3c40203b11ab7df3b3c",
+    "expected_configurations": 1121
+  },
+  "frozen_reference_P": {
+    "architecture_fingerprint": "960efb3b97f00491c3956657cfd57958effb6096f65b1db2fa8aaae586b82207",
+    "dropout": 0.55173624,
+    "edges": [
+      [0, 1],
+      [1, 2],
+      [0, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [3, 5],
+      [0, 5],
+      [5, 6]
+    ],
+    "fresh_30_validation_mean_approx": 0.80773,
+    "hidden": 512,
+    "historical_30_seed_validation_mean": 0.8087333,
+    "hp_fingerprint": "911259943106a1edad300bc5300a3883ece8cbffba48b95e6c61b6e5eb4b679d",
+    "joint_fingerprint": "30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2",
+    "l2": 0.001,
+    "layernorm": false,
+    "lr": 0.0219530948,
+    "operations": [
+      "GCNConv",
+      "GATConv",
+      "GCNII",
+      "GCNII",
+      "SAGEConv"
+    ]
+  },
+  "gates": {
+    "boundary_upper_main": 0.9,
+    "boundary_upper_secondary": 0.8,
+    "enrichment_min": 1.5,
+    "interaction_gap_min": 0.003,
+    "matched_gain_min": 0.003,
+    "matched_min_pairs": 20,
+    "matched_win_rate_min": 0.6,
+    "q90_gap_min": 0.003,
+    "training_late_best_fraction_min": 0.4,
+    "training_late_best_ratio_min": 1.5,
+    "training_ran_to_max_fraction_min": 0.5
+  },
+  "input_sources": [
+    {
+      "archive": "results/posthoc/original-head-confirmatory-attribution-global4-v2/original-head-confirmatory-attribution-global4-v2-20260825.tar.gz",
+      "archive_sha256": "95a58f74985e202c2f6524b8d3daef91d25b89887bae9b50d66eedbd8da47819",
+      "archive_sidecar": "results/posthoc/original-head-confirmatory-attribution-global4-v2/original-head-confirmatory-attribution-global4-v2-20260825.tar.gz.sha256",
+      "archive_manifest_member": "artifact_manifest.json",
+      "expected_configurations": 192,
+      "frozen_selection": "frozen_strategy_selections.json",
+      "layernorm_evaluator": "source_snapshot/analyse/run_original_head_confirmatory_attribution_v2_labels.py",
+      "manifest": "artifact_manifest.json",
+      "manifest_sha256": "113082170098cd6e197dc8ccc60f81d99e5e48438dd3aa9f5ff889500bee73ce",
+      "name": "OH_BLIND_JOINT_RANDOM",
+      "pre_label_firewall": "pre_label_firewall_audit.json",
+      "preregistration": "preregistration.json",
+      "result_records": [
+        "phase_b/seed_results_merged_summary.csv"
+      ],
+      "root": "results/posthoc/original-head-confirmatory-attribution-global4-v2",
+      "role": "primary",
+      "selection": "selected_union_configs.json",
+      "strategy": "BLIND_JOINT_RANDOM",
+      "test_evidence": "final_classification.json"
+    },
+    {
+      "archive": "results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz",
+      "archive_sha256": "050a64b0cde5bdb17ababa9833e5ee578b448c9b19da31fbb00f0251ec82491c",
+      "archive_sidecar": "results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz.sha256",
+      "archive_manifest_member": "artifact_manifest.json",
+      "expected_configurations": 192,
+      "frozen_selection": "frozen_strategy_selections.json",
+      "frozen_selection_task_stage_policy": "matching_strategy_rows_require_task_stage_key_absent",
+      "layernorm_evaluator": "source_snapshot/analyse/run_high_regime_prior_model_blind_validation_labels.py",
+      "manifest": "artifact_manifest.json",
+      "manifest_sha256": "f16688c3d67fa14580292b54729341cff80a97675b53ab9a1acf040c6923cbcb",
+      "name": "HR_BALANCED_RANDOM_HP",
+      "pre_label_firewall": "pre_label_firewall_audit.json",
+      "preregistration": "preregistration.json",
+      "result_records": [
+        "phase_b/initial/seed_results_merged_summary.csv"
+      ],
+      "root": "results/search/high-regime-prior-model-blind-validation-global4-v1",
+      "role": "primary",
+      "selection": "selected_union_configs.json",
+      "strategy": "BALANCED_RANDOM_HP",
+      "task_stage": "initial",
+      "test_evidence": "final_classification.json"
+    },
+    {
+      "archive": "results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz",
+      "archive_sha256": "afb4bcf6dcc490ef884203dfa22414bbc1e203178b54f623fdb2ebdf1bf56ee9",
+      "archive_sidecar": "results/posthoc/b4-guided-search-accuracy-gate-global4-v1.tar.gz.sha256",
+      "archive_manifest_member": "b4-guided-search-accuracy-gate-global4-v1/manifest.json",
+      "decision": "decision.json",
+      "dependency_manifest": "evaluation/evaluator_adapter/source_dependency_manifest.json",
+      "expected_configurations": 254,
+      "expected_generator_candidates": 4096,
+      "frozen_protocol": "frozen_protocol.json",
+      "generator_manifest": "pre_search/candidate_manifest.csv",
+      "manifest": "manifest.json",
+      "manifest_sha256": "5ef4d5f7560d0a62ed92bd3e901c80ede3f20755661bb69acc7a6dd5970ee0ab",
+      "name": "B4_GUIDED_SEARCH_COMPLETE",
+      "result_records": [
+        "evaluation/gpu0/seed_results.jsonl",
+        "evaluation/gpu1/seed_results.jsonl"
+      ],
+      "root": "results/posthoc/b4-guided-search-accuracy-gate-global4-v1",
+      "role": "secondary"
+    },
+    {
+      "archive": "results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz",
+      "archive_sha256": "49e7b91956c433597f6f5e076ccaf2cf8d110b703388c9c81ad4dd5a8a141597",
+      "archive_sidecar": "results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1.tar.gz.sha256",
+      "archive_manifest_member": "m1-m2-metric-guided-search-accuracy-gate-global4-v1/manifest.json",
+      "decision": "decision.json",
+      "dependency_manifest": "evaluation/evaluator_adapter/source_dependency_manifest.json",
+      "expected_configurations": 364,
+      "expected_generator_candidates": 4096,
+      "frozen_protocol": "frozen_protocol.json",
+      "generator_manifest": "pre_search/candidate_manifest.csv",
+      "manifest": "manifest.json",
+      "manifest_sha256": "b9ee3a27459f2944c7c46b9bb7d509dddc1f40b0066fdb01967a08835aa1f2f4",
+      "name": "M1_M2_SEARCH_COMPLETE",
+      "result_records": [
+        "evaluation/gpu0/seed_results.jsonl",
+        "evaluation/gpu1/seed_results.jsonl"
+      ],
+      "root": "results/posthoc/m1-m2-metric-guided-search-accuracy-gate-global4-v1",
+      "role": "secondary"
+    },
+    {
+      "archive": "results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1.tar.gz",
+      "archive_sha256": "aaa471d6e97b88c70d7f11b0ded1b3833895f1e24ed5e9489615e2d1296af1be",
+      "archive_sidecar": "results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1.tar.gz.sha256",
+      "archive_manifest_member": "b4-arch-diversity-prospective-search-accuracy-gate-global4-v1/manifest.json",
+      "decision": "decision.json",
+      "dependency_manifest": "evaluation/evaluator_adapter/source_dependency_manifest.json",
+      "expected_configurations": 503,
+      "expected_generator_candidates": 6144,
+      "frozen_protocol": "frozen_protocol.json",
+      "generator_manifest": "pre_search/candidate_manifest.csv",
+      "manifest": "manifest.json",
+      "manifest_sha256": "8cb6ceea0cc21be85f94aa41b926491525453fd28518b8f5783afd45a19d5dc6",
+      "name": "B4_ARCH_DIVERSITY_SEARCH_COMPLETE",
+      "result_records": [
+        "evaluation/gpu0/seed_results.jsonl",
+        "evaluation/gpu1/seed_results.jsonl"
+      ],
+      "root": "results/posthoc/b4-arch-diversity-prospective-search-accuracy-gate-global4-v1",
+      "role": "secondary"
+    }
+  ],
+  "output": "results/posthoc/boundary-training-ceiling-audit-global4-v1",
+  "protocol_version": "phase-a-e-master-global4-v1",
+  "required_dependency_hashes": {
+    "architecture_diagnostics.py": "a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f",
+    "dataset_utils.py": "8c47efed0521241cd067d4cf5a6e0283f905f1921db4066f5531d707c20648fa",
+    "deterministic_runtime.py": "41c3be4824cee9d4e1e9eee4afb58db8b61e69726dfeda0f44146adaf613ac24",
+    "eval_utils.py": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+    "evaluation_errors.py": "40c42b17454c6cc15e305cfb7f48f6bcd35624e6e29472d2cdd034c08c905936",
+    "hp_modes.py": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf",
+    "models.py": "975c9b20f064a9bda98f99db04946cac89ab84cddf8a584217926b6853dffc7e",
+    "nas_space.py": "386514dac7bbffabea45bd8a2663bf6da8b740b3fd55eef361aa2ae14350727b"
+  },
+  "scientific_budget": {
+    "gpu": 0,
+    "new_gnn": 0,
+    "test_access": 0
+  },
+  "runner": "scripts/run_boundary_training_ceiling_audit.sh",
+  "runner_sha256": "70c91ead247cf0acb654a487437a3b7ad83a142a7a71cad188fe1f527f7e19f8",
+  "tmux_session": "boundary_training_audit_v1",
+  "top_tail_proportions": [
+    0.25,
+    0.1,
+    0.05
+  ]
+}

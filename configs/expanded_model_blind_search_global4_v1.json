@@ -1,0 +1,644 @@
+{
+  "schema_version": "expanded-model-blind-search-global4-v1",
+  "experiment": "expanded-model-blind-search-global4-v1",
+  "repository_root": "/home/fangxy/D-VAE",
+  "required_host": "ismc36",
+  "result_root": "results/posthoc/expanded-model-blind-search-global4-v1",
+  "tmux_name": "expanded_model_blind_search_v1",
+  "result_root_must_be_absent_before_any_write": true,
+  "phase_e_must_never_start": true,
+  "governing_documents": [
+    {
+      "path": "plans/phase_a_e_frozen_master_protocol_2026-08-30.md",
+      "sha256": "e591c1ae6f966374885b06e1a0b76d201406a5460b8e4eec1e45d8e747e296eb"
+    },
+    {
+      "path": "plans/phase_c_v2_amendment_2026-08-30.md",
+      "sha256": "1d487f8bd5ddebc4a6b964f77975e3fc1931496ce4c800658b50cfa8640f4279"
+    },
+    {
+      "path": "Handoff.md",
+      "sha256": "ab3d5e96969a100e4c1e34f4118543cc88d388eb81f56f78a897d7d6b9a77d84"
+    }
+  ],
+  "governing_documents_available_to_outer_controller_only": true,
+  "accepted_upstream": {
+    "phase_a": {
+      "state": "COMPLETE",
+      "classification": "NO_SIMPLE_BOUNDARY_OR_TRAINING_SIGNAL",
+      "boundary": false,
+      "training": false,
+      "test": false,
+      "test_accessed": false,
+      "phase_b_started": false,
+      "phase_b_status": "NOT_RUN"
+    },
+    "phase_c": {
+      "result_root": "results/posthoc/fixed-layernorm-enhancement-global4-v2-recovery1",
+      "run_id": "phase-c-v2-14f9af76-6456-4303-a1a8-cbe5a116db7e",
+      "classification": "FIXED_LN_RECIPE_AUTHORIZED_FOR_PHASE_D_TESTING",
+      "formal_manifest_root_sha256": "e1d659676e3004c56ca72758dfe1698a5fbc29b00b9064fd5af9934c27b0e2d1",
+      "archive_sha256": "c37714049f1fbcb8e2562cb4047b485242543c843ce409dfdc1ab1d4fb6579f8",
+      "state": "COMPLETE",
+      "scientific_decision": "REACHED",
+      "planned_task_count": 240,
+      "completed_task_count": 240,
+      "failed_task_count": 0,
+      "retry_task_count": 0,
+      "test_accessed": false,
+      "phase_d_started": false,
+      "phase_e_started": false
+    },
+    "use_as_declared_identity_only_without_rereading_outcome_values": true
+  },
+  "dependency_hashes": {
+    "analyse/high_regime_prior_model_blind_validation.py": "4c6f5228abe7480c1a018b187483461505a272246dc13ef1084eafac2887ac39",
+    "analyse/original_head_deterministic_batch_pilot.py": "381ab598aca5d75b82d5c4c152942fe96bc292a640979a2fcc4b3348a4ae6723",
+    "architecture_diagnostics.py": "a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f",
+    "analyse/performance_aware_vae_strict_regression.py": "a2e722153f68c25eb593357b9313f7ec14408d0fbe34d8cc1b66f4820b503121",
+    "analyse/structure_native_surrogate_pilot.py": "192771e783386a280b2c2c4b6934afdcbf41e6549c49d7ff7aea656b62e0ad96",
+    "eval_utils.py": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+    "analyse/fixed_layernorm_enhancement_v2.py": "c766eb8f1032b5fb9eae1be5782f0d1335e7213e70264500dc67c8e6f7a60a54",
+    "checkpoints/joint_model_pipeline_global4_best.pth": "e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4"
+  },
+  "verify_live_dependencies_before_candidate_generation": true,
+  "legacy_helpers": {
+    "generator_entrypoint": "analyse/high_regime_prior_model_blind_validation.py::_decode_global_reservoir",
+    "helper_source": "analyse/original_head_deterministic_batch_pilot.py",
+    "functions": [
+      "load_joint_vae",
+      "config_from_igraph",
+      "architecture_fingerprint",
+      "validate_static_config",
+      "hp_fingerprint",
+      "realize_global4_hp"
+    ],
+    "read_only_direct_use": true,
+    "semantic_changes_forbidden": true
+  },
+  "historical_exposure": {
+    "projection": "architecture_identity_only",
+    "forbid_deserializing_accuracy_validation_or_test_fields": true,
+    "artifacts": [
+      {
+        "path": "results/search/high-regime-prior-model-blind-validation-global4-v1/exposure_registry.json",
+        "size_bytes": 1498071,
+        "sha256": "98c5f54345a41b90b1b89f0bf1a6d883974c36eadcb4291d93b529a068bb3d66",
+        "architecture_count": 13871
+      },
+      {
+        "path": "results/search/high-regime-prior-model-blind-validation-global4-v1/global_reservoir.json",
+        "size_bytes": 164195,
+        "sha256": "ff4bb7f06dc2424b6b686b2102d43f590c9cdaaf363f3ab9f020c3f50a63f619",
+        "architecture_count": 192
+      }
+    ],
+    "input_overlap_count": 0,
+    "union_architecture_count": 14063,
+    "broad_historical_rescan_forbidden": true,
+    "commitment": {
+      "algorithm": "sha256",
+      "encoding": "canonical-json-sorted-architecture-fingerprint-list",
+      "record_in_prelaunch": true
+    },
+    "phase_d_architecture_count": 192,
+    "require_phase_d_global_uniqueness": true,
+    "require_phase_d_disjoint_from_union": true
+  },
+  "p_anchor": {
+    "identity_source": {
+      "path": "results/search/high-regime-prior-model-blind-validation-global4-v1/selected_union_configs.json",
+      "sha256": "7ae5cb88664ffb7d3d33374766ff8b986f25f6d465ba3a65d968f1f03c73c792",
+      "projection": "exact_identity_and_hp_row_only"
+    },
+    "row": {
+      "architecture_fingerprint": "960efb3b97f00491c3956657cfd57958effb6096f65b1db2fa8aaae586b82207",
+      "hp_fingerprint": "911259943106a1edad300bc5300a3883ece8cbffba48b95e6c61b6e5eb4b679d",
+      "joint_config_fingerprint": "30e0bb108c1fdbe8db186152a09c3f2fc6e812be189db920fe4d0d2b0d3cb1a2",
+      "config_id": "hr_p22_b0_s4_960efb3b97f0_hp_high_91125994",
+      "operations": [
+        "GCNConv",
+        "GATConv",
+        "GCNII",
+        "GCNII",
+        "SAGEConv"
+      ],
+      "edges": [
+        [0, 1],
+        [1, 2],
+        [0, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [3, 5],
+        [0, 5],
+        [5, 6]
+      ],
+      "effective_layers": 5,
+      "raw_hp_vector": [
+        0.936598281105957,
+        0.9034724664872731,
+        0.8355336476052301,
+        0.8524634455587309
+      ],
+      "lr": 0.0219530947756673,
+      "dropout": 0.5517362415790558,
+      "hidden_dim": 512,
+      "l2": 0.001,
+      "gat_heads": 1,
+      "sage_aggr": "mean",
+      "gin_eps": 0.0,
+      "gat_heads_by_layer": null,
+      "sage_aggr_by_layer": null,
+      "gin_eps_by_layer": null,
+      "gcnii_alpha": null,
+      "gcnii_theta": null,
+      "hp_regime": "hp_high"
+    },
+    "recompute_and_require_fingerprints": [
+      "architecture_fingerprint",
+      "hp_fingerprint",
+      "joint_config_fingerprint"
+    ],
+    "component_variant": "baseline",
+    "seeds": [0, 1, 2],
+    "fresh_training_task_count": 3,
+    "historical_accuracy_reuse_forbidden": true
+  },
+  "search_design": {
+    "replicate_ids": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12"
+    ],
+    "slot_ids": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16"
+    ],
+    "arms": [
+      {
+        "arm": "Control",
+        "component_variant": "baseline"
+      },
+      {
+        "arm": "Intervention",
+        "component_variant": "layer_norm"
+      }
+    ],
+    "training_seeds": [0, 1, 2],
+    "architecture_count_per_replicate": 16,
+    "paired_unit_count": 576,
+    "search_task_count": 1152,
+    "task_counts": {
+      "Control": 576,
+      "Intervention": 576,
+      "P_anchor": 3,
+      "method_equivalent_total": 1155
+    },
+    "equal_budget_arms": true,
+    "same_architecture_and_raw_decoded_hp_within_pair": true
+  },
+  "generation": {
+    "architecture_latent_dimension": 12,
+    "torch_generator_device": "cpu",
+    "architecture_distribution": "standard_normal",
+    "decoder_call": "model.arch_vae.decode(latent_batch, stochastic=False)",
+    "decode_batch_size": 256,
+    "ordered_stream_consumption": true,
+    "one_randn_per_call_forbidden": true,
+    "global_permutation_forbidden": true,
+    "seed_derivation": {
+      "algorithm": "sha256-first-8-bytes",
+      "byte_order": "big",
+      "signed": false,
+      "mask_modulo_or_sign_conversion_forbidden": true,
+      "system_or_time_randomness_forbidden": true,
+      "architecture_material_template": "expanded-model-blind-search-global4-v1|architecture-slots|replicate={replicate_id}|2026-08-30",
+      "raw_hp_material_template": "expanded-model-blind-search-global4-v1|raw-hp-uniforms|replicate={replicate_id}|2026-08-30",
+      "streams_independent": true
+    },
+    "architecture_acceptance": {
+      "convert_with": "config_from_igraph",
+      "static_validate_with": "validate_static_config",
+      "fingerprint_with": "architecture_fingerprint",
+      "reject_conversion_failure": true,
+      "reject_legacy_static_invalid": true,
+      "reject_historical_exposure": true,
+      "reject_previously_accepted_phase_d_architecture": true,
+      "rejection_counter_scope": "replicate_slot_reset_after_acceptance",
+      "maximum_allowed_rejections_per_slot": 1000,
+      "fail_on_rejection_number": 1001,
+      "record_generated_draw_count": true,
+      "record_consumed_draw_count": true,
+      "record_rejection_reasons": true,
+      "stop_after_slot": "16",
+      "record_unused_values_from_final_batch": true,
+      "unused_values_must_not_be_reassigned": true
+    },
+    "raw_hp": {
+      "consume_only_after_architecture_acceptance": true,
+      "generator": "numpy.random.default_rng",
+      "dtype": "float64",
+      "distribution": "uniform",
+      "low": 0.8,
+      "high": 0.95,
+      "size": 4,
+      "coordinate_order": [
+        "u_lr",
+        "u_dropout",
+        "u_hidden",
+        "u_l2"
+      ],
+      "fingerprint_with": "hp_fingerprint",
+      "decode_with": "realize_global4_hp",
+      "hp_regime": "hp_high",
+      "double_rescaling_forbidden": true,
+      "both_arms_reference_byte_equivalent_values": true
+    }
+  },
+  "training_protocol": {
+    "hp_regime": "hp_high",
+    "max_epochs": 300,
+    "patience": 80,
+    "seeds": [0, 1, 2],
+    "p_anchor_uses_same_protocol": true,
+    "hidden_or_l2_expansion": false,
+    "max_epochs_600_or_patience_160": false,
+    "surrogate": false,
+    "predictor": false,
+    "bayesian_optimization": false,
+    "diversity_selection": false,
+    "adaptive_allocation": false,
+    "candidate_replacement": false,
+    "seed_replacement": false,
+    "result_imputation": false,
+    "optimizer_checkpoint_and_evaluator": "source-bound eval_utils.train_and_eval_arch legacy behavior",
+    "layer_norm_contract": {
+      "order": [
+        "operation",
+        "LayerNorm",
+        "activation",
+        "dropout"
+      ],
+      "identity_gets_layer_norm": false,
+      "control_has_layer_norm": false,
+      "intervention_has_only_layer_norm_change": true
+    }
+  },
+  "workers": {
+    "count": 4,
+    "gpus": [
+      {
+        "index": 0,
+        "uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"
+      },
+      {
+        "index": 1,
+        "uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"
+      }
+    ],
+    "mapping": [
+      {
+        "worker_id": 0,
+        "gpu_index": 0,
+        "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"
+      },
+      {
+        "worker_id": 1,
+        "gpu_index": 1,
+        "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"
+      },
+      {
+        "worker_id": 2,
+        "gpu_index": 0,
+        "gpu_uuid": "GPU-5496be78-3b71-4978-3960-b6ed926ebe49"
+      },
+      {
+        "worker_id": 3,
+        "gpu_index": 1,
+        "gpu_uuid": "GPU-197ae2b9-74cd-6afc-446d-7bc9e98176f9"
+      }
+    ],
+    "pair_order": [
+      "replicate_id",
+      "slot_id",
+      "seed"
+    ],
+    "pair_index_zero_based": true,
+    "pair_assignment_rule": "worker_id = pair_index % 4",
+    "both_arms_colocated": true,
+    "p_anchor_assignment": {
+      "0": 0,
+      "1": 1,
+      "2": 2
+    },
+    "search_arm_task_counts_per_worker": {
+      "0": {
+        "Control": 144,
+        "Intervention": 144
+      },
+      "1": {
+        "Control": 144,
+        "Intervention": 144
+      },
+      "2": {
+        "Control": 144,
+        "Intervention": 144
+      },
+      "3": {
+        "Control": 144,
+        "Intervention": 144
+      }
+    },
+    "total_task_counts_per_worker": {
+      "0": 289,
+      "1": 289,
+      "2": 289,
+      "3": 288
+    },
+    "search_arm_task_counts_per_gpu": {
+      "0": {
+        "Control": 288,
+        "Intervention": 288
+      },
+      "1": {
+        "Control": 288,
+        "Intervention": 288
+      }
+    },
+    "total_task_counts_per_gpu": {
+      "0": 578,
+      "1": 577
+    },
+    "retries_never_move_task_worker_or_gpu": true
+  },
+  "pair_equality": {
+    "assert_structurally": true,
+    "only_fields_allowed_to_differ": [
+      "task_id",
+      "arm",
+      "component_variant"
+    ],
+    "fields_required_equal_include": [
+      "architecture",
+      "raw_hp_vector",
+      "decoded_hp",
+      "seed",
+      "max_epochs",
+      "patience",
+      "training_semantics"
+    ]
+  },
+  "evaluation": {
+    "dataset": "Cora",
+    "dataset_root": "Cora",
+    "split": "public",
+    "transform": "NormalizeFeatures",
+    "full_batch": true,
+    "evaluator": "eval_utils.train_and_eval_arch",
+    "checkpoint_rule": "existing validation-only best-checkpoint rule",
+    "formal_track_test_literal": false,
+    "return_metadata": true,
+    "data_proxy_source": "analyse/fixed_layernorm_enhancement_v2.py::ValidationOnlyDataProxy",
+    "data_allowlist": [
+      "x",
+      "edge_index",
+      "train_mask",
+      "val_mask",
+      "y"
+    ],
+    "formal_worker_dataset_loads_at_most_once": true,
+    "forbid_test_mask_test_metric_and_forbidden_requests": true,
+    "forbidden_request_terminates_run": true,
+    "final_or_test_evaluator_forbidden": true
+  },
+  "retry": {
+    "maximum_retries_per_task": 2,
+    "maximum_attempts_per_task": 3,
+    "retryable_exception_types": [
+      "InfrastructureEvaluationError",
+      "OSError",
+      "TimeoutError"
+    ],
+    "scientific_identity_firewall_and_evaluator_invalid_failures_retryable": false,
+    "same_candidate_seed_protocol_worker_and_gpu_required": true,
+    "retry_task_count_definition": "distinct task IDs with attempt > 1 across all 1155 planned tasks",
+    "maximum_allowed_retried_task_count": 57,
+    "fail_immediately_on_retried_task_count": 58,
+    "third_failed_attempt_fails_run": true,
+    "method_equivalent_task_count": 1155,
+    "physical_attempt_count_recorded_separately": true,
+    "only_final_successful_observation_enters_statistics": true
+  },
+  "lifecycle": {
+    "modes": [
+      "synthetic-smoke",
+      "dry-run",
+      "record-launch-request",
+      "runner-enter",
+      "formal-run",
+      "runner-exit"
+    ],
+    "synthetic_smoke": {
+      "fake_inputs_only": true,
+      "real_dataset_access": false,
+      "real_checkpoint_access": false,
+      "gnn_evaluations": 0,
+      "cuda_initialization": false,
+      "result_root_write": false
+    },
+    "dry_run": {
+      "verify_inputs_dependencies_gpu_identity_and_zero_compute_processes": true,
+      "freeze_candidate_count": 192,
+      "freeze_task_count": 1155,
+      "gnn_evaluations": 0,
+      "test_accessed": false,
+      "publish_only_after_all_checks": true
+    },
+    "prelaunch_publication": {
+      "staging_parent": "result_root_parent",
+      "atomic_directory_rename": true,
+      "tmp_to_result_rename_forbidden": true,
+      "overwrite_forbidden": true
+    },
+    "launch_request": {
+      "unique_run_uuid": true,
+      "bind_prelaunch_manifest_source_snapshots_frozen_protocol_and_task_ledger": true,
+      "exclusive": true
+    },
+    "formal_start": {
+      "same_parent_staging": true,
+      "atomic_directory_publication": true,
+      "bind_launch_request_and_prelaunch_manifest": true
+    }
+  },
+  "prelaunch": {
+    "required_files": [
+      "frozen_protocol.json",
+      "inference_plan.json",
+      "input_hashes.json",
+      "frozen_exposure.json",
+      "frozen_candidates.json",
+      "frozen_tasks.json",
+      "assignments.json",
+      "test_firewall.json",
+      "pre_execution_estimate.json",
+      "environment.json",
+      "state.json",
+      "source_snapshot/analyse/expanded_model_blind_search_global4_v1.py",
+      "source_snapshot/configs/expanded_model_blind_search_global4_v1.json",
+      "source_snapshot/scripts/run_expanded_model_blind_search_global4_v1.sh",
+      "source_snapshot/tests/test_expanded_model_blind_search_global4_v1.py",
+      "manifest.json"
+    ],
+    "source_snapshot_paths": [
+      "analyse/expanded_model_blind_search_global4_v1.py",
+      "configs/expanded_model_blind_search_global4_v1.json",
+      "scripts/run_expanded_model_blind_search_global4_v1.sh",
+      "tests/test_expanded_model_blind_search_global4_v1.py"
+    ],
+    "source_snapshot_count": 4,
+    "manifest_root": {
+      "algorithm": "sha256",
+      "encoding": "canonical-json-sorted-file-records",
+      "covers_all_other_prelaunch_files": true,
+      "deterministic": true
+    }
+  },
+  "formal_artifacts": {
+    "required": [
+      "formal/start.json",
+      "formal/attempt_ledger.json",
+      "formal/task_ledger.json",
+      "formal/test_access_ledger.json",
+      "formal/results.json",
+      "formal/statistics.json",
+      "formal/challengers.json",
+      "formal/decision.json",
+      "formal/state.json",
+      "formal/terminal.json",
+      "formal/manifest.json",
+      "expanded-model-blind-search-global4-v1.tar.gz",
+      "expanded-model-blind-search-global4-v1.tar.gz.sha256"
+    ],
+    "archive": {
+      "basename": "expanded-model-blind-search-global4-v1.tar.gz",
+      "sidecar_basename": "expanded-model-blind-search-global4-v1.tar.gz.sha256",
+      "member_set_matches_prelaunch_and_formal_manifests": true,
+      "unique_regular_files_only": true,
+      "validate_before_complete": true,
+      "exclude_from_archive": [
+        "expanded-model-blind-search-global4-v1.tar.gz",
+        "expanded-model-blind-search-global4-v1.tar.gz.sha256",
+        "completion.json"
+      ]
+    }
+  },
+  "inference": {
+    "replicate_arm_config_seed_observations": 3,
+    "config_score": "arithmetic_mean_of_seeds_0_1_2",
+    "final_best": "maximum_of_16_config_means",
+    "final_best_tie_break": "joint_config_fingerprint_ascending",
+    "replicate_delta": "Intervention_final_best_minus_Control_final_best",
+    "replicate_delta_count": 12,
+    "mean_delta": "equal_weight_arithmetic_mean",
+    "wins": "strict_delta_greater_than_zero",
+    "zero_delta_is_tie": true,
+    "sign_flip": {
+      "exact": true,
+      "sign_vector_count": 4096,
+      "statistic": "arithmetic_mean_of_signed_replicate_deltas",
+      "alternative": "greater_equal_observed",
+      "p_value": "count(T_perm >= T_observed) / 4096",
+      "monte_carlo_plus_one_correction": false,
+      "rng": false
+    },
+    "bootstrap": {
+      "replicates": 100000,
+      "unit": "whole_replicate_delta",
+      "sampling": "with_replacement",
+      "lower_quantile": 0.05,
+      "quantile_method": "linear",
+      "seed_derivation": "unsigned big-endian integer from first 8 bytes of SHA256 of exact final frozen_protocol.json bytes"
+    },
+    "protocol_self_hash_rule": {
+      "frozen_protocol_contains_derived_bootstrap_seed": false,
+      "derive_only_after_frozen_protocol_bytes_final": true,
+      "inference_plan_records_protocol_sha256_and_derived_seed": true,
+      "inference_plan_is_in_prelaunch_manifest": true
+    },
+    "classification": {
+      "all_gates_required": true,
+      "gates": {
+        "mean_delta_minimum_inclusive": 0.003,
+        "one_sided_p_value_maximum_exclusive": 0.05,
+        "bootstrap_lower_bound_minimum_exclusive": 0.0,
+        "wins_minimum_inclusive": 8
+      },
+      "pass": "EXPANDED_SEARCH_CONFIRMED_ON_CORA",
+      "complete_gate_miss": "EXPANDED_SEARCH_NOT_CONFIRMED_ON_CORA",
+      "complete_gate_miss_is_run_failure": false
+    }
+  },
+  "challengers": {
+    "source_arm": "Intervention",
+    "complete_configs_only": true,
+    "minimum_mean_advantage_over_fresh_p_anchor_inclusive": 0.001,
+    "sort": [
+      "mean_descending",
+      "sample_sd_ascending_ddof_1",
+      "joint_config_fingerprint_ascending"
+    ],
+    "maximum_selected": 2,
+    "required_report_fields": [
+      "threshold_eligible_config_count_pre_cap",
+      "eligible_challenger_count",
+      "phase_e_eligible"
+    ],
+    "phase_e_eligible_rule": "eligible_challenger_count > 0",
+    "start_phase_e": false
+  },
+  "runtime_estimate_minutes": {
+    "best": 165,
+    "expected": 210,
+    "worst_reference": 360
+  },
+  "terminal_contract": {
+    "complete_scientific_terminal": {
+      "planned_task_count": 1155,
+      "completed_task_count": 1155,
+      "failed_task_count": 0,
+      "Control_completed_task_count": 576,
+      "Intervention_completed_task_count": 576,
+      "P_anchor_completed_task_count": 3,
+      "complete_replicate_count": 12,
+      "test_accessed": false,
+      "phase_e_started": false
+    },
+    "run_failure_state": "RUN_FAILED",
+    "run_failure_completion": "INCOMPLETE"
+  }
+}
