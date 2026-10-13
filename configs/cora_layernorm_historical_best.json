@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "selection_scope": "Cora Stage A deduplicated full-fidelity historical archive",
+  "selection_metric": "validation_accuracy",
+  "selection_test_access": "PROHIBITED",
+  "archive_full_record_count": 4500,
+  "archive_deduplicated_candidate_count": 3582,
+  "source_history": "legacy_artifacts/pre_20260813/results/formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768/history_final.json",
+  "source_history_sha256": "2288fc2de818ff0a1dd6afa9192f9cfd1b749b0776a48f47b3ca243ef63a73ae",
+  "source_history_index": 221,
+  "source_method": "G150",
+  "source_search_seed": 0,
+  "source_run": "formal_seedfair_full300_gmm_ted_lowfid_gmm_fit_pool_exp150_global4_seed0_pool768",
+  "candidate_fingerprint": "421c269719718dc5cc95f572e054d70bee9ee0d7431dfb09854f0e7b5231c441",
+  "architecture_fingerprint": "d4741b3dd279dccfd7250c6a0dd36976fe5c018a1ae2335e77b52b552cea1e0b",
+  "historical_validation_accuracy": 0.828,
+  "normalization": "none",
+  "operations": ["GCNConv", "GCNII", "GCNII", "GATConv", "GINConv"],
+  "edges": [[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4], [1, 4], [4, 5], [3, 5], [2, 5], [1, 5], [0, 5], [5, 6]],
+  "hp": {
+    "learning_rate": 0.0003002973896739684,
+    "dropout": 0.1,
+    "hidden_dimension": 512,
+    "weight_decay": 0.00001,
+    "gat_heads": 1,
+    "sage_aggregation": "mean",
+    "gin_epsilon": 0.0
+  }
+}

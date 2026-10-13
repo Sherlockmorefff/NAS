@@ -8,7 +8,8 @@ cd "$REPO_ROOT"
 usage() {
   echo "Usage: $0 --final-base-seed N --protocol-id ID [--run-dir DIR] [--top-k N]"
   echo "          [--dataset NAME] [--data-root DIR] [--search-run-tag TAG]"
-  echo "          [--search-protocol-id ID] [--legacy-root DIR]"
+  echo "          [--search-protocol-id ID] [--formal-matrix JSON] [--search-seeds CSV]"
+  echo "          [--legacy-root DIR]"
   echo "          [--eval-epochs N] [--patience N] [--python PATH] [--train] [--resume]"
   echo
   echo "Without --train, all 15 histories are preflighted and no GNN training starts."
@@ -20,6 +21,7 @@ FINAL_BASE_SEED=""
 RUN_DIR=""
 TOP_K=10
 N_REPLICATES=10
+N_REPLICATES_EXPLICIT=0
 EVAL_EPOCHS=300
 PATIENCE=80
 START_TRAINING=0
@@ -29,8 +31,12 @@ DATA_ROOT=""
 SEARCH_RUN_TAG=""
 PROTOCOL_ID=""
 SEARCH_PROTOCOL_ID=""
+FORMAL_MATRIX=""
+SEARCH_SEEDS_CSV=""
 LEGACY_ROOT="legacy_artifacts/pre_20260813"
 PYTHON_OVERRIDE=""
+SEARCH_SEEDS=(0 1 2 3 4)
+declare -A FORMAL_HISTORY
 
 while (($#)); do
   case "$1" in
@@ -48,6 +54,7 @@ while (($#)); do
       ;;
     --n-replicates)
       N_REPLICATES="$2"
+      N_REPLICATES_EXPLICIT=1
       shift 2
       ;;
     --eval-epochs)
@@ -76,6 +83,14 @@ while (($#)); do
       ;;
     --search-protocol-id)
       SEARCH_PROTOCOL_ID="$2"
+      shift 2
+      ;;
+    --formal-matrix)
+      FORMAL_MATRIX="$2"
+      shift 2
+      ;;
+    --search-seeds)
+      SEARCH_SEEDS_CSV="$2"
       shift 2
       ;;
     --legacy-root)
@@ -180,6 +195,132 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
   exit 2
 fi
 
+load_formal_matrix() {
+  local matrix_path="$1"
+  local expected_protocol="$2"
+  local requested_seeds="$3"
+  if [[ ! -f "$matrix_path" ]]; then
+    echo "Formal matrix does not exist: $matrix_path" >&2
+    return 2
+  fi
+  local rows
+  if ! rows="$($PYTHON_BIN - "$matrix_path" "$expected_protocol" "$DATASET" "$requested_seeds" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+from experiment_paths import validate_protocol_id
+
+matrix_path, expected_protocol, dataset, requested = sys.argv[1:]
+try:
+    validate_protocol_id(expected_protocol)
+except ValueError as exc:
+    raise SystemExit(f"invalid formal matrix protocol_id: {exc}") from exc
+payload = json.loads(Path(matrix_path).read_text(encoding="utf-8"))
+if payload.get("protocol_id") != expected_protocol:
+    raise SystemExit(
+        f"formal matrix protocol_id mismatch: expected {expected_protocol!r}, "
+        f"got {payload.get('protocol_id')!r}"
+    )
+tasks = payload.get("tasks")
+if not isinstance(tasks, list) or len(tasks) != 60:
+    raise SystemExit("formal matrix must contain exactly 60 tasks")
+expected_seeds = {5, 6, 7, 8, 9}
+matrix_seeds = {int(row["search_seed"]) for row in tasks}
+if matrix_seeds != expected_seeds:
+    raise SystemExit(f"formal matrix seeds must be 5..9, got {sorted(matrix_seeds)}")
+if requested:
+    try:
+        requested_values = [int(value) for value in requested.split(",") if value != ""]
+    except ValueError as exc:
+        raise SystemExit(f"invalid --search-seeds CSV: {requested!r}") from exc
+    if requested_values != sorted(expected_seeds):
+        raise SystemExit(
+            "--search-seeds does not match formal matrix seeds: "
+            f"requested={requested_values!r} matrix={sorted(expected_seeds)!r}"
+        )
+method_labels = {"S0": "global_schur", "G100": "gmm_exp100", "G150": "gmm_exp150"}
+selected = [row for row in tasks if row.get("dataset") == dataset]
+expected = {(method, seed) for method in method_labels for seed in expected_seeds}
+actual = {(str(row.get("method")), int(row.get("search_seed"))) for row in selected}
+if actual != expected:
+    raise SystemExit(
+        f"formal matrix dataset {dataset!r} does not contain exactly 15 method/seed tasks"
+    )
+for row in sorted(selected, key=lambda item: (str(item["method"]), int(item["search_seed"]))):
+    method = str(row["method"])
+    output = row.get("output_directory")
+    if not output:
+        raise SystemExit(f"formal matrix task has no output_directory: {row!r}")
+    method_dir = {"S0": "s0", "G100": "g100", "G150": "g150"}[method]
+    expected_output = (
+        Path.cwd()
+        / "results"
+        / "search"
+        / expected_protocol
+        / dataset
+        / method_dir
+        / f"search_seed{int(row['search_seed'])}"
+    ).resolve()
+    if Path(output).resolve() != expected_output:
+        raise SystemExit(
+            "formal matrix output_directory must be exactly "
+            f"results/search/{expected_protocol}/{dataset}/{method_dir}/"
+            f"search_seed{int(row['search_seed'])}: {output!r}"
+        )
+    print(f"{method_labels[method]}\t{int(row['search_seed'])}\t{Path(output) / 'history_final.json'}")
+PY
+)"; then
+    return 2
+  fi
+  SEARCH_SEEDS=()
+  FORMAL_HISTORY=()
+  while IFS=$'\t' read -r method_label search_seed history; do
+    [[ -n "$method_label" ]] || continue
+    FORMAL_HISTORY["$method_label:$search_seed"]="$history"
+    SEARCH_SEEDS+=("$search_seed")
+  done <<< "$rows"
+  if [[ "${#SEARCH_SEEDS[@]}" -ne 15 ]]; then
+    echo "Formal matrix produced an unexpected task count for $DATASET" >&2
+    return 2
+  fi
+  SEARCH_SEEDS=(5 6 7 8 9)
+}
+
+if [[ -n "$SEARCH_PROTOCOL_ID" ]]; then
+  if [[ -z "$PROTOCOL_ID" ]]; then
+    echo "--protocol-id is required for formal matrix-driven evaluation" >&2
+    exit 2
+  fi
+  if [[ "$PROTOCOL_ID" != "$SEARCH_PROTOCOL_ID" ]]; then
+    echo "--protocol-id and --search-protocol-id must match in formal mode" >&2
+    exit 2
+  fi
+  if [[ -z "$FORMAL_MATRIX" ]]; then
+    echo "--formal-matrix is required with --search-protocol-id" >&2
+    exit 2
+  fi
+  load_formal_matrix "$FORMAL_MATRIX" "$SEARCH_PROTOCOL_ID" "$SEARCH_SEEDS_CSV" || exit 2
+  if [[ "$N_REPLICATES_EXPLICIT" -eq 1 && "$N_REPLICATES" -ne 30 ]]; then
+    echo "formal evaluation requires replicate IDs 0..29; --n-replicates must be 30" >&2
+    exit 2
+  fi
+  N_REPLICATES=30
+elif [[ -n "$FORMAL_MATRIX" || -n "$SEARCH_SEEDS_CSV" ]]; then
+  if [[ -n "$PROTOCOL_ID" && -n "$FORMAL_MATRIX" && -z "$SEARCH_PROTOCOL_ID" ]]; then
+    SEARCH_PROTOCOL_ID="$PROTOCOL_ID"
+    load_formal_matrix "$FORMAL_MATRIX" "$SEARCH_PROTOCOL_ID" "$SEARCH_SEEDS_CSV" || exit 2
+    if [[ "$N_REPLICATES_EXPLICIT" -eq 1 && "$N_REPLICATES" -ne 30 ]]; then
+      echo "formal evaluation requires replicate IDs 0..29; --n-replicates must be 30" >&2
+      exit 2
+    fi
+    N_REPLICATES=30
+  else
+    echo "--formal-matrix and --search-seeds require --search-protocol-id" >&2
+    exit 2
+  fi
+fi
+
 if [[ -z "$RUN_DIR" ]]; then
   if [[ -z "$PROTOCOL_ID" ]]; then
     echo "--protocol-id is required unless the legacy --run-dir override is explicit" >&2
@@ -213,8 +354,12 @@ history_path() {
     *) return 2 ;;
   esac
   if [[ -n "$SEARCH_PROTOCOL_ID" ]]; then
-    printf "results/search/%s/%s/%s/search_seed%s/history_final.json" \
-      "$SEARCH_PROTOCOL_ID" "$DATASET" "$method_key" "$search_seed"
+    local matrix_history="${FORMAL_HISTORY["$method_label:$search_seed"]-}"
+    if [[ -z "$matrix_history" ]]; then
+      echo "formal matrix has no history for $method_label seed $search_seed" >&2
+      return 2
+    fi
+    printf "%s" "$matrix_history"
     return
   fi
   if [[ -z "$SEARCH_RUN_TAG" && "$DATASET" == "cora" ]]; then
@@ -304,7 +449,7 @@ run_task() {
 METHODS=(global_schur gmm_exp100 gmm_exp150)
 PREFLIGHT_FAILED=0
 for method_label in "${METHODS[@]}"; do
-  for search_seed in 0 1 2 3 4; do
+  for search_seed in "${SEARCH_SEEDS[@]}"; do
     preflight_output="$RUN_DIR/preflight/${method_label}_seed${search_seed}"
     run_task preflight "$method_label" "$search_seed" "$preflight_output" || PREFLIGHT_FAILED=1
   done
@@ -331,7 +476,7 @@ fi
 
 TRAIN_FAILED=0
 for method_label in "${METHODS[@]}"; do
-  for search_seed in 0 1 2 3 4; do
+  for search_seed in "${SEARCH_SEEDS[@]}"; do
     case "$method_label" in
       global_schur) method_dir="s0" ;;
       gmm_exp100) method_dir="g100" ;;

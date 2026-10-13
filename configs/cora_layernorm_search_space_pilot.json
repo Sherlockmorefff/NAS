@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "protocol_id": "cora-layernorm-search-space-pilot-v1",
+  "dataset": "cora",
+  "data_root": "Cora",
+  "dataset_manifest": "artifacts/reference/cross_dataset_v1_preflight/manifests/cora/dataset_manifest.json",
+  "checkpoint": "checkpoints/joint_model_pipeline_global4_best.pth",
+  "checkpoint_sha256": "e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4",
+  "split_fingerprint": "bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09",
+  "search_seeds": [10, 11, 12],
+  "confirmation_seed_manifest": "configs/cora_layernorm_confirmation_seeds.json",
+  "confirmation": {
+    "winner_selection": "highest validation candidate from each method and search seed; test is not used",
+    "nas_winner_count": 6,
+    "historical_best_manifest": "configs/cora_layernorm_historical_best.json",
+    "historical_best_count": 1,
+    "candidate_count": 7,
+    "replicates_per_candidate": 5,
+    "eval_epochs": 300,
+    "patience": 80,
+    "training_count": 35,
+    "total_protocol_training_count": 935,
+    "practical_validation_delta": 0.004,
+    "test_access": "read only after all seven candidates and the validation comparison are frozen"
+  },
+  "methods": {
+    "original": {
+      "method_label": "cora_s0_original_none",
+      "normalization_space": "none"
+    },
+    "expanded": {
+      "method_label": "cora_s0_none_layernorm",
+      "normalization_space": "none_layernorm"
+    }
+  },
+  "search": {
+    "hp_mode": "global4",
+    "initial_selection_strategy": "schur",
+    "n_lhs_candidates": 768,
+    "n_init": 50,
+    "initial_seed_evals": 50,
+    "initial_expand_evals": 0,
+    "n_iter": 100,
+    "max_total_full_evals": 150,
+    "warm_start": "",
+    "sigma_arch": 0.8,
+    "z_bound": 2.5,
+    "log_lr_min": -4.0,
+    "log_lr_max": -1.5,
+    "dropout_min": 0.1,
+    "dropout_max": 0.6,
+    "eval_epochs": 150,
+    "patience": 40,
+    "gp_init_mode": "scratch",
+    "surrogate_type": "exact_gp",
+    "scratch_gp_min_points": 3,
+    "online_candidate_strategy": "qlogei",
+    "num_restarts": 8,
+    "raw_samples": 256,
+    "n_extra": 128,
+    "gp_update_mode": "warm_refit",
+    "gp_refit_every": 5,
+    "gp_refit_steps": 20,
+    "gp_save_every": 5,
+    "use_conditional_kernel": false,
+    "adaptive_sampling": false,
+    "gmm_init_trials": 0
+  },
+  "output_root": "results/cora-layernorm-search-space-pilot-v1",
+  "log_root": "logs/cora-layernorm-search-space-pilot-v1",
+  "vae_retrain_required": false
+}
