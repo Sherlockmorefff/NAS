@@ -1,0 +1,576 @@
+protocol_version: joint_metric_independent_confirmation_surrogate_selection_global4_v1
+scientific_scope: independent_prospective_metric_family_confirmation_and_parsimonious_surrogate_selection
+dataset: Cora
+hp_mode: global4
+
+engineering_fix:
+  parent_failed_archive_sha256: 1b50edf5d22a928c0c9056adfc0e47967334ddfa511d59413fee9a995e9410b8
+  parent_classification: RUN_FAILED
+  parent_failure: "scorer protocol mismatch: ['M2']"
+  root_cause: non-metric baseline audit was incorrectly validated with the full metric scorer validator
+  scientific_protocol_changed: false
+  candidate_generation_changed: false
+  candidate_seeds_changed: false
+  random_seed_changed: false
+  M1_changed: false
+  M2_changed: false
+  B1_changed: false
+  B3_changed: false
+  B4_changed: false
+  B_STAR_rule_changed: false
+  selection_gate_changed: false
+  training_protocol_changed: false
+
+authoritative_inputs:
+  historical_training_v1:
+    result_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+    archive: results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz
+    archive_sha256_sidecar: results/search/high-regime-prior-model-blind-validation-global4-v1/high-regime-prior-model-blind-validation-global4-v1-20260826.tar.gz.sha256
+    archive_sha256: 050a64b0cde5bdb17ababa9833e5ee578b448c9b19da31fbb00f0251ec82491c
+    source_dependency_manifest_sha256: 4c836f903d1bea346bcd0139d7c1e367e52b8b99d8549dbf33b13db09cb9f115
+    dataset_content_fingerprint: 373d00c7962dc1ab0cc86974b1542eb76a768d2878013ceee0691b3932d062c7
+    split_fingerprint: bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09
+    track_test: false
+  soft_metric_v2:
+    result_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2
+    archive: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz
+    archive_sha256_sidecar: results/posthoc/joint-configuration-soft-metric-gate-global4-v2.tar.gz.sha256
+    required_marker: COMPLETE
+    classification: SOFT_JOINT_METRIC_REJECTED
+    archive_sha256: f5a0a73cb45098994afa3d60de44eb4c54c010d6814d963e3d4c3ba69c219f74
+    config_sha256: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+    source_sha256: d042a158a2c006baecc7c9d1d50dd42683f7b4f4c4dbdfed0c2f2c8bcc3a3aea
+    source_snapshot_manifest_root: 7125d9d7eececca53fcd00c2d578fb685c1b0d2156de62f4de08b362ffe10273
+    split_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+    artifacts:
+      oof_predictions.csv: 13deeecff25813ca4d98a6dcead07ea27c0e7dcaee16d78a7894b1eeaa565fe9
+      metrics_per_fold.csv: 118acdcd74de1da856045caf4d4fea1bb9a08d82c776245604e0a1877cb0a29b
+      best_of_4_results.json: c4fb310cb275efd0ba7a5a084db809af3822773ec7c1e4327248ff8d76097902
+      metric_training_audit.json: c6c656f88541e5908f82914fe110ee99f7835b8d40145ca26fb6520e3f1bf641
+      split_manifest.json: 5062395ef61868b211201141aae0a9a296cefb0389ad8f71629df236619fb586
+  cross_factor_diagnosis_v1:
+    result_root: results/posthoc/joint-configuration-cross-factor-locality-diagnosis-global4-v1
+    archive: results/posthoc/joint-configuration-cross-factor-locality-diagnosis-global4-v1.tar.gz
+    required_marker: COMPLETE
+    classification: CROSS_FACTOR_DIAGNOSIS_COMPLETE
+    archive_sha256: a4e435991d9b8740198216e8deb40644497c304b14d87049b6ab8d617bc76827
+    descriptive_only: true
+  previous_prospective_pilot_v1:
+    result_root: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1
+    archive: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1.tar.gz
+    archive_sha256_sidecar: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1.tar.gz.sha256
+    required_marker: COMPLETE
+    classification: METRIC_GP_PROSPECTIVE_SIGNAL
+    archive_sha256: 7bc437a8babcc61493bf1d86ec50e1c8c4db1596288479f6b47ac7a0bcf13736
+    config_sha256: 9f0a1d572f25f3f89951cb08728f279388310929b3bcbdd880ee56f508451eba
+    source_sha256: 2074cde312979393e22d75bbdf93731e48c7cc17b1412ee45a65bd0ea6a37e3d
+    source_snapshot_manifest_root: 1489b93667f0a1125a3d83377f1ab4bddd6c9bb94add70880c4990c50e1f07f9
+    pre_eval_root_sha256: 987231579bce11e164a5dd91362f9e8a89e9cfc9c066544508abdb5e863eebb2
+    candidate_manifest_sha256: 6fcbf5d73eb83d9f0d06fa3d554764069e444ddef88b32540a9efdad8962862c
+    candidate_count: 32
+    unique_architecture_count: 32
+    unique_joint_configuration_count: 32
+    completed_gnn_runs: 96
+    use_candidates_for_exclusion: true
+    labels_in_any_scorer_training: forbidden
+    labels_in_confirmation_or_surrogate_gate: forbidden
+    labels_in_descriptive_cumulative_context_only: true
+
+historical_supervision_boundary:
+  source_root: results/search/high-regime-prior-model-blind-validation-global4-v1
+  result_shards:
+    - phase_b/initial/gpu0/seed_results.jsonl
+    - phase_b/initial/gpu1/seed_results.jsonl
+  recursive_results_scan: false
+  expected_unique_joint_configurations: 336
+  expected_unique_architectures: 192
+  expected_unique_pools: 24
+  expected_seed_records: 1008
+  training_seeds: [0, 1, 2]
+  aggregate_target: raw_validation_accuracy_seed_mean
+  hp_residualization: forbidden
+  stabilization_seeds_in_training: forbidden
+  previous_prospective_labels_in_training: forbidden
+  current_prospective_labels_in_training: forbidden
+  reject_any_test_field: true
+
+frozen_runtime:
+  soft_snapshot_root: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/source_snapshot
+  pilot_snapshot_root: results/posthoc/joint-metric-prospective-selection-gate-global4-v1-rerun1/source_snapshot
+  high_regime_snapshot_root: results/search/high-regime-prior-model-blind-validation-global4-v1/source_snapshot
+  live_scientific_source_fallback: forbidden
+  fail_closed_on_missing_unreadable_or_hash_mismatch: true
+  files:
+    configs/joint_configuration_soft_metric_gate_v2.yaml: 0b97af8a13d270e80fe8cc7b9a4beaf2616ff624c01faf5832fdebbeae25aadd
+    analyse/joint_configuration_soft_metric_gate.py: d823e87055774e29a11851a45b659785cbb9ba524fec063f2f5f0e0a3e011c50
+    analyse/joint_configuration_metric_gate.py: e7c883e63b7a6133f5be6d029cb8d8f2f5cf755d8366cf9cf715e0c214906a13
+    analyse/performance_metric_quick_gate.py: 92fd4bb6cf2e49a67f37b62582072fc6a9960f0725a92366e7b1ca271af6d7ba
+    analyse/joint_pair_power_projection_audit.py: 0b100d6f4ee06c2754414027eabf948b5db43b0e1be702def476025a7931422f
+    analyse/joint_metric_prospective_selection_gate.py: 8e309fbabfc3409c97a824d12f56ce869cd1d2358f6cbc511298a06cec197579
+    analyse/high_regime_prior_model_blind_validation.py: 4c6f5228abe7480c1a018b187483461505a272246dc13ef1084eafac2887ac39
+    analyse/run_high_regime_prior_model_blind_validation_labels.py: b3b951993ff69f7a28b068235887443b995f6fa6e0f25ed6c532d086a81a4aab
+    analyse/analyse_high_regime_prior_model_blind_validation.py: 5b43ca2902e0885e30e53a78a618ef1075b2aa9b438022929203834da015d18b
+    eval_utils.py: 0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d
+    architecture_diagnostics.py: a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f
+  base_vae_checkpoint:
+    path: checkpoints/joint_model_pipeline_global4_best.pth
+    sha256: e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4
+    use: frozen_model_blind_architecture_generator_only
+
+split:
+  manifest: results/posthoc/joint-configuration-soft-metric-gate-global4-v2/split_manifest.json
+  logical_sha256: b80b1a211a05285121cafe4dabd4c67baddea93606c1913e777fcd34dd79a2ec
+  outer_folds: 5
+  reuse_without_resplitting: true
+
+scorer_replay:
+  device: cpu
+  deterministic: true
+  python_hash_seed: 0
+  torch_num_threads: 1
+  outer_folds: 5
+  metric_model_seeds: [0, 1, 2]
+  encoder_count: 15
+  supervision_scope: historical_336_only
+  pair_construction: frozen_soft_metric_v2
+  inner_split: frozen_architecture_grouped_80_20
+  best_epoch_source: archived_metric_training_audit
+  final_refit: fresh_initialization_on_complete_outer_train
+  hp_standardizer: outer_train_only
+  embedding_dim: 8
+  embedding_l2_normalized: true
+  replay_tolerance_absolute: 1.0e-8
+  required_reproductions:
+    - all_15_metric_best_epochs
+    - M1_OOF_predictions
+    - M2_OOF_predictions
+    - pooled_metric_gap_at_5
+    - all_15_fold_seed_distance_gap_spearman
+    - all_336_metric_top5_neighbor_fingerprint_sequences
+    - previous_prospective_scorer_identity_status_IDENTICAL
+  previous_pilot_labels_read_for_training: false
+  current_candidate_labels_available_during_replay: false
+  failure_decision: SCORER_REPLAY_IDENTITY_MISMATCH
+
+historical_baseline_replay:
+  methods: [B1, B3, B4]
+  supervision_scope: historical_336_only
+  source: frozen_soft_metric_v2_strict_OOF_outputs_and_source
+  required_reproductions:
+    - OOF_predictions
+    - pooled_MAE
+    - best_of_4_mean_simple_regret
+  absolute_tolerance: 1.0e-8
+  previous_pilot_labels_in_replay: forbidden
+  current_candidate_labels_in_replay: forbidden
+  prospective_labels_may_select_B_STAR: false
+  fail_closed_if_B4_protocol_is_not_uniquely_recoverable: SPEC_UNDERDEFINED
+
+candidate_generation:
+  master_seed: 202608281601
+  pool_seed_rule: master_seed_plus_zero_based_pool_id
+  rng_streams:
+    architecture: torch_cpu_generator_seeded_directly_with_pool_seed
+    hp: numpy_default_rng_seeded_directly_with_pool_seed
+    hp_draw_timing: after_architecture_validity_and_novelty_acceptance
+  acceptance_order: first_four_valid_novel_decodes_in_generation_order
+  duplicate_scope: historical_training_previous_pilot_and_all_current_earlier_candidates
+  pools: 16
+  configurations_per_pool: 4
+  total_configurations: 64
+  independent_pools: true
+  architecture_generator: frozen_high_regime_model_blind_architecture_generation
+  architecture_source: frozen_vae_standard_normal_deterministic_greedy
+  hp_prior: HIGH_REGIME_PRIOR
+  hp_prior_source: frozen_high_regime_hp_high_sampling_and_global4_realization
+  hp_raw_unit_interval_range: [0.80, 0.95]
+  maximum_draws_per_pool: 65536
+  decode_batch_size: 256
+  predictor_access_during_generation: forbidden
+  validation_access_during_generation: forbidden
+  historical_top_architecture_use: forbidden
+  mutation_or_local_search: forbidden
+  latent_optimization: forbidden
+  rejection_reasons:
+    - invalid_architecture
+    - duplicate_architecture_fingerprint
+    - historical_architecture_fingerprint
+    - previous_pilot_architecture_fingerprint
+    - duplicate_joint_fingerprint
+    - historical_joint_fingerprint
+    - previous_pilot_joint_fingerprint
+  score_based_rejection: forbidden
+  novelty:
+    architecture_unseen_vs_historical_192: true
+    joint_unseen_vs_historical_336: true
+    architecture_unseen_vs_previous_pilot_32: true
+    joint_unseen_vs_previous_pilot_32: true
+    architecture_unique_within_current_64: true
+    joint_unique_within_current_64: true
+  failure_decision: CONFIRMATION_CANDIDATE_GENERATION_FAILED
+
+prospective_methods:
+  M1:
+    name: metric_weighted_knn
+    historical_supervision_scope: corresponding_outer_train_only
+    k: 5
+    distance: raw_l2_normalized_embedding_Euclidean
+    weight: inverse_distance_plus_1e-8
+    aggregate_metric_seeds: arithmetic_mean
+    aggregate_outer_folds: arithmetic_mean
+    previous_pilot_labels_in_training: forbidden
+  M2:
+    name: metric_isotropic_gp
+    historical_supervision_scope: corresponding_outer_train_only
+    input: frozen_l2_normalized_8d_embedding
+    per_dimension_input_standardization: false
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: false
+    lengthscale_count: 1
+    exact_gp: true
+    target_standardization: outer_train_only
+    observation_noise: historical_validation_se_squared_plus_outer_train_fitted_noise_floor_squared
+    noise_floor_fit_scope: outer_train_only
+    prediction: posterior_mean_only
+    posterior_variance_use: forbidden
+    aggregate_metric_seeds: arithmetic_mean
+    aggregate_outer_folds: arithmetic_mean
+    previous_pilot_labels_in_training: forbidden
+  B1:
+    name: hp_only_gp
+    source: frozen_soft_metric_v2_B1
+    features: [log10_lr, dropout, log2_hidden_dim, log10_l2]
+    standardization: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+    exact_gp: true
+    numerical_protocol: frozen_soft_metric_v2
+    aggregate_outer_folds: arithmetic_mean
+    previous_pilot_labels_in_training: forbidden
+  B3:
+    name: explicit_joint_feature_gp
+    source: frozen_soft_metric_v2_B3
+    features: explicit_canonical_graph_features_plus_transformed_hp
+    standardization: outer_train_only
+    mean: ConstantMean
+    kernel: Matern-5/2
+    ard: true
+    exact_gp: true
+    numerical_protocol: frozen_soft_metric_v2
+    aggregate_outer_folds: arithmetic_mean
+    previous_pilot_labels_in_training: forbidden
+  B4:
+    name: direct_joint_regressor
+    source: frozen_soft_metric_v2_B4_implementation_and_protocol
+    architecture_branch: frozen_soft_metric_v2
+    hp_branch: frozen_soft_metric_v2
+    interaction_fusion: frozen_soft_metric_v2
+    loss: Huber
+    model_seeds: [0, 1, 2]
+    outer_split: frozen_5_fold
+    inner_split: architecture_grouped_80_20
+    early_stopping: frozen_soft_metric_v2
+    final_refit: frozen_soft_metric_v2
+    aggregate_model_seeds: arithmetic_mean
+    aggregate_outer_folds: arithmetic_mean
+    previous_pilot_labels_in_training: forbidden
+    fail_closed_if_any_scientific_parameter_cannot_be_recovered: SPEC_UNDERDEFINED
+  R:
+    name: frozen_random
+    selection_seed: 202608281602
+    selected_before_new_validation: true
+
+gp_numerical_protocol:
+  source: frozen_soft_metric_v2
+  optimizer: Adam
+  learning_rate: 0.05
+  optimization_steps: 20
+  restart_seed: 0
+  initial_noise_floor_original_target_units: 0.0001
+  minimum_noise_floor_original_target_units: 1.0e-8
+  cholesky_jitter: 1.0e-6
+
+historical_baseline_selection:
+  candidates: [B1, B3, B4]
+  output: pre_eval/baseline_selection.json
+  input_scope: historical_soft_metric_v2_strict_OOF_only
+  primary: lowest_historical_OOF_best_of_4_mean_simple_regret
+  first_tie_tolerance_absolute: 1.0e-12
+  first_tie_break: lower_historical_OOF_MAE
+  second_tie_break: method_id_lexicographic_ascending
+  prospective_labels_may_change_selection: false
+  freeze_before_current_validation: true
+  identifier: B_STAR
+
+selection_freeze:
+  pools: 16
+  candidates_per_pool: 4
+  methods: [M1, M2, B1, B3, B4, R]
+  objective: maximum_predicted_raw_validation_mean
+  tie_break: joint_fingerprint_lexicographic_ascending
+  simultaneous_all_pools_before_first_gnn: true
+  candidate_replacement_after_freeze: forbidden
+  online_update: forbidden
+  sequential_refit: forbidden
+  new_labels_added_to_any_scorer: forbidden
+  immutable_files:
+    - candidate_manifest.json
+    - previous_pilot_exclusion_audit.json
+    - predictions.csv
+    - selections.json
+    - baseline_selection.json
+    - scorer_identity.json
+  root_algorithm: sha256_of_canonical_json_sorted_relative_path_and_file_sha256_pairs
+  marker: pre_eval/PRE_EVAL_SELECTION_FROZEN
+
+information_gate:
+  M1_vs_B_STAR_disagreement_pools: d1
+  M2_vs_B_STAR_disagreement_pools: d2
+  minimum_disagreement_pools: 6
+  authorize_when_maximum_at_least: 6
+  insufficient_action: CONFIRMATION_LOW_INFORMATION
+  gnn_runs_when_insufficient: 0
+  regenerate_to_increase_disagreement: forbidden
+  M1_vs_M2_disagreement_is_admission_gate: false
+
+evaluation:
+  configurations: 64
+  training_seeds: [0, 1, 2]
+  total_tasks: 192
+  total_gnn_runs: 192
+  same_pool_matched_seeds: true
+  evaluator: frozen_high_regime_prior_model_blind_validation_v1
+  max_epochs: 300
+  patience: 80
+  optimizer_protocol: frozen_high_regime_v1
+  validation_metric: frozen_high_regime_v1
+  maximum_system_retries: 2
+  device_policy: frozen_two_GPU_shards
+  track_test: false
+  candidate_replacement_after_failure: forbidden
+  required_successful_results_per_pool: 12
+  incomplete_action: CONFIRMATION_EVALUATION_INCOMPLETE
+  observed_oracle_name: observed_3_seed_pool_oracle
+
+reporting_metrics:
+  methods: [M1, M2, B1, B3, B4, R]
+  selection:
+    - selected_validation_mean
+    - mean_simple_regret
+    - median_simple_regret
+    - true_best_hit_count
+    - true_best_hit_rate
+    - within_0_006_of_oracle_rate
+  prediction_auxiliary: [MAE, Pearson, Spearman, Kendall]
+  primary_endpoint: selection_regret
+  random_expected_metrics:
+    status: DESCRIPTIVE_EXPECTED_RANDOM
+    selected_mean: pool_mean
+    regret: observed_oracle_minus_pool_mean
+
+statistics:
+  independent_unit: pool
+  training_seed_is_independent_unit: false
+  configuration_is_independent_unit: false
+  bootstrap:
+    unit: pool
+    replicates: 10000
+    seed: 0
+    interval: percentile_95
+  sign_test:
+    unit: pool
+    alternative: one_sided
+    role: descriptive_only
+
+metric_family_confirmation:
+  methods: [M1, M2]
+  comparator: frozen_B_STAR
+  individually_confirmed_requires_all: [C1, C2, C3, C4, C5, C6]
+  C1:
+    disagreement_pools_at_least: 6
+  C2:
+    wins_fraction_formula: ceil_two_thirds_times_disagreement
+    wins_at_least: 4
+  C3:
+    mean_selected_validation_advantage_all_16_at_least: 0.003
+  C4:
+    mean_simple_regret_at_most_comparator_fraction: 0.80
+    comparator_near_zero_threshold_strictly_less_than: 1.0e-6
+    near_zero_fallback: method_regret_less_than_or_equal_to_comparator
+  C5:
+    true_best_hits_at_least_comparator: true
+  C6:
+    bootstrap_selected_validation_difference_ci95_lower_strictly_greater_than: 0.0
+  family_confirmed_rule: confirmed_M1_OR_confirmed_M2
+  neither_confirmed_action: METRIC_FAMILY_NOT_CONFIRMED
+  random_may_confirm_family: false
+  previous_pilot_pools_enter_gate: false
+
+surrogate_selection:
+  execute_only_if_metric_family_confirmed: true
+  comparison: M1_vs_M2_on_current_16_pools_only
+  GP_increment:
+    requires_all: [S_GP_1, S_GP_2, S_GP_3, S_GP_4, S_GP_5]
+    S_GP_1: {disagreement_pools_at_least: 6}
+    S_GP_2:
+      M2_wins_fraction_formula: ceil_two_thirds_times_disagreement
+      M2_wins_at_least: 4
+    S_GP_3:
+      M2_mean_regret_at_most_M1_fraction: 0.90
+      M1_near_zero_threshold_strictly_less_than: 1.0e-6
+      near_zero_fallback: M2_regret_less_than_or_equal_to_M1
+    S_GP_4: {M2_true_best_hits_at_least_M1: true}
+    S_GP_5: {bootstrap_M2_minus_M1_ci95_lower_strictly_greater_than: 0.0}
+    final_surrogate: M2
+    classification: METRIC_FAMILY_CONFIRMED_GP_SELECTED
+    selection_basis: CLEAR_GP_INCREMENT
+  KNN_advantage:
+    evaluate_only_if_GP_increment_fails: true
+    requires_all: [S_KNN_1, S_KNN_2, S_KNN_3, S_KNN_4, S_KNN_5]
+    S_KNN_1: {disagreement_pools_at_least: 6}
+    S_KNN_2:
+      M1_wins_fraction_formula: ceil_two_thirds_times_disagreement
+      M1_wins_at_least: 4
+    S_KNN_3:
+      M1_mean_regret_at_most_M2_fraction: 0.90
+      M2_near_zero_threshold_strictly_less_than: 1.0e-6
+      near_zero_fallback: M1_regret_less_than_or_equal_to_M2
+    S_KNN_4: {M1_true_best_hits_at_least_M2: true}
+    S_KNN_5: {bootstrap_M1_minus_M2_ci95_lower_strictly_greater_than: 0.0}
+    final_surrogate: M1
+    classification: METRIC_FAMILY_CONFIRMED_KNN_SELECTED
+    selection_basis: CLEAR_KNN_ADVANTAGE
+  parsimony:
+    condition: family_confirmed_and_no_clear_GP_or_KNN_advantage
+    final_surrogate: M1
+    classification: METRIC_FAMILY_CONFIRMED_KNN_SELECTED
+    selection_basis: PARSIMONY_NO_CLEAR_GP_INCREMENT
+    interpretation: no_evidence_that_GP_complexity_is_necessary_not_proof_that_M1_is_superior
+
+previous_pilot_context:
+  status: DESCRIPTIVE_CUMULATIVE_CONTEXT
+  may_report: [pilot_direction, confirmation_direction]
+  may_pool_with_current_16: false
+  may_compute_combined_p_value: false
+  may_change_current_classification: false
+
+decision:
+  allowed:
+    - CONFIRMATION_INPUT_INVALID
+    - SCORER_REPLAY_IDENTITY_MISMATCH
+    - CONFIRMATION_CANDIDATE_GENERATION_FAILED
+    - CONFIRMATION_LOW_INFORMATION
+    - CONFIRMATION_EVALUATION_INCOMPLETE
+    - METRIC_FAMILY_NOT_CONFIRMED
+    - METRIC_FAMILY_CONFIRMED_KNN_SELECTED
+    - METRIC_FAMILY_CONFIRMED_GP_SELECTED
+    - RUN_FAILED
+  scientific_underdefinition_action: SPEC_UNDERDEFINED_fail_closed
+  posterior_variance_used: false
+  acquisition_used: false
+  historical_classifications_modified: false
+
+next_authorized_action:
+  METRIC_FAMILY_NOT_CONFIRMED: stop_metric_guided_NAS_mainline_without_rescue_tuning_or_repeated_similar_confirmation
+  METRIC_FAMILY_CONFIRMED_KNN_SELECTED: frozen_soft_joint_metric_plus_weighted_kNN_deterministic_ranking_plus_multiround_discrete_candidate_search
+  METRIC_FAMILY_CONFIRMED_GP_SELECTED: frozen_soft_joint_metric_plus_isotropic_GP_posterior_mean_deterministic_ranking_plus_multiround_discrete_candidate_search
+  GP_uncertainty_authorized: false
+  acquisition_authorized: false
+  forbidden_acquisitions: [EI, qLogEI, UCB, TS, KG]
+
+state:
+  required_stages:
+    - IMPLEMENTATION_READY
+    - HISTORICAL_IDENTITY_COMPLETE
+    - PREVIOUS_PILOT_EXCLUSION_AUDITED
+    - SCORER_REPLAY_COMPLETE
+    - HISTORICAL_BASELINES_REPLAYED
+    - B_STAR_FROZEN
+    - CANDIDATES_FROZEN
+    - SELECTIONS_FROZEN
+    - PRE_EVAL_AUDIT_PASSED
+    - EVALUATION_RUNNING
+    - EVALUATION_COMPLETE
+    - ANALYSIS_COMPLETE
+  progress_fields:
+    - completed_gnn_runs
+    - total_gnn_runs
+    - failed_runs
+    - current_pool
+    - current_config
+    - current_seed
+
+report:
+  required_sections:
+    - Executive conclusion
+    - Historical evidence boundary
+    - Independence from previous 8-pool pilot
+    - Historical scorer replay
+    - Historical baseline replay
+    - Frozen B_STAR selection
+    - Candidate generation
+    - Candidate novelty audit
+    - Pre-evaluation freeze
+    - Predictor scores
+    - Method disagreement counts
+    - GNN evaluation completeness
+    - Per-pool actual validation table
+    - All-method selection metrics
+    - M1 vs B_STAR
+    - M2 vs B_STAR
+    - Metric-family confirmation
+    - M1 vs M2 comparison
+    - Final surrogate selection
+    - Random baseline
+    - Pool bootstrap/sign summary
+    - Frozen classification
+    - Interpretation
+    - What this does NOT prove
+    - Next authorized experiment
+    - Engineering audit
+  per_pool_table_requires:
+    - four_candidate_joint_fingerprints
+    - four_candidate_architecture_fingerprints
+    - four_raw_HP_records
+    - four_validation_means
+    - all_method_selections
+    - B_STAR_selection
+    - observed_3_seed_pool_oracle
+    - all_method_regrets
+
+source_snapshot:
+  mandatory_files:
+    - configs/joint_metric_independent_confirmation_surrogate_selection_v1.yaml
+    - analyse/joint_metric_independent_confirmation_surrogate_selection.py
+    - scripts/run_joint_metric_independent_confirmation_surrogate_selection.sh
+    - tests/test_joint_metric_independent_confirmation_surrogate_selection.py
+    - configs/joint_configuration_soft_metric_gate_v2.yaml
+    - analyse/joint_configuration_soft_metric_gate.py
+    - analyse/joint_configuration_metric_gate.py
+    - analyse/performance_metric_quick_gate.py
+    - analyse/joint_pair_power_projection_audit.py
+    - analyse/joint_metric_prospective_selection_gate.py
+    - analyse/high_regime_prior_model_blind_validation.py
+    - analyse/run_high_regime_prior_model_blind_validation_labels.py
+    - analyse/analyse_high_regime_prior_model_blind_validation.py
+    - eval_utils.py
+    - architecture_diagnostics.py
+  enumerate_imported_local_python_modules_under_repository_root: true
+  save_exact_source_bytes: true
+  imported_module_inventory: source_snapshot/imported_local_modules.json
+  sha256_manifest: source_snapshot/sha256_manifest.json
+  fail_closed_on_unreadable_source: true
+
+output:
+  result_root: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1
+  archive: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1.tar.gz
+  archive_sha256: results/posthoc/joint-metric-independent-confirmation-surrogate-selection-global4-v1-rerun1.tar.gz.sha256
+  refuse_existing_nonempty_result: true
+  refuse_existing_archive_or_sha: true
+  success_marker: COMPLETE
+  failure_marker: FAILED
+  failure_bundle_required: true
+  model_weights_in_bundle: forbidden
+  caches_or_python_environment_in_bundle: forbidden

@@ -1,0 +1,315 @@
+Codex 第一轮实验 Prompt：E0–E2
+版本：2026-10-02
+用途：将以下 Prompt A 与 Prompt B 分两次粘贴到同一个 Codex 对话。
+先在 Plan 模式发送 A；检查计划确实符合本文件后，切到执行模式发送 B。
+本文件包含第一轮完整规格，无需依赖之前的 ChatGPT 聊天。
+本轮结束后输出证据，第二轮的容量/CLML/KG/B确认根据证据另行安排。
+
+==================== Prompt A：Plan 模式 ====================
+
+请为我的 GNN NAS＋超参数优化项目制定第一轮实验实施计划。当前只规划与只读核验，不修改项目代码，不启动正式实验。
+
+项目定位：
+- GitHub：https://github.com/Sherlockmorefff/NAS.git。
+- 优先使用当前已打开的 NAS 项目；服务器候选目录为 ~/D-VAE，Mac 候选目录为 ~/Projects/NAS。先核实，不能把猜测路径写成已确认路径。
+- 已审查快照为分支 review/dkl-sync-20260929T170121+0800，commit 1ab3901a13673ae3751caff88f530559f9419f30。
+- 可从 docs/review/dkl-sync-20260929T170121+0800/CODE_MAP.md、ENVIRONMENT_AND_GAPS.md，以及 artifacts/dkl-stage2-v1-20260922T080157Z/protocol.json 开始查阅。
+- 服务器当前实现才是执行依据；快照只作代码定位参考。先记录当前 branch/commit/working-tree 状态，不擅自切分支、覆盖修改或回滚。
+
+研究问题：
+1. 12维架构latent与4维HP采用单个整体距离，是否不如分开的架构核与HP核？
+2. 加入架构—HP乘积交互是否改善未知架构预测？
+3. 实际架构图的WL结构特征是否比latent更有用？
+4. 已有DKL失准是否具有训练MLL改善、未知架构预测恶化、核过度相关等证据？
+
+本轮范围固定为：
+E0：数据/协议/代码校验。
+E1：复用已有RAW/FROZEN/REG/DKL/残差/长训记录做机制诊断。
+E2：L-A、L-I、W-A、W-I四组，另加匹配RAW16对照。
+禁止启动小容量映射、CLML、KG闭环、B确认、新GNN训练、LayerNorm配方变更或跨数据集实验。
+
+请先完整阅读本文件下方 Prompt B 的技术规格，并根据真实代码逐项落实。你的计划必须具体回答：
+1. A候选、完整标签、SE、架构配置、latent、fold与训练抽样清单在哪里；哪些已核实、哪些缺失？
+2. 300/80的缓存标签配方是否一致？SE是否已经是三种子均值的标准误？
+3. 同架构不同HP是否严格分组？能否恢复原5fold及两个draw的n20/n50？
+4. 实际架构配置是否包含足以构造有向算子连接图的信息？
+5. 现有诊断属于哪个模型族，哪些结果/checkpoint可合法复用？是否证明预训练未用该fold的Q标签？
+6. 服务器真实KG入口是什么？这里只定位与说明，不运行；若仍是qLogEI，准确记录。
+7. 需要新增/修改哪些文件和函数？哪些现有代码保持原样？
+8. 如何实现共同噪声、训练内scaler、四组核、RAW16、三起点、独立scorer和断点续跑？
+9. 小规模数值检查、pilot及全量运行的实际命令是什么？
+10. 拟合数量、验收规则、失败处理、耗时估计方法及结果包结构是什么？
+
+计划要求：
+- 数据已具备时，形成能直接执行的完整步骤，不停留在抽象建议。
+- 例行工程选择由你根据代码解决；仅列出无法从代码/数据确认、会实质改变科学设计的缺项。
+- 不增加新损失、新搜索策略、参数网格，不复做已无稳定收益的fuzzy metric、ARCH_FLOOR或延长训练。
+- 不打开B标签/SE，不读取节点test分数。
+- 不为匹配预期数量而重划数据或按标签筛选。
+- 最终输出明确的实施计划、已确认事实、缺项、文件变更、真实运行命令及验收条件。
+- 当前Plan阶段结束于计划；收到执行指令后再改代码和运行。
+
+==================== Prompt B：执行模式 ====================
+
+按已核对的计划和以下冻结规格，完整执行第一轮E0–E2。现在授权你在当前NAS项目内新增必要实验代码、修复本轮工程问题、运行CPU代理拟合并生成报告。不需要在每个fold、每个模型或例行工程修复前询问我。
+
+不要只写代码或只跑pilot。只要数据与验收条件满足，就继续完成所有预定设置。
+科学规格存在无法核实的缺项时，保存已完成工作和明确阻塞报告；不得凭空补标签、扩大研究范围或将缺失内容写成已验证。
+
+一、固定边界
+
+- 优先当前已打开的NAS工作目录，核对路径与AGENTS.md。
+- 保留历史代码、标签和结果；本轮使用新的运行目录。
+- 不擅自切换分支、git reset、覆盖用户修改，不commit/push。
+- VAE冻结；按candidate_id取回实际候选，不进行连续latent解码搜索。
+- 原输入为latent12＋HP4：log10(lr)、dropout、log2(hidden_dim)、log10(l2)。已经取过对数的列不再取对数。
+- 仅使用现有A标签。B标签/SE和节点test分数不进入本轮训练、预处理、诊断、选方法或报告。
+- 本轮不训练任何新的GNN，不变更No-LN，不运行KG。
+- 不新增fuzzy metric、ARCH_FLOOR、排序/top5损失、后验校准、预测裁剪或参数扫描。
+- E1只复用合法旧记录/checkpoint，补充可由现有记录直接计算的诊断；不为补曲线重训一批DKL。
+
+二、E0：建立唯一协议与数据清单
+
+已核验的预期协议：
+- A为179个联合候选、96个架构；以真实数据复核。
+- Cora、public split、NormalizeFeatures、full-batch、No-LN。
+- 标签来自max_epochs=300、patience=80；GNN seeds=0,1,2验证准确率均值。
+- 150/40属于另一流程，不得混入本次缓存。
+- 五个架构隔离fold，Q候选数预期38、36、36、34、35。
+- draw seeds=20260922、20260923；n=20、50；n20嵌套于n50。
+- 优先读取原始fold与抽样manifest，核对stage2_data/protocol中的真实逻辑。
+- 原协议的抽样为：
+  rng=default_rng(SeedSequence([sample_seed,fold]))
+  ordered=rng.permutation(sorted(training_pool_ids))
+  ids20=ordered[:20]，ids50=ordered[:50]。
+  候选排序与ID类型应与原实现完全一致，不按y或SE筛选。
+- 原fold丢失时，只有能够从原协议确定性重建并验证身份/覆盖/隔离时才继续。不得重新随机划分寻找有利结果。
+
+输出candidate_manifest，包含：
+candidate_id、architecture_id、graph_hash、HP4、latent12、recipe_id、原始三seed验证成绩（如果存在）、mean、SE、fold。
+
+检查：
+1. candidate_id与实际配置一一对应，无不同配置错误复用ID。
+2. 架构标识忽略全局HP，且包括真实架构离散操作/连接属性。不能用浮点latent近似相等代替architecture_id。
+3. 同架构全部HP组合处于同fold；每个T/Q架构不重叠；n20⊂n50。
+4. 检查recipe一致、目标列为验证准确率、单位一致。
+5. 若原seed成绩存在，至少抽查5个mean/SE；没有原seed时记录SE来源和可核实范围。
+6. 缓存SE若已经是三seed均值标准误，known_var=SE²；不再除3。
+   若记录的是原seed样本方差s²，均值噪声为s²/3。
+   未知字段语义是阻塞项，不猜测。
+7. 保存code/数据/配置/VAE/fold/T-Q身份哈希；缓存原始文件不改写。
+8. 定位服务器真实KG/qLogEI实现并写到preflight报告，但不执行搜索。
+
+科学协议不一致时先报告差异。能确定修复的单位/索引错误可修复本轮装载代码并重新验证；不能静默改变配方或数据集。
+
+三、尺度、噪声和标签访问隔离
+
+- 每个T单独拟合输入scaler与y尺度，保持原stage2_data的标准差约定。
+- latent12和HP4分别标准化；常量输入列采用固定scale=1并记录。
+- y_std=(y-mean_T)/scale_T。
+- known_var_std=known_var_raw/scale_T²。
+- y尺度为零/非有限时，将该设置标为BLOCKED，不临时改目标尺度继续。
+- extra_noise是模型参数，定义在标准化y尺度。初始化0.01、下界1e-6均是该尺度的方差，不能再除scale_T²。
+- 如果调用旧代码中的raw尺度参数，先明确单位再转换；禁止方差和标准差混用。
+- 输出mu_raw=mean_T+scale_T*mu_std，var_raw=scale_T²*var_std。
+- numerical jitter与观测噪声分开记录，不能当作候选评估方差。
+
+实现训练器与scorer的访问边界：
+- fit只接收T输入、T成绩、T方差和已冻结的无标签候选特征。
+- Q输入可以预测，但Q成绩/SE不能进入任何预训练、scaler、拟合、早停或起点选择。
+- scorer在拟合状态冻结后独立读取Q标签/SE并评分。
+- 优化起点选择、checkpoint选择不接收Q指标。
+- 全池无标签结构可用于固定WL字典；声明这一信息使用，不读取候选性能。
+- 复用旧学习型checkpoint前，必须确认其监督预训练只用合法T。来源不明则该旧参照不可复用，标记缺失，不默认无泄漏。
+
+四、E1：复用已有DKL做机制诊断
+
+先核对旧实验模型族：
+- 主诊断族是stage2_core/residual_core中的Matérn5/2、constant mean、FixedNoise＋extra noise。
+- 正式代理中的ARD RBF和不同网络是另一个族，不拼接成匹配结果。
+- 旧结果与本轮新静态GP优化预算不同，单独注明，不用历史数字代替本轮匹配RAW16。
+
+优先复用RAW16、FROZEN、REG、压缩DKL、残差DKL、已有延长训练记录。
+有合法日志/checkpoint时，记录固定更新数0/10/50/100/300/1000中实际存在的点：
+train NLL、Q MAE/NLPD、核非对角相关性中位数/95%分位、有效秩、映射距离、lengthscale、outputscale、mean、extra_noise、不同model seeds预测分歧。
+r_eff=(tr R)²/tr(R²)，注明R是哪个样本集上的归一化先验核相关矩阵。
+
+由scorer记录：
+- 真实Q前10%候选的mean(mu-y)；以准确率排序，ceil(0.1*|Q|)，同分按candidate_id确定顺序。
+- 预测Q前5候选的mean(mu-y)。
+- 没有对应旧标签访问或checkpoint就标记缺失；不补造轨迹。
+
+解释时区分事实、解释与假说：
+- train NLL改善＋Q恶化＋有效秩下降，才支持过拟合/过度相关解释。
+- 距离缩小可被长度尺度补偿，单独不能证明坍缩。
+- 仅覆盖率提高/区间扩大不算均值预测改善。
+- 不用Q曲线选择最佳checkpoint。
+- 保存diagnosis，不在本轮启动容量或CLML分支。
+
+五、E2：四组核＋匹配RAW16
+
+组别：
+L-A：latent12架构表示，加法核。
+L-I：latent12架构表示，加法＋乘积交互。
+W-A：真实架构有向WL特征，加法核。
+W-I：真实架构有向WL特征，加法＋乘积交互。
+RAW16：标准化[latent12,HP4]整体Matérn5/2。
+
+统一核：
+M(r)=(1+sqrt(5)*r+5*r²/3)*exp(-sqrt(5)*r)
+ka=M(da/ell_a)，kh=M(dh/ell_h)
+K_A=sf²*(ka+kh)/2
+K_I=sf²*(0.5*(ka+kh)/2+0.5*ka*kh)
+eta固定0.5，不学习、不扫描。
+四组ka/kh对角为1，总核对角均为sf²。
+四组可学习量为mean、sf²、ell_a、ell_h、extra_noise，共5个标量。
+RAW16用一个整体ell，共4个标量；如实注明，不人为新增无效参数凑数。
+HP不启用ARD，各组不加新参数专属先验。
+
+WL实现：
+1. 对象为候选GNN算子与连接的有向图，不是Cora数据图。
+2. 阅读真实配置schema，保留架构操作、聚合、激活、角色和结构属性。
+3. hidden_dim等全局HP只在HP4中出现，不重复写入WL节点标签。
+4. H=2固定；每轮签名分别包含本节点旧标签、排序的入邻居multiset、排序的出邻居multiset。
+5. h=0/1/2标签空间分开，计数拼接为phi。
+6. 不降维到8/16维。psi=[phi/||phi||_2,n_nodes/n_max,n_edges/e_max]；无边时边项0。
+7. 字典及n_max/e_max从冻结的已知无标签候选池建立，保存feature manifest/hash。
+8. latent架构距离用T标准化latent的欧氏距离；WL用psi欧氏距离，不再对WL各计数列做标签驱动预处理。
+9. 每种架构距离除以T内严格正两两距离中位数；没有正距离则取1并记录退化。
+10. HP距离由T标准化HP4计算，按相同T内正距离中位数规则缩放。
+11. RAW16整体距离采用同样训练内正距离中位数规则，禁止从Q估计距离尺度。
+12. 保存每个T的距离尺度。对重复输入、常量列及短图做数值验证。
+13. WL碰撞不是自动代码错误，列出比例；若图信息缺失/所有图结构表示相同，W分支标BLOCKED并解释，不制造连接或临时换图编码。
+14. 这里是WL特征＋Matérn适配，不将其称为原NAS-BOWL线性WL核的完全复现。
+
+共同观测模型：
+constant mean＋latent covariance＋diag(known_var_std＋extra_noise_std)。
+使用项目既有GP库，实现必要自定义核；优先保持已有依赖，不为本任务升级整个环境。
+CPU、float64、固定threads=1。可用固定并行进程，但每进程1线程；记录并发数。
+
+拟合：
+- 每个静态GP的三个确定性起点：
+  ell_a=ell_h或RAW整体ell分别为0.5、1、2；sf²=1、extra_noise=0.01、mean=0。
+- 正参数下界：ell 1e-4、sf² 1e-8、extra_noise 1e-6。
+- 每起点Adam lr=0.01，300步；再L-BFGS max_iter=100、max_eval=125，所有组线搜索规则一致。
+- 按最终有限的训练NLL选择起点。NLL完全相同时按起点编号0/1/2。
+- 使用-ExactMarginalLogLikelihood时核对其已按n归一化，不再次除n。
+- 保留3起点日志。失败起点不能偷偷换成更多随机起点。
+- 若GP库存在min_fixed_noise默认裁剪，显式核对，不把已知噪声统一替换。
+- jitter初始1e-8；仅数值Cholesky失败时统一按[1e-8,1e-7,1e-6]重试，逐项记录；超过上限标FAILED，不随意加大。
+- 每个起点保存结束原因、最终梯度范数及末段目标变化。达到冻结优化预算且目标/参数/posterior有限，视为预算内完成；这不等于证明收敛。若Adam末50步每观测NLL改善仍超过1e-4，或L-BFGS因max_iter/max_eval结束，标convergence_warning，完整报告，不自动加长训练。
+- 任一起点非有限或数值失败时，保留可用预测但该设置不算完整成功；不得用忽略失败的平均值宣布通过。允许修复确定工程错误后在同样配置下重跑，不额外增加起点或预算。
+
+实验清单：
+5fold×2draw×2n=20个训练/预测上下文。
+四组总80个设置＋RAW16总20个设置=100个设置。
+每设置3起点，完整共300次静态GP优化。
+两个预测噪声评分版本不新增模型；优化起点不当作3个独立实验重复。
+
+六、小规模检查、pilot与自动全量执行
+
+先做与本次科学实现直接相关的验证：
+- candidate映射/fold隔离/n20嵌套；
+- 噪声与尺度换算；
+- 核矩阵对称、对角、Cholesky及有限posterior；
+- 图节点重编号后WL一致；
+- 同操作不同连接的样例；
+- 训练器不会读取Q成绩/SE；
+- 三起点只按训练NLL选择；
+- 已冻结状态不被scorer修改。
+
+先跑fold0、draw20260922、n20/n50，全部5种方法。
+该pilot用于实现正确性、收敛及耗时验证，不用于换H/eta/核族或选有利配置。
+工程问题修复后重跑受影响pilot，冻结protocol与代码hash。
+pilot通过后自动完成全部100设置，包括其他fold/draw，不等待逐组确认。
+pilot与正式设置完全一致时可计入全量；修过影响数值/模型的代码后旧pilot不得混用。
+若需新增科学设置才能继续，不自行修改：保存阻塞原因与已有输出。
+
+七、统一评分与判定
+
+主指标：MAE，单位百分点，raw accuracy若0–1则乘100。
+主要配套：前瞻NLPD、90%观测均值区间coverage/width/IS90。
+前瞻var_std=latent_var_std＋extra_noise_std＋median_T(known_var_std)。
+这三个配套指标不得使用未知Q真实SE作为主要分布。
+
+辅助：
+- latent function interval；
+- scorer用Q真实SE²作事后观测噪声分解，文件字段加retrospective标记；
+- Spearman；
+- 真实Q前10%候选mean(mu-y)；
+- 预测Q前5候选mean(mu-y)；
+- regret@5=max_Q(y)-max(y among predicted top5)，准确率降序、同分candidate_id。
+- IS90=(u-l)+20*(l-y)I[y<l]+20*(y-u)I[y>u]。
+
+聚合：
+- 同fold/draw/n先聚合合法旧学习型model seeds0/1/2；新静态GP只使用训练NLL选中的那个起点，不平均三起点当ensemble。
+- 同fold/n平均两个draw，再对5fold等权平均。
+- n50为主，n20完整报告。
+- L-I vs L-A、W-A vs L-A、W-I vs W-A、四组vsRAW16全部报告。
+- 不能将重叠fold/draw或架构内不同HP当作独立样本计算简单显著性结论。
+
+冻结工程门槛：
+- n50平均MAE相对RAW16降低至少0.3百分点。
+- 至少4/5fold的MAE差值为正。
+- n50前瞻NLPD比RAW16恶化不超过0.1nat。
+- n50前瞻IS90恶化不超过5%。
+- n20平均MAE恶化不超过0.3百分点。
+- 所有科学设置完整成功；存在缺项/失败时单独报告，不宣布通过。
+这些门槛为本项目工程建议，不称为理论保证或显著性标准。
+
+若多组通过：
+n50 MAE最小优先；差距小于0.05百分点视为工程并列；
+并列时前瞻NLPD更低优先；NLPD差距小于0.01nat时加法优先；
+仍并列时latent优先，以减少实现复杂度。
+保留唯一“待第二轮确认”的方法，不能把A获胜写成最终验证成功。
+若无组通过，给NO_STABLE_GAIN，不自动扫参。
+主任务到此结束，输出报告，不启动E3/E4/E5。
+
+八、续跑与过程记录
+
+新目录建议runs/structured_kernel_phase1_<timestamp>/，实际遵循仓库约定。
+执行开始时保存Plan、冻结protocol、全部设置列表以及status。
+每个设置状态为PENDING/RUNNING/COMPLETE/FAILED/BLOCKED。
+检查点身份至少包括：
+code/recipe/input-feature/split hash、fold、draw、n、method、T/Q IDs、scalers、起点和优化器配置。
+只有身份一致且模型、预测、指标、3起点日志均完整的COMPLETE设置允许跳过。
+中断后补跑缺失设置，不全量重跑；源代码/科学配置改过则新建run版本，不能拼接旧数值。
+定期更新进度、已完成数量、失败项、实测耗时与剩余估计；不要只启动后台任务就宣称完成。
+如果环境无法继续监控，明确指出RUNNING状态、进程、日志和恢复命令，不能假称全部实验结束。
+
+九、最终交付
+
+运行目录包含至少：
+- PLAN.md
+- protocol.json
+- candidate_manifest.csv
+- split_manifest.json
+- preflight_report.md
+- status.json
+- fit_log.jsonl
+- predictions.csv
+- metrics_by_context.csv
+- metrics_by_fold.csv
+- mapping_diagnostics.csv（旧证据缺失则附missing清单）
+- 本轮代码修改diff及真实执行命令
+- README_RESULTS.md
+- GPT_ANALYSIS_REQUEST.md
+- 一个可分享的证据压缩包，排除凭据、大型不必要权重和完整B/test标签。
+
+README_RESULTS必须直接回答：
+1. 哪些事实已核实，哪些仍缺失？
+2. 完成/失败/阻塞设置数量，是否完整达到100设置/300起点预算？
+3. n50/n20各组MAE、前瞻NLPD、IS90、coverage与width。
+4. 三个成对消融分别支持什么，不支持什么？
+5. DKL机制诊断哪些解释有证据，哪些只是未验证假说？
+6. 有没有唯一方法通过工程门槛？
+7. 下一轮应进入同KG比较、容量实验、CLML，还是停止扩大代理复杂度？给出对应证据，不直接执行。
+
+GPT_ANALYSIS_REQUEST明确要求后续分析：
+- 引用具体数值与文件；
+- 区分事实、解释、假说；
+- 不能把WL更好解释成“已证明VAE丢信息”，不能把交互更好解释成“原模型完全没有交互”；
+- 不能把A探索性收益解释成B/test验证或搜索已成功；
+- 推荐最小规模的下一步，不重启已无稳定收益的旧路线。
+
+现在按以上要求实施、验证并完成第一轮；只有缺失关键数据或需要改变冻结科学规格时才停在明确的阻塞状态。

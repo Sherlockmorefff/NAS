@@ -1,0 +1,47 @@
+from analyse.structured_kernel_development_replay.protocol import protocol as old_protocol
+from .common import SEEDS,METHODS,KERNEL_KIND
+
+
+def protocol():
+    p=old_protocol()
+    p.update(version=1,purpose='A_development_single_kernel_intervention_and_unlabeled_C_preparation',independent_confirmation=False,
+        methods=list(METHODS),kernel={'kernel_kind':KERNEL_KIND,'base':'isotropic Matern5/2 in WL and HP',
+            'formula':'sf2*((1/3)*kh+(2/3)*ka*kh)','original':'sf2*(.25*ka+.25*kh+.5*ka*kh)',
+            'parameter_count':5,'fixed_weights':True,'explicit_branch':True,'priors':[],'extra_losses':[]},
+        budget={'trajectories':10,'fits':210,'starts':630,'initial_per_trajectory':50,'qlogei_per_trajectory':20,
+            'terminal_greedy_per_trajectory':1,'fit_n':list(range(50,71)),'terminal_n':71,'logical_releases':710},
+        analysis={'primary':'n71 W-HI minus W-I (pp)','comparators':['W-I','RAW16','existing Random'],
+            'secondary':['n70 paired gain','slot21 greedy increment','trapezoid regret query0..20 /20','champion hits/first query'],
+            'tie':'raw accuracy abs difference<=1e-12','bootstrap_replicates':2000,'bootstrap_seed':2026100631,
+            'paired_indices_shared_across_comparisons':True,'quantiles':[.025,.975],
+            'fixed_parameter_models':10,'fixed_parameter_name':'W-HI_FIXED_WI_PARAMS','fixed_parameter_optimization':0,
+            'Q0':'same A minus initial50, 129 candidates; all10 seeds equally weighted',
+            'true_top10':'exactly10 Q0 candidates sorted by (-cached_mean,full candidate_id), constructed after all formal trajectories sealed',
+            'prediction_top5':'sort(-mu,full candidate_id); original regret5=max(y_Q)-max(y_predicted_top5)',
+            'scoring':'original phase1 score_prediction prospective primary; Q-SE retrospective separate',
+            'top10_metrics':['signed_bias_pp','mean_positive_underestimate_pp','MAE_pp','mean_latent_sd_pp','latent/prospective coverage90,width90,IS90'],
+            'unknown_champion':'never count self-observed posterior fit as bias repair; initial champion2006/2008 separate',
+            'terminal_intersection':'optional auxiliary omitted; shared Q0 remains primary',
+            'selection_rule':'complete valid10 and mean n71 W-HI-W-I >1e-9 pp and mean AUC W-HI <= W-I+1e-9 pp => recommend W-HI; else W-I; invalid/missing=>INCONCLUSIVE',
+            'underestimation_rule':'Q0 true-top10 mean positive underestimate and MAE must both decrease; separately report signed bias/full-pool/calibration',
+            'requires_independent_confirmation':True},
+        C={'seed':2026100601,'max_actual_decoder_calls':5000,'target_architectures':45,'HP_per_architecture':4,'max_configurations':180,
+            'generator':'original frozen JointSpaceVAE.arch_vae.decode(stochastic=False), z~N(0,I12), CPU float32',
+            'latent_order':'torch.Generator(cpu).manual_seed(2026100601); sequential torch.randn(1,12); preseal 5000 latent draws; no reservoir permutation',
+            'grammar':'original1..5 operators; input/output, ordered DAG; six original operator types; original static validator',
+            'original192':'sampled from16384 decoded graphs, not exhaustive legal space enumeration',
+            'HP':'default_rng(SeedSequence([2026100601,architecture_index_zero_based,1])); original four uniform regimes in original order; original float32 global4 realization',
+            'HP_realization':{'lr':'10**(-4+2.5*u0)','dropout':'.1+.5*u1','hidden_dim_support':[16,32,64,128,256,512],'l2_support':[1e-5,5e-5,1e-4,5e-4,1e-3],'discrete_index':'min(int(min(clip01(u),1-1e-12)*n),n-1); original float32 input'},
+            'HP_regimes':{'hp_low':[.05,.20],'hp_mid_low':[.30,.45],'hp_mid_high':[.55,.70],'hp_high':[.80,.95]},
+            'HP_duplicate':'redraw same regime with same RNG until distinct realized (lr,dropout,hidden,l2); max100 attempts then mark gap',
+            'history':'exact typed directed isomorphism against available label-free history graphs; conservative known fingerprint rejection; missing full graphs remain provenance unresolved',
+            'source_gap_stop':'if historical graphs cannot be fully resolved without forbidden mixed caches, retain at most first45 provisional new graphs/180 configs and stop C as provenance-blocked; never call these eligible independent C',
+            'features':'separate append-only H0/H1/H2 dictionaries; preserve old IDs; remap A old coordinates; original n_max/e_max; no C target prediction',
+            'encoder':'frozen deterministic architecture mean; actual decoded graph, not latent draw as architecture encoding',
+            'OOV_after_freeze':'encoding blocked; never silently drop or UNK',
+            'unlabeled_structure_exposure':'transductive; does not imply performance leakage'},
+        forbidden=['B performance/SE','node test scores','new GNN training','VAE updates','C performance labels or predictions/acquisition scores','KG','additional methods/HP scans','later540 GNN tasks'],
+        recovery={'adam_checkpoint_every':25,'also_save_initial':True,'RNG_saved':True,
+            'LBFGS':'original single PyTorch step; interruption replays from saved Adam boundary with physical closure/update work logged separately',
+            'completed':'validate hashes and skip; sealed choices precede oracle releases'})
+    return p
