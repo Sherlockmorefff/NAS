@@ -1,0 +1,1550 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/Sherlockmorefff/NAS.git",
+  "review_branch": "review/ac-ln-source-sync-20261013",
+  "base_ref": "origin/review/dkl-sync-20260929T170121+0800",
+  "base_commit": "1ab3901a13673ae3751caff88f530559f9419f30",
+  "origin_main_at_fetch": "9a1ea429df658cdb4642dca36e4fa794523ba49f",
+  "audit_time_UTC": "2026-10-13T08:15:50.307848+00:00",
+  "server_root": "/home/fangxy/D-VAE",
+  "review_worktree": "/home/fangxy/D-VAE-review-ac-ln-20261013",
+  "runs": {
+    "ac_open_graph_mix_20261012v1": {
+      "result_root": "/home/fangxy/D-VAE/results/ac_open_graph_mix_20261012v1",
+      "protocol_version": "AC_open_graph_mix_v1_20261012",
+      "freeze_identity": "66bf42f94961b5fbfa1255e59b719db0953d92363cd5e060ac533b1d020ddb71",
+      "SOURCE_MANIFEST_sha256": "b6e26f5bfcf0e58acba3d31dee16c77f8330179c4b4ef276e25003a1721bbac4",
+      "PROTOCOL_sha256": "0858be8d528bbebabfdfdc4a6cfe4ac7a6dc2e2384f43ca1a2d1eacbd774d9ff",
+      "freeze_file_sha256": "5cb6f6ac8ca1f3fde2d75b4f692830ab04bafc39407e2595289f9655cac554d1",
+      "frozen_at": null,
+      "source_paths": [
+        "analyse/ac_open_graph_mix/__init__.py",
+        "analyse/ac_open_graph_mix/__main__.py",
+        "analyse/ac_open_graph_mix/checks.py",
+        "analyse/ac_open_graph_mix/common.py",
+        "analyse/ac_open_graph_mix/gp.py",
+        "analyse/ac_open_graph_mix/graphs.py",
+        "analyse/ac_open_graph_mix/initialization.py",
+        "analyse/ac_open_graph_mix/optimize.py",
+        "analyse/ac_open_graph_mix/prepare.py",
+        "analyse/ac_open_graph_mix/report.py",
+        "analyse/ac_open_graph_mix/runtime.py",
+        "analyse/ac_open_graph_mix/scoring.py",
+        "analyse/ac_open_graph_mix/search.py",
+        "analyse/ac_open_graph_mix/start_tmux.sh",
+        "analyse/acq_optimizer_offline/__init__.py",
+        "analyse/acq_optimizer_offline/common.py",
+        "analyse/acq_optimizer_offline/geometry.py",
+        "analyse/acq_optimizer_offline/problem.py",
+        "analyse/structured_kernel_development_replay/__init__.py",
+        "analyse/structured_kernel_development_replay/acquisition.py",
+        "analyse/structured_kernel_followup/__init__.py",
+        "analyse/structured_kernel_followup/common.py",
+        "analyse/structured_kernel_followup/validation_train.py",
+        "analyse/structured_kernel_phase1/__init__.py",
+        "analyse/structured_kernel_phase1/features.py",
+        "analyse/structured_kernel_phase1/gp.py",
+        "analyse/structured_kernel_phase1/io.py",
+        "analyse/structured_kernel_phase1/protocol.py",
+        "analyse/wi_schur_AC_pool300/__init__.py",
+        "analyse/wi_schur_AC_pool300/common.py",
+        "analyse/wi_schur_AC_pool300/gp.py",
+        "analyse/wi_schur_AC_pool300/prepare.py",
+        "analyse/wi_schur_B_pool300/__init__.py",
+        "analyse/wi_schur_B_pool300/common.py",
+        "analyse/wi_schur_B_pool300/gp.py",
+        "analyse/wi_schur_B_pool300/prepare.py",
+        "architecture_diagnostics.py",
+        "dataset_utils.py",
+        "deterministic_runtime.py",
+        "eval_utils.py",
+        "evaluation_errors.py",
+        "hp_modes.py",
+        "models.py",
+        "nas_space.py",
+        "surrogate/__init__.py",
+        "surrogate/accuracy_gp.py",
+        "surrogate/checkpoint_io.py"
+      ],
+      "current_state": "COMPLETE",
+      "launch_record": {
+        "path": "/home/fangxy/D-VAE/results/ac_open_graph_mix_20261012v1/LAUNCH_SNAPSHOT.json",
+        "sha256": "582768ac90be9286762e2c9be094cf449ebfcfca26b75287fbe022773c348826",
+        "recorded_freeze_identity": "66bf42f94961b5fbfa1255e59b719db0953d92363cd5e060ac533b1d020ddb71",
+        "started_unix": 1791821409.8004549
+      },
+      "reused_scientific_sanity": {
+        "path": "/home/fangxy/D-VAE/results/ac_open_graph_mix_20261012v1/SANITY.json",
+        "sha256": "a4f0b56a394cbd7f1dde31a4e1acd4794dc764ac600eabaac93d0ae38f89e8b7",
+        "checks": {
+          "A_actual_float32_landing": {
+            "PASS": true,
+            "max_absolute": 0.0
+          },
+          "A_finite_difference": {
+            "PASS": true,
+            "max_absolute": 0.00014377210254679085
+          },
+          "A_gradient_old": {
+            "PASS": true,
+            "max_absolute": 0.0
+          },
+          "A_two_implementations": {
+            "PASS": true,
+            "max_absolute": 0.0
+          },
+          "C_HP_autograd": {
+            "PASS": true,
+            "max_absolute": 1.5313169510200453e-08
+          },
+          "C_graph_proposals_no_VAE": {
+            "PASS": true,
+            "attempts": 18,
+            "decoder_calls": 0,
+            "encoder_calls": 0,
+            "graphs": 16
+          },
+          "C_ordinary_mean": {
+            "PASS": true,
+            "max_absolute": 4.6629367034256575e-15
+          },
+          "C_ordinary_variance": {
+            "PASS": true,
+            "max_absolute": 0.0
+          },
+          "budget_resume": {
+            "2048_batch_vector_arithmetic": true,
+            "270_main_300_total_states_separate": true,
+            "PASS": true,
+            "bounded_C_fallback_requests": 64,
+            "consumed_exception_requests": 1,
+            "external_native_deadline_probe": true,
+            "normal_early_convergence_requests": 3,
+            "per_start_caps": [
+              200,
+              30
+            ],
+            "resume_preserved_count_and_time": true
+          },
+          "cache_observation_gate": {
+            "PASS": true,
+            "legacy_training_key_unchanged": true,
+            "logical_method_key_present": true,
+            "method_in_physical_key": false,
+            "own_observations_only": true,
+            "selection_sealed_before_cache_lookup": true,
+            "test_gate_reused_separate_float32_process": true
+          },
+          "fixed_MC_tbatch_q1": {
+            "PASS": true,
+            "max_absolute": 7.105427357601002e-15
+          },
+          "graph_boundaries_and_output_rebuild": {
+            "PASS": true,
+            "allIdentity_rejected": true,
+            "missing_incoming_preserved": true
+          },
+          "isolated_float32_scoring": {
+            "PASS": true,
+            "test_mask_access": 0,
+            "training_updates": 0
+          },
+          "old768_posterior_mean": {
+            "PASS": true,
+            "max_absolute": 1.9539925233402755e-14
+          },
+          "old768_posterior_variance": {
+            "PASS": true,
+            "max_absolute": 1.7763568394002505e-15
+          },
+          "old768_qLogEI": {
+            "PASS": true,
+            "max_absolute": 2.0250467969162855e-12
+          },
+          "old_pool_graph_family_and_decode_mapping": {
+            "PASS": true,
+            "fixed_salt": 1829667883,
+            "rows": 768
+          },
+          "old_training_Gram": {
+            "PASS": true,
+            "max_absolute": 0.0
+          },
+          "shared_novel_history_token_Gram": {
+            "PASS": true,
+            "max_absolute": 4.440892098500626e-16,
+            "shared_new_symbols": 5
+          }
+        }
+      },
+      "existing_acceptance": {
+        "path": "/home/fangxy/D-VAE/results/ac_open_graph_mix_20261012v1/ACCEPTANCE.json",
+        "sha256": "da1ae8d955093a79ba7e49c1d4d6c1c7f450735f940d9a9f17dd844cc6e01b4b",
+        "checks": "PASS"
+      }
+    },
+    "ac_champions_ln_reuse_none_20261013v1": {
+      "result_root": "/home/fangxy/D-VAE/results/ac_champions_ln_reuse_none_20261013v1",
+      "protocol_version": "ac_champions_ln_reuse_none_20261013v2",
+      "freeze_identity": "0de8d569e77ca4a6330c3171781971d3d061d956a1025c73c15e2568945fe2c0",
+      "SOURCE_MANIFEST_sha256": "9f9bc790ed1f16d8f94e483e6e81c67299f66dea5a2c664777e2ec4631365e75",
+      "PROTOCOL_sha256": "e23713a00b352e5d871cb86f2069903e1c42d3062b861f32531f974dc0a5fb0b",
+      "freeze_file_sha256": "6963b5dd538a7e1d17c9194d4fa288a8e30e8286637e5c8da27156b4491373f1",
+      "frozen_at": "2026-10-13T05:45:07.327385+00:00",
+      "source_paths": [
+        "analyse/ac_champions_ln_reuse_none/__init__.py",
+        "analyse/ac_champions_ln_reuse_none/__main__.py",
+        "analyse/ac_champions_ln_reuse_none/checks.py",
+        "analyse/ac_champions_ln_reuse_none/common.py",
+        "analyse/ac_champions_ln_reuse_none/prepare.py",
+        "analyse/ac_champions_ln_reuse_none/report.py",
+        "analyse/ac_champions_ln_reuse_none/runtime.py",
+        "analyse/ac_champions_ln_reuse_none/scoring.py",
+        "analyse/ac_champions_ln_reuse_none/start_tmux.sh",
+        "analyse/ac_champions_ln_reuse_none/training.py",
+        "eval_utils.py",
+        "deterministic_runtime.py",
+        "dataset_utils.py",
+        "evaluation_errors.py",
+        "hp_modes.py",
+        "analyse/structured_kernel_followup/validation_train.py",
+        "analyse/structured_kernel_followup/common.py",
+        "analyse/structured_kernel_phase1/io.py",
+        "analyse/ac_open_graph_mix/scoring.py"
+      ],
+      "current_state": "COMPLETE",
+      "launch_record": {
+        "path": "/home/fangxy/D-VAE/results/ac_champions_ln_reuse_none_20261013v1/LAUNCH_SNAPSHOT.json",
+        "sha256": "97bebc8510433ec7940cfafbf5cb6abb41dc17f6de3ee03f73d34eac026dd847",
+        "recorded_freeze_identity": "0de8d569e77ca4a6330c3171781971d3d061d956a1025c73c15e2568945fe2c0",
+        "started_unix": 1791870352.5649219
+      },
+      "reused_scientific_sanity": {
+        "path": "/home/fangxy/D-VAE/results/ac_champions_ln_reuse_none_20261013v1/SANITY.json",
+        "sha256": "9d4ab05c1067898d027cca208cf5d9e08f9c53a77bb73542573d8473b2db91f6",
+        "checks": "PASS"
+      },
+      "existing_acceptance": {
+        "path": "/home/fangxy/D-VAE/results/ac_champions_ln_reuse_none_20261013v1/ACCEPTANCE.json",
+        "sha256": "b231652d52d49c503d84cded802ac0a3880445df1e543a070ee3c91897a6ce1f",
+        "checks": "PASS"
+      }
+    }
+  },
+  "source_files": [
+    {
+      "path": "analyse/ac_open_graph_mix/__init__.py",
+      "sha256": "6f09f884682980e5250423f345dba2bceedd883e6dab065b75bd6dea27d0ef56",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/__main__.py",
+      "sha256": "5af8e2d030704e0740110ca67a9add36c63499e0cfa007f201bd7fc24d15d7be",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/__main__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/checks.py",
+      "sha256": "265368c05701d0bc716e0a4e90fc61695e8275ab5e09aa678d428956a23fdcb1",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/checks.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/common.py",
+      "sha256": "c36b3a87bde1232e699d67fa677d8ab67b8a6dd3d9dbf5f9e370feb52d5ef3c9",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/gp.py",
+      "sha256": "b227dd04da662b9a06588f7606783bfd81c1149cf1714aab43c5c346b1410358",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/gp.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/graphs.py",
+      "sha256": "24e582b8ac1973823a70f5637149114e47e88b52b2980f33abd4c5834dc6ff78",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/graphs.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/initialization.py",
+      "sha256": "15f7eb9e1bdf558533497fedb744283a0a6faf2e09526fd1e9e93ec6c5416710",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/initialization.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/optimize.py",
+      "sha256": "82da13e8059d845660f3889c2916b0dba8cb24be7196f0ca78670cccc98b6bca",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/optimize.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/prepare.py",
+      "sha256": "eb57328b2ae58f57245f0daa4b5ad2c325499aca0bc91d9e3457222abee34c46",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/prepare.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/report.py",
+      "sha256": "d79ff358ffa93c3f07a30fa00be0590bf1fa803a8b91f6e716d0aadd0fc54136",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/report.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/runtime.py",
+      "sha256": "f4757c7fd4e9c6d5b2f15d629081d4419b11bcfb3901055e9993e60eea65d59d",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/runtime.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/scoring.py",
+      "sha256": "b71da41973c337394b8ca420a59ac9782561b4fddb7519fdb61e1c2011475e37",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/scoring.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/search.py",
+      "sha256": "8eb562fbcd44e961d4eb25d3766eb6f4c9a38c92c781b298befba931831bb929",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/search.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_open_graph_mix/start_tmux.sh",
+      "sha256": "3234c3159f29ff10cfd2da76c987045846758d8b7c6a140711df58d05f057c38",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_open_graph_mix/start_tmux.sh",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/acq_optimizer_offline/__init__.py",
+      "sha256": "e874b40506b1e296819a3fd95c91990ff60197b7030fb1672c6509184fe47bf3",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/acq_optimizer_offline/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/acq_optimizer_offline/common.py",
+      "sha256": "6127420d4889ffc9edf527544250016bcc6963b60346903254766f3cfa5c50f8",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/acq_optimizer_offline/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/acq_optimizer_offline/geometry.py",
+      "sha256": "ec9d11ca3fab026f144e9c80607e8061471fe0f3631294effa183e9569ae5e56",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/acq_optimizer_offline/geometry.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/acq_optimizer_offline/problem.py",
+      "sha256": "b493e96746e299febe81365d18f9e3a2db5856592617b64489826b535beb2f10",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/acq_optimizer_offline/problem.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_development_replay/__init__.py",
+      "sha256": "84881ceb47ddab403bc207101cb3dc8bc644f06e54e11f451b1f69ee40cef5b2",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_development_replay/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_development_replay/acquisition.py",
+      "sha256": "c41d00ca80efab45321f821c4b4c3662cfe06b4db0a0e4e99a56dfd4a79d5fa6",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_development_replay/acquisition.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_followup/__init__.py",
+      "sha256": "d5d4b9b48cb725fcbea00786145b622fc49804b06b476457d1014a319d38ecbb",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_followup/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_followup/common.py",
+      "sha256": "96938d45c3bb05618975d4c46a6b13bb4c560b60b852c5bf05cb2100dc166e86",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_followup/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_followup/validation_train.py",
+      "sha256": "41d34223d378660e552a9d9ef10c0e737af016aff276256c9f6604965743b776",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_followup/validation_train.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_phase1/__init__.py",
+      "sha256": "d359bc002a412bde9b1dabb54de323a1e93486714ec1b595314a08d5c54a993f",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_phase1/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_phase1/features.py",
+      "sha256": "5b11174d3f423baae67cd427c30b3e7115d93f39814d2af801ee7f153cb1d1b4",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_phase1/features.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_phase1/gp.py",
+      "sha256": "99ac77a5a94d8a57425bcf4ed5756246086110e810f7eefabac57899d98cb6fb",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_phase1/gp.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_phase1/io.py",
+      "sha256": "25e93e3d17f30a616781c8a99a6261000766ae604b4d213cecde358609722250",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_phase1/io.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/structured_kernel_phase1/protocol.py",
+      "sha256": "5b8b9e12521aed61bf0ac9af90df1ef6beddc3325fc4c08f3b5e5c129d016779",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/structured_kernel_phase1/protocol.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/__init__.py",
+      "sha256": "6f09f884682980e5250423f345dba2bceedd883e6dab065b75bd6dea27d0ef56",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/common.py",
+      "sha256": "21c132b568c1f442ec8835c5222559a2d720a27fa2998188eafada32274c354b",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/gp.py",
+      "sha256": "b227dd04da662b9a06588f7606783bfd81c1149cf1714aab43c5c346b1410358",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/gp.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/prepare.py",
+      "sha256": "ee57c01fcbf143f951d9d7208800ea0ea90b5a06898d9473f4f3f95d4e78a4c1",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/prepare.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/__init__.py",
+      "sha256": "76739a146ebe483f1e46112792a4eb844c1f6a985d6fd1d81ebb7dc2d9697cfb",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/common.py",
+      "sha256": "89e5c23e5fd7d0128cafd57044b28acdf8f93e4c1988b1bcd6ce3d86e1c95e5b",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/gp.py",
+      "sha256": "61a46d0a7e25f7a464189b7c01a9e0fffa1f2fbbd039922aee697fe51cb94c47",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/gp.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/prepare.py",
+      "sha256": "3aa85c311351bc850b94e045e9c64b569480c56e032448aa429e29bea7058df4",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/prepare.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "architecture_diagnostics.py",
+      "sha256": "a1efc8a2ae21b8520d90166771ad434186a57147e0c7f01a842856abd00cf05f",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/architecture_diagnostics.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "dataset_utils.py",
+      "sha256": "8c47efed0521241cd067d4cf5a6e0283f905f1921db4066f5531d707c20648fa",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/dataset_utils.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "deterministic_runtime.py",
+      "sha256": "41c3be4824cee9d4e1e9eee4afb58db8b61e69726dfeda0f44146adaf613ac24",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/deterministic_runtime.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "eval_utils.py",
+      "sha256": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/eval_utils.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "evaluation_errors.py",
+      "sha256": "40c42b17454c6cc15e305cfb7f48f6bcd35624e6e29472d2cdd034c08c905936",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/evaluation_errors.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "hp_modes.py",
+      "sha256": "9badfab2d1071d3146e312a393e75e9360b7eca5332d97fb2f010c6d8e8521cf",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1",
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/hp_modes.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "models.py",
+      "sha256": "975c9b20f064a9bda98f99db04946cac89ab84cddf8a584217926b6853dffc7e",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/models.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "nas_space.py",
+      "sha256": "386514dac7bbffabea45bd8a2663bf6da8b740b3fd55eef361aa2ae14350727b",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/nas_space.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "surrogate/__init__.py",
+      "sha256": "4087df34a8afb4bf14470a4a163123886a366318c42262b0d1d6a17463cd64a0",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/surrogate/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "surrogate/accuracy_gp.py",
+      "sha256": "ca2f8df525c9210aaad6a9ac56a4030886ce33dbea2e6fd99132bad8698f492c",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/surrogate/accuracy_gp.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "surrogate/checkpoint_io.py",
+      "sha256": "0bc8883d03900660b29f5f82acf2e0637a090fc7226626d55164d6892798bd30",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_open_graph_mix_20261012v1"
+      ],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        },
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "identical",
+      "origin_path": "/home/fangxy/D-VAE/surrogate/checkpoint_io.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/__init__.py",
+      "sha256": "d53b19a496b543b16a3014961b01f527526e16140b5b22e52301054479174506",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/__init__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/__main__.py",
+      "sha256": "38270306bd87d35f027aef3ccdb5af41debb30cf3c13871039e7e5ea3889c072",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/__main__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/checks.py",
+      "sha256": "34d168633a4797cbd697a0d47b94275ab046689ecf5ff45ac13cad96815f430e",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/checks.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/common.py",
+      "sha256": "74fc9ddbca8a46686cb7a175612bed174151b38bc275e7da1ac476b00fb57e10",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/common.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/prepare.py",
+      "sha256": "9e317112e7108db8c55d90ca7e70ba99a5cc6a4aae47ba5b5bc77ae0f94759c6",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/prepare.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/report.py",
+      "sha256": "8a3f8d69c269119ec5c2dd5d1c716eb9e232eb8169ab6cdfeaf50aa09c2cd34e",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/report.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/runtime.py",
+      "sha256": "6e2481f4076c64f1a86736e481275422ebdb4312a1cd8cf97e2c320381f96cef",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/runtime.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/scoring.py",
+      "sha256": "329107bac7a70422e3a2f5861797179ec8d226fcfea77bd6e99eb92486ef90d5",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/scoring.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/start_tmux.sh",
+      "sha256": "fceb29a7d87c17652f6608f58259265efe3f9cf2943473400a8ffea2781aad59",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/start_tmux.sh",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/ac_champions_ln_reuse_none/training.py",
+      "sha256": "3f5d2f282472737b64c418bc71c7282f9ce85713376752c55927fc5defbf0b17",
+      "kind": "frozen_runtime_source",
+      "frozen_in": [
+        "ac_champions_ln_reuse_none_20261013v1"
+      ],
+      "historical_identity_dependency": [],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/ac_champions_ln_reuse_none/training.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/__main__.py",
+      "sha256": "43cdf55366bfb6970b4d3db883ee3447e6b34c1046096ca85d29260d6172ca6b",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/__main__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/cpu_check.py",
+      "sha256": "0d6f16f4b51e4f4cda4bc0c58288e67168a0e64955a360bbc5ad6e380bc1d301",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/cpu_check.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/report.py",
+      "sha256": "cd8e8873a43a51da27cfa63eb192c0bbe579d72896d537ac8407b7730415a600",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/report.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/runtime.py",
+      "sha256": "2b43379051e44534b92c93b84c49573b4b79cd342679fbf327ca30cc85237e4d",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/runtime.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_B_pool300/search.py",
+      "sha256": "ed76061302efe33c07983eb8b4d9417608d77f38160e87e7149b8a8b2cf36c88",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_B_pool300_20261011v1",
+          "freeze_identity": "c5d34db8ed78bbfc7f4175414d94cda53ef062574591ba0d92b1680ec068fb92"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_B_pool300/search.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/__main__.py",
+      "sha256": "e2ac7dd99506dd8e9cd575caddfdf0da96d015f5564a90c64ac7ceb2536dcb4c",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/__main__.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/cpu_check.py",
+      "sha256": "a166fd001c80db90ea87a63119daa454303e721dbf1293e0ac59f91ab7004cd4",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/cpu_check.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/initialization.py",
+      "sha256": "15f7eb9e1bdf558533497fedb744283a0a6faf2e09526fd1e9e93ec6c5416710",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/initialization.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/report.py",
+      "sha256": "1479304ec8848d28d4b5bc8fd8ac90a2d39299438fb5328d7ef5d610b3eda16d",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/report.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/runtime.py",
+      "sha256": "742d107a97912912f82ffe86bad9cbe9af1111bea5f6a683d58090304cb21049",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/runtime.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/scoring.py",
+      "sha256": "dbdf900be31fa773ef2b3068b6dd2cd8b430a769f16b7286a06a50f2300aabaa",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/scoring.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/search.py",
+      "sha256": "b02546bb2f8774d4f0b7fbd12341e13543462c225d34d286eca19a6490ff6a33",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/search.py",
+      "current_worktree_matches_frozen": true
+    },
+    {
+      "path": "analyse/wi_schur_AC_pool300/start_tmux.sh",
+      "sha256": "fbd7531eef9ba0d2ae6f37afe9b7d74b6e347fded4476d12270c1cab1cdd7442",
+      "kind": "historical_source_identity_dependency",
+      "frozen_in": [],
+      "historical_identity_dependency": [
+        {
+          "run": "wi_schur_AC_pool300_20261012v1",
+          "freeze_identity": "54a932fc8f7369a6faac848fba22486d3342bdfd46f1ffed1ecb7fa3bbc5e4d0"
+        }
+      ],
+      "base_branch_file_state": "missing",
+      "origin_path": "/home/fangxy/D-VAE/analyse/wi_schur_AC_pool300/start_tmux.sh",
+      "current_worktree_matches_frozen": true
+    }
+  ],
+  "supplemental_files": [
+    {
+      "path": "scripts/review/ac_ln_source_sync/watchdog.py",
+      "origin_path": "/home/fangxy/D-VAE/artifacts/ac_open_graph_mix_20261012v1/watchdog.py",
+      "sha256": "b459e9d59d3ad9aecae51b9230e1fe03e9dfcae948fb4d94ef2fc7427c100079",
+      "kind": "post_freeze_supervision",
+      "run": "ac_open_graph_mix_20261012v1",
+      "included_in_frozen_scientific_source": false,
+      "source_receipt_sha256": "9af916bb666bdef94c119d99ff4e339af39ea3de453e3cd989b3310ab1635fb7",
+      "relocation": "byte-identical review copy; original execution path retained in provenance"
+    },
+    {
+      "path": "scripts/review/ac_ln_source_sync/finalize_delivery.py",
+      "origin_path": "/home/fangxy/D-VAE/artifacts/ac_champions_ln_reuse_none_20261013v1/finalize_delivery.py",
+      "sha256": "89c8af2f046d2676d351ac6d8d157ccceed36dcb5f043ce499d5f5403ae83f09",
+      "kind": "post_training_report_delivery_repair",
+      "run": "ac_champions_ln_reuse_none_20261013v1",
+      "included_in_frozen_scientific_source": false,
+      "source_receipt_sha256": "f8e82ecaf2bd267de10579d1e242cbb43d60db0e6996b8c34b1b8711dc6264a6",
+      "relocation": "byte-identical review copy; original execution path retained in provenance"
+    }
+  ],
+  "small_identity_files": [
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_open_graph_mix_20261012v1/SOURCE_MANIFEST.json",
+      "sha256": "b6e26f5bfcf0e58acba3d31dee16c77f8330179c4b4ef276e25003a1721bbac4"
+    },
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_open_graph_mix_20261012v1/PROTOCOL.json",
+      "sha256": "0858be8d528bbebabfdfdc4a6cfe4ac7a6dc2e2384f43ca1a2d1eacbd774d9ff"
+    },
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_champions_ln_reuse_none_20261013v1/SOURCE_MANIFEST.json",
+      "sha256": "9f9bc790ed1f16d8f94e483e6e81c67299f66dea5a2c664777e2ec4631365e75"
+    },
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_champions_ln_reuse_none_20261013v1/PROTOCOL.json",
+      "sha256": "e23713a00b352e5d871cb86f2069903e1c42d3062b861f32531f974dc0a5fb0b"
+    },
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_open_graph_mix_20261012v1/SUPERVISION_MANIFEST.json",
+      "sha256": "9af916bb666bdef94c119d99ff4e339af39ea3de453e3cd989b3310ab1635fb7"
+    },
+    {
+      "path": "docs/ac_ln_source_sync/identities/ac_champions_ln_reuse_none_20261013v1/DELIVERY_REPAIR.json",
+      "sha256": "f8e82ecaf2bd267de10579d1e242cbb43d60db0e6996b8c34b1b8711dc6264a6"
+    }
+  ],
+  "conflicts": [],
+  "later_current_tree_changes_in_frozen_files": [],
+  "original_workspace": {
+    "at": "2026-10-13T08:09:43.109738+00:00",
+    "HEAD": "64a44c14316f11debaf01cf8583426acfe1410e6",
+    "branch": "feature/accuracy-bottleneck-diagnostics",
+    "status_sha256": "8ee4af25f0160878aebeedf1dcdfa6483189a315fa73789d0073d08df8f943d9",
+    "tracked_diff_sha256": "9c869c0aa6a6ee452a44ecd5c7535905311f741362035ad72bcba446fb68fcdd",
+    "status_entries": 297,
+    "tracked_modified_hashes": {
+      "bo_phase4.py": "3fd80c3e49e7f56311930c8451419d97d5676e40dbe53ed995de81601ac0a458",
+      "eval_utils.py": "0cbfb402db030173ca11e4e90570df6ac427d99b416470863f55280d51e2541d"
+    }
+  },
+  "excluded": [
+    "weights",
+    "datasets",
+    "result archives",
+    "full training/results tables",
+    "runtime logs",
+    "environment directories",
+    "credentials",
+    "unrelated server modifications"
+  ],
+  "scientific_training_scoring_or_GP_fitting_in_this_sync": false,
+  "remote_source_comparison": [
+    {
+      "ref": "origin/feature/accuracy-bottleneck-diagnostics",
+      "commit": "397a12526169feddf7e8a08e707accd35881e669",
+      "identical": 8,
+      "different": 2,
+      "missing": 60
+    },
+    {
+      "ref": "origin/feature/gp-offline-online-update",
+      "commit": "522d303fa7a8a551b3b7fa4486140674cced4c35",
+      "identical": 8,
+      "different": 2,
+      "missing": 60
+    },
+    {
+      "ref": "origin/main",
+      "commit": "9a1ea429df658cdb4642dca36e4fa794523ba49f",
+      "identical": 3,
+      "different": 1,
+      "missing": 66
+    },
+    {
+      "ref": "origin/review/dkl-sync-20260929T170121+0800",
+      "commit": "1ab3901a13673ae3751caff88f530559f9419f30",
+      "identical": 10,
+      "different": 0,
+      "missing": 60
+    }
+  ],
+  "checks": {
+    "syntax_files": 72,
+    "imported_frozen_and_identity_modules": 67,
+    "entry_help": [
+      "analyse.ac_open_graph_mix",
+      "analyse.ac_champions_ln_reuse_none"
+    ],
+    "CUDA_VISIBLE_DEVICES": "",
+    "real_data_loading": false,
+    "GNN_training": false,
+    "GP_fit": false,
+    "test_scoring": false,
+    "supplemental_tools_compiled_not_imported": true,
+    "legacy_unused_imports": [
+      {
+        "path": "analyse/structured_kernel_followup/validation_train.py",
+        "import": "from analyse.vae_label_expansion import EXPECTED_DATASET_CONTEXT",
+        "scope": "legacy run_task helper not used by A/C/LN"
+      }
+    ],
+    "seconds": 3.5315566062927246,
+    "result": "PASS",
+    "git_diff_checks": [
+      {
+        "command": [
+          "git",
+          "diff",
+          "--cached",
+          "--check",
+          "--",
+          ".",
+          ":!analyse/ac_champions_ln_reuse_none/training.py"
+        ],
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "git",
+          "-c",
+          "core.whitespace=-blank-at-eof",
+          "diff",
+          "--cached",
+          "--check",
+          "--",
+          "analyse/ac_champions_ln_reuse_none/training.py"
+        ],
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "git",
+          "diff",
+          "--check"
+        ],
+        "result": "PASS"
+      }
+    ],
+    "default_cached_diff_check": {
+      "exit_code": 2,
+      "sole_finding": "analyse/ac_champions_ln_reuse_none/training.py:157: new blank line at EOF.",
+      "disposition": "preserve byte-identical frozen source; original EOF blank line documented, no source edited",
+      "file_sha256": "3f5d2f282472737b64c418bc71c7282f9ce85713376752c55927fc5defbf0b17",
+      "other_files_default_check": "PASS",
+      "same_file_other_whitespace_checks": "PASS"
+    }
+  },
+  "dependency_versions": {
+    "frozen_B_environment": {
+      "botorch": "0.16.1",
+      "gpytorch": "1.15.2",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "torch": "2.5.1+cu121",
+      "torch-geometric": "2.7.0"
+    },
+    "observed_at_sync_additional": {
+      "linear-operator": "0.6.1",
+      "igraph": "1.0.0",
+      "ogb": "1.3.6"
+    }
+  },
+  "original_workspace_preserved_at_precommit": {
+    "checked_UTC": "2026-10-13T08:23:14.846449+00:00",
+    "HEAD_unchanged": true,
+    "branch_unchanged": true,
+    "full_porcelain_unchanged": true,
+    "tracked_diff_unchanged": true,
+    "result_files_read_only": true
+  },
+  "scope_notes": {
+    "scientific_source_byte_changes": 0,
+    "unused_legacy_followup_run_task_helper": "not called by these protocols; its separate runner and vae_label_expansion pipeline are intentionally not copied",
+    "supplemental_review_copies": "byte-identical relocated copies; compile only; original paths in receipts",
+    "generated_files_not_self_hashed": [
+      "SOURCE_SYNC_MANIFEST.json",
+      "GIT_SOURCE_SYNC_REPORT.md"
+    ]
+  }
+}

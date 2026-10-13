@@ -1,0 +1,8 @@
+{
+  "file": "/home/fangxy/D-VAE/artifacts/ac_open_graph_mix_20261012v1/watchdog.py",
+  "sha256": "b459e9d59d3ad9aecae51b9230e1fe03e9dfcae948fb4d94ef2fc7427c100079",
+  "added_after_freeze": true,
+  "purpose": "routine engineering heartbeat and exact checkpoint recovery only; scientific protocol/source/initialization/seeds unchanged",
+  "at": "2026-10-12T16:31:30.617017+00:00",
+  "freeze_identity": "66bf42f94961b5fbfa1255e59b719db0953d92363cd5e060ac533b1d020ddb71"
+}

@@ -1,0 +1,452 @@
+{
+  "A_generated_latent": "original12 for initialization, generated little-endian float32 after landing; no encoder_mu replacement",
+  "A_optimizer": {
+    "Sobol16": 256,
+    "decoder_salt": "AC_open_graph_mix_v1_20261012\\0",
+    "decoder_trials": 5,
+    "fallback_Sobol": 128,
+    "ftol": 1e-09,
+    "gtol": 1e-06,
+    "max_requests_each": 200,
+    "maxiter": 200,
+    "maxls": 20,
+    "post": 64,
+    "scramble": true,
+    "seed": "first4 little endian SHA256(salt+clipped latent12 float32 bytes)",
+    "starts": 8
+  },
+  "B_new_search_or_training_trajectories": 0,
+  "B_root": "/home/fangxy/D-VAE/results/wi_schur_B_pool300_20261011v1",
+  "CPU_sanity_tolerances": {
+    "absolute": 1e-07,
+    "finite_difference_step": 1e-06,
+    "fixed_points": [
+      0.43,
+      0.37
+    ],
+    "relative": 1e-06
+  },
+  "C_full_history_tokens": "recursive H0/H1/H2 semantic hashes; all seen tokens as explicit axes, T-union-Q expansion; complete norms and shared new-token inner products",
+  "C_latent": null,
+  "C_optimizer": {
+    "attempts_per_flow": 128,
+    "coarse_per_graph": 60,
+    "fallback": 64,
+    "fallback_graph_attempts": 128,
+    "ftol": 1e-09,
+    "gtol": 1e-06,
+    "hidden": [
+      16,
+      32,
+      64,
+      128,
+      256,
+      512
+    ],
+    "l2": [
+      1e-05,
+      5e-05,
+      0.0001,
+      0.0005,
+      0.001
+    ],
+    "maxiter": 30,
+    "maxls": 20,
+    "mutation": "uniform parent; .5 operator replacement, .5 possible internal edge toggle; rebuild outputs",
+    "mutations": 8,
+    "online_decoder_calls": 0,
+    "online_encoder_calls": 0,
+    "parents": "top5 different own seen structures by best search validation then structureID",
+    "post": 64,
+    "random_graphs": 8,
+    "refine_requests_each": 30,
+    "refine_starts_per_graph": 2,
+    "shared_Sobol2_points": 2
+  },
+  "ETA": "first measured after A0/C0 each10online; current-run stage timings; initial due=ETA+900s, mutable until first trigger; healthy recheck300s",
+  "GP": {
+    "A": "isotropic Matern5/2 RAW16 four parameters",
+    "Adam_lr": 0.01,
+    "Adam_steps": 300,
+    "C": "sf2*(.25*kW+.25*kH+.5*kW*kH), two isotropic Matern5/2, five parameters",
+    "LBFGS": {
+      "history_size": 100,
+      "line_search_fn": "strong_wolfe",
+      "lr": 1.0,
+      "max_eval": 125,
+      "max_iter": 100,
+      "tolerance_change": 1e-09,
+      "tolerance_grad": 1e-07
+    },
+    "cold_starts": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "floors": [
+      0.0001,
+      1e-08,
+      1e-06
+    ],
+    "initial_mean": 0.0,
+    "initial_noise": 0.01,
+    "initial_signal": 1.0,
+    "jitter": [
+      1e-08,
+      1e-07,
+      1e-06
+    ],
+    "parameters_fixed_during_acquisition": true,
+    "scales": "own seen observations only; ddof0; positive pair medians; zero y scale blocks"
+  },
+  "H_access": false,
+  "acquisition": {
+    "MC": 512,
+    "candidate_requests": 2048,
+    "eta": 0.001,
+    "external_native_call_supervisor": true,
+    "fat": true,
+    "main_seconds": 270,
+    "posterior": "latent no added likelihood noise",
+    "q": 1,
+    "requests_counted_before_call": true,
+    "same_old_step_seed": true,
+    "tau_max": 0.01,
+    "tau_relu": 1e-06,
+    "total_seconds": 300
+  },
+  "cache_sources": [
+    "/home/fangxy/D-VAE/results/wi_schur_AC_pool300_20261012v1",
+    "/home/fangxy/D-VAE/results/wi_schur_B_pool300_20261011v1"
+  ],
+  "dataset_context": {
+    "canonical_name": "cora",
+    "dataset_content_fingerprint": "373d00c7962dc1ab0cc86974b1542eb76a768d2878013ceee0691b3932d062c7",
+    "graph_transform": "NormalizeFeatures",
+    "metric": "accuracy",
+    "ogb_version": "1.3.6",
+    "pyg_version": "2.7.0",
+    "source_class": "torch_geometric.datasets.Planetoid",
+    "source_version": "2.7.0",
+    "split_fingerprint": "bcf2020a2d127eb2b4a91fb698062a3b22106a11b752490924c1adbe5dba9e09",
+    "split_protocol": "planetoid_public",
+    "split_seed": null,
+    "torch_version": "2.5.1+cu121",
+    "training_mode": "full_batch"
+  },
+  "evaluation_code_identity": "b3c806913557d4807819ca072e07b25389040e611dc05ad6d6cd95ba23d0461b",
+  "final_recipe": {
+    "batch": "full_batch",
+    "checkpoint_selection": "strict validation improvement, first best retained",
+    "dataset": "cora",
+    "dtype": "float32",
+    "graph_transform": "NormalizeFeatures",
+    "hp_mode": "global4",
+    "max_epochs": 300,
+    "model": "DynamicGNN baseline/relu",
+    "normalization": "none",
+    "optimizer": "Adam original defaults; lr=config.lr, weight_decay=config.l2",
+    "patience": 80,
+    "scheduler": "CosineAnnealingLR(T_max=max_epochs,eta_min=lr*.01)",
+    "split": "planetoid_public",
+    "track_test": false
+  },
+  "fixed_configuration": {
+    "gat_heads": 1,
+    "gat_heads_by_layer": null,
+    "gcnii_alpha": 0.1,
+    "gcnii_theta": 0.5,
+    "gin_eps": 0.0,
+    "gin_eps_by_layer": null,
+    "hp_mode": "global4",
+    "normalization": "none",
+    "sage_aggr": "mean",
+    "sage_aggr_by_layer": null
+  },
+  "frozen_at": "2026-10-12T16:09:50.676816+00:00",
+  "graph_family": {
+    "all_Identity_rejected": true,
+    "m": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "max_edges": 16,
+    "max_nodes": 7,
+    "missing_incoming_fallback_preserved": true,
+    "operators": [
+      "GCNConv",
+      "GATConv",
+      "SAGEConv",
+      "GINConv",
+      "GCNII",
+      "Identity"
+    ],
+    "output": "all and only internal loose ends connect END"
+  },
+  "groups": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "historical_development_benchmark": true,
+  "historical_final_seeds_previously_used": true,
+  "logical_budget": {
+    "each_trajectory": [
+      50,
+      250,
+      300,
+      30
+    ],
+    "final": 300,
+    "search": 3000,
+    "total": 6300,
+    "validation": 3000
+  },
+  "method_definitions": {
+    "A": "RBF-Schur50; RAW16; 256 Sobol +8 L-BFGS-B; float32 VAE landing",
+    "C": "old unlabeled WI-Schur50; full stable-token WI; 8 random+8 mutated graphs; discrete enumeration +continuous HP gradients"
+  },
+  "methods": [
+    "A",
+    "C"
+  ],
+  "old_AC_root": "/home/fangxy/D-VAE/results/wi_schur_AC_pool300_20261012v1",
+  "prompt_sha256": "a7b41e893cd5533e99d7c96be41a47b6e82fd0b5d3917327a81ef83ffb35e095",
+  "proposal_seed": {
+    "base": 2026101223,
+    "formula": "uint32(SeedSequence([base,group,phase,index]).generate_state(1))",
+    "phases": [
+      11,
+      12,
+      21,
+      22,
+      23,
+      24,
+      31
+    ]
+  },
+  "representation": {
+    "0": {
+      "e_max": 16,
+      "fallback_ids": [
+        "a74eec09b746a7650c85f6a5b2cf22ca3e81d84d8d8c846afd0e1a4eb9a8a229",
+        "b2435e45f2cf4bd243172d37553c2db4f7f7e9902d5c7089b9359ae671bf5ed4",
+        "cb0e6e1691d5c8f0232eb38fdfd2868ce9eb6f24b69ae7e79a8b749e22ad77e0",
+        "5ee9bc210faf54c2ac0508fecd47f8fb5e5ab644f1237085c952b803c32c3999",
+        "0a4f7bf2f46bea6fbffb97aa7c91a0f0ea4cd926c6b79ff60ade10a5e836a239",
+        "0c73c4e7e1ea630b31d3f214635aac2aa8b0f133dcdde0af87fdb4a8d71c679a",
+        "8a213e00f52c33e6891de98bd39373d2981660c775966b8e5b98ae198b1e8ed4",
+        "45243743170239929321a87cd5564f4d34f540d9163f7bc98535cbe210af954c",
+        "1c542781ac15f44a3c2f4047c1728836bdf4bf01f9f0bd3e768c1ef546fd8563",
+        "926f73509e165fd61bf1537e51d4c107d02c6c6db33b6ac2f03f447ab0afa288",
+        "ebc51965b74d185e00a42a1fa96c39fd9ee9489c16a23acc6a7831021bb62d10",
+        "a7279e632bc0a214b200dad33bb63617c27eb473acdb34a7721936df05588dcd",
+        "242ff405ec5cc668c7c5d7e8b0eded2b22b6578bf6f5ba88ad1004d1d9168981",
+        "e666b2814dabacd3d29055b70b17912054910b5cc7a0f193e7a11318d7addd4e",
+        "d30cc057f875a7fc5431821cd60e2809121ed57ca23d783b1ddc5532c339ef35",
+        "d58da791776d28e5fbf6ebf1bc0efd6dfd5ed1db49877e0c1be4b0f509718edc",
+        "0ceaca9a67486f790109757967e8195241e46d472e9c5233a5b5e62a7ff58019",
+        "3487a303e24c0fe127b048869f6168935af187f4c7a593fb717967256c80cd9f",
+        "5ce0a083bd85cce7f31403b199bcb940380a15aaab742ff74eb2dbdb89152f02",
+        "aff4d19974c9a8f47824883ba9d84cd803213e943bae0d86d1e95c30df5c0b55",
+        "fbb22ccbcad40dd39dcfeada17717ff872787c3ad1cdb87fee9eedc260bf2c18",
+        "595107763191d0c170d92d6a7843169d19823c3055464063be49344a41e368db",
+        "62b0387559b95a6a78efd7b3c979edc864f3d08d5f70b6864fb1e1d0322d6a92",
+        "04a7166fd7cd3ae3a61097fcf0f80464a1fae6176576df2a0e5b59b8652abc68"
+      ],
+      "n_max": 7
+    },
+    "1": {
+      "e_max": 16,
+      "fallback_ids": [
+        "f0f6c31291ca93e704a6026f276cf03d2c0d36b77b4dd57bdc57c3611d6b574c",
+        "90de321a0a6a8ee76dcddcb6e2f2b60d7926c7fbfcccd52d1fc5cc4b67181c0e",
+        "fe1cb670d594412a6b0ffa947a8e65aa1e90c16857cb724425163363b2802dc5",
+        "283cacf4300ca5a194a9d733cc3a0ee6ca66a0ee38fa918a391616b3e138b595",
+        "2d81d7f0fd232a7135a9065d2a003ecb0514acf761741cd73b7981b1adea31b8",
+        "4fef0f37a265b7d4bd4ead4165e3e7192fa2ad729fa96482f8c71191308a627a",
+        "6867512f84119273b60587c75926c7a24ddb500de7f562d6cedaf583095fd531",
+        "05fa8d2db09fdb935c6012ef99b7ffa0aa5d24383ff3b8ffeaa877c2a7091b7e",
+        "6fe06a9a27c00ee1ee0bac71b43204685a3b203df461f9b8e00de562205f817c",
+        "df66957853172c5f662657355a975452ca7807ac9ac6eb819abd3ab9054086e4",
+        "9920b5abd750447c54f54babb9c803574fb8bc7e127bdd553f9a06c5bccd1205",
+        "033159f525b2f943e516834501c318abe2f990eac52beef9bf0f297d959b1bbe"
+      ],
+      "n_max": 7
+    },
+    "2": {
+      "e_max": 16,
+      "fallback_ids": [
+        "da6ee52880a9ceb3dc4325b97dd2b5cd7cabcf57b2d342bf87cb8cb9c187a838",
+        "51c79b44511b4efc9d44126d1b73c28997ce41178e806b7f0ca340c22e291598",
+        "21bf734dbeeeefd1cd7198506880d9c7cd0c0ff98de47a6c920acd4b409e9f73",
+        "b11da7f13ae2396525d070753771e7240e929f81ecb794436723343dbc542b3d",
+        "ec786f1339cf1c27eed62db04d216da463246cc87ade88de32c7b1f19b5e947a",
+        "c60745dbd1a50a179b26475596c6ccd838e867f674f4f556a83dd75f6de61466",
+        "1a520fd8ed306b47ed9d636d84d6e138b8a2f8fafe178896ee1fd0bddaf5b1ad",
+        "0c3eb99a01a256349af18ed8b852ba1709aabf1e6245f5f0db28478327346a64",
+        "7cb8eaf711e117d825d72974521eac9365b0309f04b1ad3800cbf167ebcd65fc",
+        "7066912ac1b101c87150a28ee17f3dd1e1a1ed7d534fe901bfd1b5c8ec87a4b5",
+        "c910a0003af7f0ec0f0e82d17155c411acd22df47463f6c7e1008bc02e712200",
+        "c1a8bdbd81f8184afd213a6b786bfa2b75662287449ea6cff9b7333a8a2f8d30",
+        "164d5f058498a0b4b1358de26c1847b76f44619f7d2cbd2aa103b79b635d401a",
+        "9a9c6135c1f5d1f9aea130a8fdead650b74e4b319cf6472d9e3bba2d056b9807",
+        "e0e25b813d8d2b09042502fea0912aeaa3916d53e8d34df0b67041711d768032",
+        "fcd04384262758c9bd7e05811a4a38f95b6fb9c6b6fa9630f9eab84acf23fd3c",
+        "5a1fe6160be45a8ddf1bf952e8d5e8c33674c8739c8a03785dc90dd0f2d555c2",
+        "569f86e5a2a911beb69b14cf7fa1f4d88a5a85ce81f0674335ccb1594525f770",
+        "a7a2b0c16aa511cddf6baddcf5b28e8f47a9eaf78ddffefbb8d106b26e147264"
+      ],
+      "n_max": 7
+    },
+    "3": {
+      "e_max": 16,
+      "fallback_ids": [
+        "babc2ebdb010294d8dfb44bf36bb258cfec5d484fddd52c0c9df7d0d8da34b70",
+        "7791a9d7026d50738618d9e2ac840ebd74fd596d414d81514492c64de3314c12",
+        "9d7681ebdc4b2e1e03eebde0bd3caf91a9b3872bbd5171a6909e92eeab24c560",
+        "a0caccb8fa5c4829c833a369f19f52429f82d23055ae8fde82996a1615fb186d",
+        "0f826a31260db253d493de030488c838a0c81b61b954a89d5f63da2ffff5ff15",
+        "229f8fc6634439cb3d76b4d4a37a07eb50c9f6780e0eedda9657a3ed93c8fc3c",
+        "11a1dc1156cc5f5cecabf2e40684ec758edbcadd0e017a1c67b2063d57a7ffc2",
+        "e96cf53a8d82df8052ba6b336baaf02422446a622139732daaaf8b8013d0f8ec",
+        "9157b576e70b33ff7870c6261766bf8437197ef87cb9af712c9e365f0622c706",
+        "95d5e4f6c5cf66d9938b89f5834abcc382b1e5edfab36a424b10dc76a38f13c3",
+        "cc874f3ae6c7f17f993bace43cd6c02be450b20d05bb32a177ec4463e217e580",
+        "ca292bd58da9dc9ea7eec4d7500483ee009c9d8775bc8e5851e3000ede67905f",
+        "69f2538a21a6f7823d728e202e33ebdf035cf48002a81ce297ae3314227a1130",
+        "41f752465c8eb7d20d2b6ef908636e5b9cdc5a96780dad6db7eb0809987e9ced",
+        "e4b581cc251ba3cf47a2500284d63bd7cfe015ffcc2638cbb55ec390a21f7b1b"
+      ],
+      "n_max": 7
+    },
+    "4": {
+      "e_max": 16,
+      "fallback_ids": [
+        "a577ecd2a253b6d5c5064d3da761308d1da5d8ee2c58f4ce8286c646a50df300",
+        "9c19d2fddf5dda3e53de49b3bb906ec722f9818c758bab7165de148de3503adb",
+        "5263dc03915a2482558563cec3c9d51a1e2a9d0e61fae2d7de901e11313c7703",
+        "0080ad11d00930bdc5f8bad97468e251826fc5d31f25c68bfe0db9b0d55457cc",
+        "aeab14f59019a5ee981039160c048524e7b67c9364eff8a50af7caa0a9852e13",
+        "10cd02cc7f2b5da1faa7888b7da9d276442570c257756cb06155a0e2de5a01f8",
+        "46bbd41f781da229188a6c292019a1f47cbf6bf26a1b49b14cb30650201cf597",
+        "364fdf418d4b9ad0b55bd68d34468e7f0bc9479ab49a1a3927cc77369bc658b6",
+        "1d89e6c664b502f5c1f2c61d7345db75f2e007b215c04aa24a946cca55e61539",
+        "644eae3c09aab0bb0f1454cf95c0cec661e55693db68bf8e5190b5a502e391b1",
+        "a9655826689a2bbad769f8b2cbe95d7377779abab524a5b4513465e7762a4df4",
+        "d60130e3997b7300ccf3f235587bea545ba10095d71aaf2ab986a3654cebedaa",
+        "4a9d8f26d1595d44cdafd29795c4c16706631c924d916563b915c18ad5a0d21b",
+        "0c2287e7d2193fb1557a9d9fb4ac0bb0ae904c61fdbb321bd6e040338f66d7fd",
+        "9b2e3db055510518918f343f80d6ede1e4cbf6bc1ad0fedaf1aa85c3ba1f9f11",
+        "1eda8df948e3dd7783eda2fcf5cd4836c1edb830bb3890825a23f51a71ee6ab8",
+        "befb69165601c76ba002075941689e98a45885a91dbdbb32df1a854fce3e3634",
+        "97bf7d0528ae6ebad2f69d2ce930ba25ea54ddd99e2ff006b56e5e2a84982433",
+        "3e1e1a4abe06df9d5b01100372f25dbfb1fef580fa8ccc7f71a3618879361e5f",
+        "75fba36e51b9b4ba6d7930efb0e8e403c0d864accadf4acd534ba1e64e884999",
+        "823e3b32128a46640cb16c3f40dd45883f2cf48bf8df5a1ae19433f0ded71f74"
+      ],
+      "n_max": 7
+    }
+  },
+  "scheduler": {
+    "CPU_numerical_workers": 2,
+    "GPU_workers_max": 2,
+    "score_priority": false,
+    "threads_each": 1,
+    "trajectories": [
+      [
+        "A",
+        0
+      ],
+      [
+        "C",
+        0
+      ],
+      [
+        "A",
+        1
+      ],
+      [
+        "C",
+        1
+      ],
+      [
+        "A",
+        2
+      ],
+      [
+        "C",
+        2
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "C",
+        3
+      ],
+      [
+        "A",
+        4
+      ],
+      [
+        "C",
+        4
+      ]
+    ]
+  },
+  "search_recipe": {
+    "batch": "full_batch",
+    "checkpoint_selection": "strict validation improvement, first best retained",
+    "dataset": "cora",
+    "dtype": "float32",
+    "graph_transform": "NormalizeFeatures",
+    "hp_mode": "global4",
+    "max_epochs": 150,
+    "model": "DynamicGNN baseline/relu",
+    "normalization": "none",
+    "optimizer": "Adam original defaults; lr=config.lr, weight_decay=config.l2",
+    "patience": 40,
+    "scheduler": "CosineAnnealingLR(T_max=max_epochs,eta_min=lr*.01)",
+    "split": "planetoid_public",
+    "track_test": false
+  },
+  "statistics": {
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 3898085213,
+    "comparison": "C-A",
+    "confirmatory_claim": false,
+    "percentiles": [
+      2.5,
+      97.5
+    ],
+    "unit": "5 paired group means; pergroup30finalseed mean/SD"
+  },
+  "test_gate": "all10 champions/300 final logical models sealed before separate float32 unique-checkpoint scoring",
+  "training_seed_rule": {
+    "base": 2026101101,
+    "formula": "uint32(SeedSequence([base,group,stage_code,index]).generate_state(1))",
+    "method_name_included": false,
+    "stage_codes": {
+      "decoder": 2,
+      "final": 6,
+      "lhs": 1,
+      "mc": 4,
+      "search": 3,
+      "validation": 5
+    }
+  },
+  "vae": {
+    "frozen": true,
+    "path": "/home/fangxy/D-VAE/checkpoints/joint_model_pipeline_global4_best.pth",
+    "sha256": "e5c8579fbbc78ce166b7f6bcd7718eefbbd5dbaa3c1f556b834b3f84759844d4"
+  },
+  "validation_selection": "Top10 own search scores then30seed means/CID; 30 disjoint final seeds; strict first-best checkpoint",
+  "version": "AC_open_graph_mix_v1_20261012"
+}

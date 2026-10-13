@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-13T06:30:57.895779+00:00",
+  "checks": "PASS",
+  "issue": "numpy bool in validation_test_mean_same_direction was not JSON serializable",
+  "repair": "report output boundary converts numpy scalars to native Python scalars in a supplemental process; frozen source unchanged",
+  "source_file": "/home/fangxy/D-VAE/artifacts/ac_champions_ln_reuse_none_20261013v1/finalize_delivery.py",
+  "source_sha256": "89c8af2f046d2676d351ac6d8d157ccceed36dcb5f043ce499d5f5403ae83f09",
+  "scientific_protocol_changed": false,
+  "training_rerun": false,
+  "test_rescored": false,
+  "training_completed_unix": 1791872638.3865626,
+  "last_LN_score_computed_at": "2026-10-13T06:24:36.710487+00:00",
+  "repair_validation_seconds": 7.8458311557769775,
+  "original_controller_exit_code": 1,
+  "freeze_identity": "0de8d569e77ca4a6330c3171781971d3d061d956a1025c73c15e2568945fe2c0"
+}
